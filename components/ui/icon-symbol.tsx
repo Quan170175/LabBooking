@@ -18,6 +18,7 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'person.fill': 'person',
   'bell.fill': 'notifications',
+  'gearshape.fill': 'settings',
   'menu': 'menu',
   'chevron.left': 'chevron-left',
   'lock': 'lock',

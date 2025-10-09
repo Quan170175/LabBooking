@@ -24,7 +24,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="notifications"
         options={{
           title: 'Thông báo',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="bell.fill" color={color} />,
