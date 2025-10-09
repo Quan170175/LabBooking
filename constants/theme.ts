@@ -27,6 +27,25 @@ export const Colors = {
   },
 };
 
+/**
+ * Brand colors for the Lab Booking application
+ */
+export const BrandColors = {
+  primary: '#E07B53',
+  primaryLight: '#FFE5D9',
+  primaryDark: '#C85A2C',
+  secondary: '#E6F4FE',
+  accent: '#FFF5F2',
+  border: '#F0F0F0',
+  textSecondary: '#687076',
+  textMuted: '#9E9E9E',
+  error: '#EF4444',
+  success: '#10B981',
+  warning: '#F59E0B',
+  white: '#FFFFFF',
+  black: '#000000',
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
