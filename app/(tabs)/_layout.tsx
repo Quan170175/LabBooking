@@ -1,49 +1,77 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { Tabs } from "expo-router";
+import { Bell, Home, Menu, UserRound } from "lucide-react-native";
+import React from "react";
+import { Platform, StyleSheet, View } from "react-native";
+import AppHeader from "../../components/AppHeader";
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
+export default function Layout() {
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Trang chủ',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+    <View style={styles.container}>
+      <AppHeader />
+
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarShowLabel: true,
+          tabBarActiveTintColor: "#ea580c",
+          tabBarInactiveTintColor: "#94a3b8",
+          tabBarStyle: {
+            position: "absolute",
+            bottom: Platform.OS === "ios" ? 16 : 12,
+            left: 16,
+            right: 16,
+            borderRadius: 28,
+            height: 62,
+            backgroundColor: "white",
+            borderWidth: 1,
+            borderColor: "#ffedd5",
+            shadowColor: "#000",
+            shadowOpacity: 0.08,
+            shadowRadius: 6,
+            elevation: 6,
+          },
+          tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: "600",
+          },
         }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Thông báo',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bell.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Cá nhân',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Chức năng',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Trang chủ",
+            tabBarIcon: ({ color }) => <Home size={20} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="notifications"
+          options={{
+            title: "Thông báo",
+            tabBarIcon: ({ color }) => <Bell size={20} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Cá nhân",
+            tabBarIcon: ({ color }) => <UserRound size={20} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="functions"
+          options={{
+            title: "Chức năng",
+            tabBarIcon: ({ color }) => <Menu size={20} color={color} />,
+          }}
+        />
+      </Tabs>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#fff7ed", // tương đương bg-orange-50
+  },
+});
