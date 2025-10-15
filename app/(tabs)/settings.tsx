@@ -1,89 +1,176 @@
-// import { AppHeader } from '@/components/common';
-// import { ThemedText } from '@/components/themed-text';
-// import { ThemedView } from '@/components/themed-view';
-// import { Ionicons } from '@expo/vector-icons';
-// import React from 'react';
-// import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useRouter } from "expo-router";
+import {
+  CalendarCheck2,
+  ChevronRight,
+  ClipboardList,
+  Clock3,
+  LifeBuoy,
+} from "lucide-react-native";
+import React from "react";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-// export default function SettingsTab() {
-//   return (
-//     <ThemedView style={styles.container}>
-//       <AppHeader />
-//       <ScrollView style={styles.content}>
-//         <ThemedText type="subtitle" style={styles.title}>
-//           Chức năng
-//         </ThemedText>
+// Kiểu dữ liệu cho mỗi chức năng
+type FunctionItem = {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  to: string;
+};
 
-//         <View style={styles.menuSection}>
-//           <TouchableOpacity style={styles.menuItem}>
-//             <View style={styles.menuItemLeft}>
-//               <Ionicons name="calendar-outline" size={24} color="#E07B53" />
-//               <ThemedText style={styles.menuItemText}>Đặt phòng Lab</ThemedText>
-//             </View>
-//             <Ionicons name="chevron-forward" size={20} color="#9E9E9E" />
-//           </TouchableOpacity>
+// Danh sách các chức năng
+const functions: FunctionItem[] = [
+  {
+    icon: CalendarCheck2,
+    title: "Đặt Lab",
+    description: "Chọn phòng, ngày, giờ cho buổi thực hành",
+    to: "/book/choose-type",
+  },
+  {
+    icon: Clock3,
+    title: "Lịch sử đặt",
+    description: "Theo dõi các yêu cầu đã gửi và trạng thái phê duyệt",
+    to: "/my-bookings",
+  },
+  {
+    icon: ClipboardList,
+    title: "Tình trạng phòng",
+    description: "Kiểm tra lab còn trống theo ngày/ca",
+    to: "/availability",
+  },
+  {
+    icon: LifeBuoy,
+    title: "Hỗ trợ",
+    description: "Gửi yêu cầu trợ giúp tới ban quản lý lab",
+    to: "/support",
+  },
+];
 
-//           <TouchableOpacity style={styles.menuItem}>
-//             <View style={styles.menuItemLeft}>
-//               <Ionicons name="time-outline" size={24} color="#E07B53" />
-//               <ThemedText style={styles.menuItemText}>Lịch sử đặt phòng</ThemedText>
-//             </View>
-//             <Ionicons name="chevron-forward" size={20} color="#9E9E9E" />
-//           </TouchableOpacity>
+export default function Settings() {
+  const router = useRouter();
 
-//           <TouchableOpacity style={styles.menuItem}>
-//             <View style={styles.menuItemLeft}>
-//               <Ionicons name="notifications-outline" size={24} color="#E07B53" />
-//               <ThemedText style={styles.menuItemText}>Thông báo</ThemedText>
-//             </View>
-//             <Ionicons name="chevron-forward" size={20} color="#9E9E9E" />
-//           </TouchableOpacity>
+  // Hàm xử lý khi nhấn vào một chức năng
+  const handleNavigation = (path: string) => {
+    // Chỉ điều hướng đến luồng đặt lab đã được triển khai
+    if (path === "/book/choose-type") {
+      router.push(path as any);
+    } else {
+      Alert.alert(
+        "Chức năng đang phát triển",
+        "Chức năng này sẽ sớm được cập nhật."
+      );
+    }
+  };
 
-//           <TouchableOpacity style={styles.menuItem}>
-//             <View style={styles.menuItemLeft}>
-//               <Ionicons name="help-circle-outline" size={24} color="#E07B53" />
-//               <ThemedText style={styles.menuItemText}>Trợ giúp</ThemedText>
-//             </View>
-//             <Ionicons name="chevron-forward" size={20} color="#9E9E9E" />
-//           </TouchableOpacity>
-//         </View>
-//       </ScrollView>
-//     </ThemedView>
-//   );
-// }
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+    >
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Chức năng</Text>
+        <Text style={styles.headerSubtitle}>
+          Truy cập nhanh các thao tác thường dùng cho việc đặt phòng lab.
+        </Text>
+      </View>
 
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//   },
-//   content: {
-//     flex: 1,
-//     backgroundColor: '#F5F5F5',
-//   },
-//   title: {
-//     padding: 20,
-//     paddingBottom: 16,
-//   },
-//   menuSection: {
-//     backgroundColor: '#FFFFFF',
-//     marginHorizontal: 20,
-//     borderRadius: 12,
-//     overflow: 'hidden',
-//   },
-//   menuItem: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     justifyContent: 'space-between',
-//     padding: 16,
-//     borderBottomWidth: 1,
-//     borderBottomColor: '#F0F0F0',
-//   },
-//   menuItemLeft: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     gap: 12,
-//   },
-//   menuItemText: {
-//     fontSize: 16,
-//   },
-// });
+      <View style={styles.listContainer}>
+        {functions.map((item, index) => {
+          const Icon = item.icon;
+          return (
+            <TouchableOpacity
+              key={item.title}
+              style={styles.listItem}
+              onPress={() => handleNavigation(item.to)}
+            >
+              <View style={styles.listItemContent}>
+                <View style={styles.iconContainer}>
+                  <Icon size={20} color="#EA580C" />
+                </View>
+                <View style={styles.textContainer}>
+                  <Text style={styles.itemTitle}>{item.title}</Text>
+                  <Text style={styles.itemDescription}>{item.description}</Text>
+                </View>
+              </View>
+              <ChevronRight size={16} color="#FDBA74" />
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#FFF7ED",
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  header: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#1E293B",
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    marginTop: 4,
+    textAlign: "center",
+  },
+  listContainer: {
+    borderRadius: 24,
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
+    overflow: "hidden",
+  },
+  listItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#FFF7ED",
+  },
+  listItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    flex: 1,
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 22,
+    backgroundColor: "#FFF7ED",
+  },
+  textContainer: {
+    flex: 1,
+  },
+  itemTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  itemDescription: {
+    fontSize: 13,
+    color: "#64748B",
+    marginTop: 2,
+  },
+});
