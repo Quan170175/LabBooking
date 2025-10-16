@@ -58,7 +58,7 @@ export default function Layout() {
           }}
         />
         <Tabs.Screen
-          name="functions"
+          name="settings"
           options={{
             title: "Chức năng",
             tabBarIcon: ({ color }) => <Menu size={20} color={color} />,
@@ -72,6 +72,6 @@ export default function Layout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff7ed", // tương đương bg-orange-50
+    backgroundColor: "#fff7ed",
   },
 });
