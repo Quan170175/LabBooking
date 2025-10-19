@@ -1,5 +1,5 @@
+import { useRouter } from "expo-router"; // 1. Import useRouter
 import {
-  Bell,
   BookOpen,
   CalendarCheck2,
   CalendarDays,
@@ -18,7 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import FeatureTile from "../../components/FeatureTile";
+import FeatureTile from "../../components/home/FeatureTile";
 
 const featureGroups = [
   {
@@ -38,12 +38,6 @@ const featureGroups = [
     title: "Tình trạng phòng",
     description: "Lab còn trống",
     icon: ClipboardList,
-  },
-  {
-    to: "/notifications",
-    title: "Thông báo",
-    description: "Tin mới nhất",
-    icon: Bell,
   },
   {
     to: "/schedule",
@@ -78,6 +72,8 @@ const featureGroups = [
 ];
 
 export default function Home() {
+  const router = useRouter();
+
   return (
     <ScrollView
       contentContainerStyle={styles.root}
@@ -98,7 +94,11 @@ export default function Home() {
               Đặt phòng thực hành, theo dõi lịch và cập nhật thông báo ngay trên
               điện thoại của bạn.
             </Text>
-            <TouchableOpacity style={styles.cta}>
+
+            <TouchableOpacity
+              style={styles.cta}
+              onPress={() => router.push("/book" as any)}
+            >
               <CalendarCheck2 size={16} color="#ea580c" />
               <Text style={styles.ctaText}> Bắt đầu đặt Lab</Text>
             </TouchableOpacity>
@@ -130,6 +130,7 @@ export default function Home() {
   );
 }
 
+// ... (Styles giữ nguyên) ...
 const styles = StyleSheet.create({
   root: { padding: 16, paddingBottom: 40, backgroundColor: "#fff7ed" },
   hero: {

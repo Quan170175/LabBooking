@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react-native";
-import React from "react";
+import React, { useState } from "react"; // 1. Import useState
 import {
   Alert,
   ScrollView,
@@ -18,22 +18,23 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+// (Không cần import ActivityIndicator nữa)
+// 2. Import component Modal mới
+import ConfirmationModal from "../../components/common/ConfirmationModal";
 
-// Kiểu dữ liệu cho mỗi mục cài đặt
+// ... (Kiểu dữ liệu Setting và mảng settings giữ nguyên) ...
 type Setting = {
   icon: React.ElementType;
   title: string;
   description: string;
   to: string;
 };
-
-// Danh sách các mục cài đặt
 const settings: Setting[] = [
   {
     icon: UserRound,
     title: "Thông tin cá nhân",
     description: "Cập nhật hồ sơ sinh viên và tài khoản FPT",
-    to: "/profile/details", // Đường dẫn chính xác
+    to: "/profile/details",
   },
   {
     icon: ClipboardList,
@@ -58,13 +59,12 @@ const settings: Setting[] = [
 export default function Profile() {
   const router = useRouter();
 
-  // SỬA LỖI: Bật lại chức năng điều hướng và xử lý các mục chưa có
+  const [isLogoutModalOpen, setLogoutModalOpen] = useState(false);
+
   const handleNavigation = (path: string) => {
-    // Chỉ điều hướng đến trang 'details'
     if (path === "/profile/details") {
       router.push(path as any);
     } else {
-      // Hiển thị thông báo cho các mục khác
       Alert.alert(
         "Chức năng đang phát triển",
         `Chức năng này sẽ sớm được cập nhật.`
@@ -72,20 +72,13 @@ export default function Profile() {
     }
   };
 
-  // Hàm xử lý đăng xuất
   const handleLogout = () => {
-    Alert.alert(
-      "Xác nhận đăng xuất",
-      "Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?",
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Đăng xuất",
-          style: "destructive",
-          onPress: () => router.replace("/login" as any),
-        },
-      ]
-    );
+    setLogoutModalOpen(true);
+  };
+
+  const onConfirmLogout = () => {
+    setLogoutModalOpen(false);
+    router.replace("/login" as any);
   };
 
   return (
@@ -94,7 +87,6 @@ export default function Profile() {
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header Profile */}
       <LinearGradient
         colors={["#FDBA74", "#F97316", "#EA580C"]}
         style={styles.profileHeader}
@@ -110,7 +102,6 @@ export default function Profile() {
         </View>
       </LinearGradient>
 
-      {/* Thẻ cảnh báo */}
       <View style={styles.alertCard}>
         <View style={styles.alertIconContainer}>
           <AlertCircle size={20} color="#EA580C" />
@@ -124,7 +115,6 @@ export default function Profile() {
         </View>
       </View>
 
-      {/* Danh sách cài đặt */}
       <View style={styles.settingsGroup}>
         {settings.map((item, index) => {
           const Icon = item.icon;
@@ -154,7 +144,6 @@ export default function Profile() {
         })}
       </View>
 
-      {/* Nút Đăng xuất */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <View style={styles.logoutButtonContent}>
           <LogOut size={16} color="white" />
@@ -162,6 +151,15 @@ export default function Profile() {
         </View>
         <Text style={styles.logoutButtonSubText}>An toàn tài khoản</Text>
       </TouchableOpacity>
+
+      <ConfirmationModal
+        visible={isLogoutModalOpen}
+        title="Xác nhận đăng xuất"
+        message="Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?"
+        confirmText="Đăng xuất"
+        onClose={() => setLogoutModalOpen(false)}
+        onConfirm={onConfirmLogout}
+      />
     </ScrollView>
   );
 }

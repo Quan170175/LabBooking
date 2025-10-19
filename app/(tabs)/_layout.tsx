@@ -2,7 +2,7 @@ import { Tabs } from "expo-router";
 import { Bell, Home, Menu, UserRound } from "lucide-react-native";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
-import AppHeader from "../../components/AppHeader";
+import AppHeader from "../../components/common/AppHeader";
 
 export default function Layout() {
   return (
@@ -41,6 +41,7 @@ export default function Layout() {
           options={{
             title: "Trang chủ",
             tabBarIcon: ({ color }) => <Home size={20} color={color} />,
+            headerShown: false,
           }}
         />
         <Tabs.Screen
