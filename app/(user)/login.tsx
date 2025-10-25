@@ -1,7 +1,13 @@
+import {
+  GoogleSignin,
+  isErrorWithCode,
+  statusCodes,
+} from "@react-native-google-signin/google-signin";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import {
+  Alert,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -18,6 +24,10 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
+// URL Backend từ logic ban đầu
+const BACKEND_URL = "http://192.168.1.10:5283";
+
+// Component GoogleGlyph từ giao diện
 const GoogleGlyph = () => (
   <Svg height={20} width={20} viewBox="0 0 24 24">
     <Path
@@ -40,8 +50,10 @@ const GoogleGlyph = () => (
 );
 
 export default function LoginScreen() {
+  // Lấy router từ giao diện
   const router = useRouter();
 
+  // Các giá trị và style cho Animated từ giao diện
   const headerOpacity = useSharedValue(0);
   const headerTranslateY = useSharedValue(-100);
 
@@ -66,7 +78,18 @@ export default function LoginScreen() {
     transform: [{ translateY: footerTranslateY.value }],
   }));
 
+  // Gộp cả hai useEffect từ 2 file
   useEffect(() => {
+    // Logic 1: Cấu hình Google Sign-In
+    GoogleSignin.configure({
+      webClientId:
+        "317167237519-3bn2trq7crhc9sm57a9f695crc9idj8e.apps.googleusercontent.com",
+      iosClientId:
+        "317167237519-9e80jt1rdcqkdbane352msd5gfnpti95.apps.googleusercontent.com",
+      scopes: ["profile", "email"],
+    });
+
+    // Logic 2: Chạy hiệu ứng animation cho giao diện
     const opacityConfig = { duration: 600 };
     const springConfig = { damping: 12, stiffness: 90 };
 
@@ -80,10 +103,77 @@ export default function LoginScreen() {
     footerTranslateY.value = withDelay(200, withSpring(0, springConfig));
   }, []);
 
-  const handleLogin = () => {
-    router.replace("/(tabs)");
+  // Hàm signIn (Core Logic) từ file logic gốc
+  const signIn = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+
+      console.log("User Info Object:", JSON.stringify(userInfo, null, 2));
+
+      // Lấy idToken một cách an toàn
+      const idToken = userInfo.data ? userInfo.data.idToken : null;
+
+      if (idToken) {
+        console.log("Đang gửi idToken đến backend...");
+        const response = await fetch(`${BACKEND_URL}/api/auth/google`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ idToken }),
+        });
+
+        const responseBodyText = await response.text();
+        console.log("Raw Backend Response:", responseBodyText);
+
+        if (response.ok) {
+          const data = JSON.parse(responseBodyText);
+          console.log("Backend response data:", data);
+          Alert.alert("Đăng nhập thành công!", `Chào mừng ${data.user.name}`);
+
+          // TÍCH HỢP: Điều hướng sau khi đăng nhập thành công
+          router.replace("/(tabs)");
+        } else {
+          try {
+            const errorData = JSON.parse(responseBodyText);
+            Alert.alert(
+              `Lỗi từ Server (${response.status})`,
+              errorData.message || "Có lỗi xảy ra."
+            );
+          } catch (e) {
+            Alert.alert(
+              `Lỗi từ Server (${response.status})`,
+              "Không thể phân tích phản hồi lỗi từ server."
+            );
+          }
+        }
+      } else {
+        Alert.alert("Lỗi", "Không lấy được idToken từ Google.");
+      }
+    } catch (error) {
+      console.error("Lỗi trong quá trình đăng nhập hoặc gọi API:", error);
+      if (isErrorWithCode(error)) {
+        switch (error.code) {
+          case statusCodes.SIGN_IN_CANCELLED:
+            console.log("Người dùng đã hủy đăng nhập");
+            break;
+          case statusCodes.IN_PROGRESS:
+            console.log("Đăng nhập đang được xử lý");
+            break;
+          case statusCodes.PLAY_SERVICES_NOT_AVAILABLE:
+            Alert.alert("Lỗi", "Dịch vụ Google Play không khả dụng.");
+            break;
+          default:
+            Alert.alert("Lỗi đăng nhập", `Code: ${error.code}`);
+        }
+      } else {
+        Alert.alert("Lỗi không xác định", "Vui lòng thử lại.");
+      }
+    }
   };
 
+  // Giao diện (return) từ file giao diện
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
@@ -120,7 +210,8 @@ export default function LoginScreen() {
 
           <Animated.View style={[styles.footerContainer, animatedFooterStyle]}>
             <View style={styles.actionArea}>
-              <TouchableOpacity style={styles.button} onPress={handleLogin}>
+              {/* TÍCH HỢP: Thay đổi onPress từ handleLogin sang signIn */}
+              <TouchableOpacity style={styles.button} onPress={signIn}>
                 <GoogleGlyph />
                 <Text style={styles.buttonText}>Đăng nhập bằng Google</Text>
               </TouchableOpacity>
@@ -139,6 +230,7 @@ export default function LoginScreen() {
   );
 }
 
+// Toàn bộ styles từ file giao diện
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
