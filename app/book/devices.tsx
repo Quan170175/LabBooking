@@ -146,7 +146,7 @@ export default function BookDevices() {
       Alert.alert(
         "Đặt phòng thành công!",
         "Yêu cầu của bạn đã được gửi đi và đang chờ xác nhận.",
-        [{ text: "OK", onPress: () => router.replace("/(tabs)" as any) }]
+        [{ text: "OK", onPress: () => router.replace("/home" as any) }]
       );
     } catch (error) {
       console.error("Lỗi khi xác nhận đặt phòng:", error);
