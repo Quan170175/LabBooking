@@ -31,7 +31,7 @@ export default function AppHeader() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => router.push("/")}
+            onPress={() => router.push("/(tabs)/home")}
             activeOpacity={0.8}
           >
             <View style={styles.centerText}>
