@@ -8,8 +8,10 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react-native";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +19,22 @@ import {
   View,
 } from "react-native";
 import FeatureTile from "../../../components/home/FeatureTile";
+
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+
+// Cấu hình cách thông báo hiển thị khi app đang chạy (foreground)
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true, // Hiển thị pop-up
+    shouldPlaySound: true, // Phát âm thanh
+    shouldSetBadge: false, // (iOS) Hiển thị số trên icon app
+
+    // THÊM 2 DÒNG NÀY ĐỂ SỬA LỖI
+    shouldShowBanner: false, // Tắt banner (vì đã có pop-up)
+    shouldShowList: false, // Tắt hiển thị ở list (vì đã có pop-up)
+  }),
+});
 
 const featureGroups = [
   {
@@ -38,7 +56,7 @@ const featureGroups = [
     icon: ClipboardList,
   },
   {
-    to: "/home/schedule",
+    to: "/home/timetable",
     title: "Thời khóa biểu",
     description: "Đồng bộ lịch học",
     icon: CalendarDays,
@@ -72,11 +90,109 @@ const featureGroups = [
 export default function Home() {
   const router = useRouter();
 
+  // 6. Thêm State và Ref để quản lý token/notification
+  const [expoPushToken, setExpoPushToken] = useState("");
+  const notificationListener = useRef<Notifications.EventSubscription>(null);
+  const responseListener = useRef<Notifications.EventSubscription>(null);
+
+  // 7. Thêm useEffect để chạy logic lấy token khi component mount
+  useEffect(() => {
+    // Hàm đăng ký và lấy token
+    async function registerForPushNotificationsAsync() {
+      let token;
+
+      // Chỉ hoạt động trên THIẾT BỊ VẬT LÝ
+      if (!Device.isDevice) {
+        Alert.alert(
+          "Lỗi",
+          "Phải sử dụng thiết bị vật lý để nhận Push Notifications"
+        );
+        return;
+      }
+
+      // Kiểm tra quyền
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      // Hỏi quyền nếu chưa cấp
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== "granted") {
+        Alert.alert(
+          "Lỗi",
+          "Không thể lấy push token vì người dùng từ chối quyền!"
+        );
+        return;
+      }
+
+      // Lấy Expo Push Token
+      try {
+        // Lấy Project ID từ cấu hình app
+        // File app.json của bạn có projectId tại: extra.eas.projectId
+
+        token = (await Notifications.getExpoPushTokenAsync()).data;
+
+        console.log("Your Expo Push Token:", token);
+        setExpoPushToken(token);
+      } catch (e) {
+        let message = "Đã xảy ra lỗi không xác định";
+        if (e instanceof Error) {
+          message = e.message;
+        }
+        Alert.alert("Lỗi khi lấy Expo Push Token", message);
+      }
+
+      // Cấu hình Kênh (Channel) cho Android
+      if (Platform.OS === "android") {
+        Notifications.setNotificationChannelAsync("default", {
+          name: "default",
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: "#FF231F7C",
+        });
+      }
+
+      return token;
+    }
+
+    // Chạy hàm lấy token
+    registerForPushNotificationsAsync();
+
+    // Listener khi nhận được thông báo (app đang chạy)
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notification) => {
+        console.log("Notification received:", notification);
+      });
+
+    // Listener khi người dùng tương tác với thông báo (nhấn vào)
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        console.log("Notification response received:", response);
+      });
+
+    // Hủy đăng ký listener khi component unmount
+    return () => {
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
+    };
+  }, []); // Mảng rỗng đảm bảo effect này chỉ chạy 1 lần
+
   return (
     <ScrollView
       contentContainerStyle={styles.root}
       showsVerticalScrollIndicator={false}
     >
+      {/* 8. Thêm View để hiển thị Token */}
+      <View style={styles.tokenContainer}>
+        <Text style={styles.tokenTitle}>Your Expo Push Token:</Text>
+        <Text style={styles.tokenText} selectable={true}>
+          {expoPushToken || "Đang lấy token..."}
+        </Text>
+      </View>
+
       {/* Hero */}
       <View style={styles.hero}>
         <View style={styles.heroLeft}>
@@ -131,6 +247,23 @@ export default function Home() {
 // ... (Styles giữ nguyên) ...
 const styles = StyleSheet.create({
   root: { padding: 16, paddingBottom: 40, backgroundColor: "#fff7ed" },
+  tokenContainer: {
+    backgroundColor: "#eee",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderColor: "#ddd",
+    borderWidth: 1,
+  },
+  tokenTitle: {
+    fontWeight: "bold",
+    color: "#333",
+  },
+  tokenText: {
+    marginTop: 4,
+    color: "#555",
+    fontSize: 12,
+  },
   hero: {
     borderRadius: 18,
     padding: 14,

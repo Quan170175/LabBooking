@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "317167237519",
+    "project_id": "labbooking-476205",
+    "storage_bucket": "labbooking-476205.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:317167237519:android:b49ee47e96a832ba9ef3fa",
+        "android_client_info": {
+          "package_name": "com.fpt.labbooking"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "317167237519-7gtpaika269eujt8gvcflsqpnceogt89.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fpt.labbooking",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "317167237519-3bn2trq7crhc9sm57a9f695crc9idj8e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTa5jQbHK-FtEeZ1i1EO1gyRuU8Z4jU20"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "317167237519-3bn2trq7crhc9sm57a9f695crc9idj8e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "317167237519-9e80jt1rdcqkdbane352msd5gfnpti95.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.fpt.labbooking"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

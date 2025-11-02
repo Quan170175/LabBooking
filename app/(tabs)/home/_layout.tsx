@@ -32,6 +32,12 @@ export default function HomeStackLayout() {
           header: () => <AppHeader />,
         }}
       />
+      <Stack.Screen
+        name="timetable"
+        options={{
+          header: () => <AppHeader />,
+        }}
+      />
     </Stack>
   );
 }
