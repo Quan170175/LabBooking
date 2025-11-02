@@ -56,7 +56,7 @@ const featureGroups = [
     icon: ClipboardList,
   },
   {
-    to: "/home/schedule",
+    to: "/home/timetable",
     title: "Thời khóa biểu",
     description: "Đồng bộ lịch học",
     icon: CalendarDays,
