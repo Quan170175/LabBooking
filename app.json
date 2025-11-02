@@ -28,13 +28,25 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.fpt.labbooking",
-      "usesCleartextTraffic": true
+      // "usesCleartextTraffic": false
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-notifications",
+        {
+          // (Tùy chọn) Biểu tượng thông báo cho Android
+          // Đặt đường dẫn đến file icon 96x96 (png) của bạn trong thư mục assets
+          "icon": "./assets/images/notification-icon.png",
+
+          // (Tùy chọn) Màu cho biểu tượng (sử dụng mã hex)
+          "color": "#ffffff"
+        }
+      ],
       "expo-router",
       [
         "@react-native-google-signin/google-signin",
@@ -53,7 +65,9 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
