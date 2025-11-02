@@ -1,6 +1,12 @@
 import { useRouter } from "expo-router";
-// --- THAY ĐỔI: Thêm icon CalendarDays ---
-import { Book, Briefcase, CalendarDays } from "lucide-react-native";
+// --- THAY ĐỔI: Thêm icon History ---
+import {
+  Book,
+  Briefcase,
+  CalendarDays,
+  History, // Icon mới
+  Star,
+} from "lucide-react-native";
 import React from "react";
 import {
   Pressable,
@@ -14,9 +20,8 @@ import BookingCard from "../../components/booking/BookingCard";
 export default function BookChooseType() {
   const router = useRouter();
 
-  // --- THAY ĐỔI: Thêm type 'teaching_flexible' và 'teaching_recurring' ---
   const handleSelectType = (
-    type: "teaching_flexible" | "teaching_recurring" | "project"
+    type: "teaching_flexible" | "teaching_recurring" | "project" | "priority"
   ) => {
     router.replace({
       pathname: "/book/rooms" as any,
@@ -24,12 +29,17 @@ export default function BookChooseType() {
     });
   };
 
+  // --- THAY ĐỔI: Hàm mới để điều hướng đến trang thay đổi ---
+  const handleChangeBooking = () => {
+    router.push("/book/select-booking-to-change" as any);
+  };
+
   return (
     <Pressable onPress={() => router.back()} style={styles.overlay}>
       <Pressable style={styles.container}>
         <Text style={styles.headerTitle}>Chọn loại đặt phòng</Text>
 
-        {/* --- THAY ĐỔI: Card "Đặt lịch dạy học" (Linh hoạt) --- */}
+        {/* ... (3 card cũ: flexible, recurring, project giữ nguyên) ... */}
         <BookingCard
           layout="option"
           onPress={() => handleSelectType("teaching_flexible")}
@@ -43,7 +53,6 @@ export default function BookChooseType() {
           </View>
         </BookingCard>
 
-        {/* --- THAY ĐỔI: Card MỚI "Đặt lịch dạy học (Định kỳ)" --- */}
         <BookingCard
           layout="option"
           onPress={() => handleSelectType("teaching_recurring")}
@@ -59,7 +68,6 @@ export default function BookChooseType() {
           </View>
         </BookingCard>
 
-        {/* Card "Đặt lịch dự án" (Giữ nguyên) */}
         <BookingCard
           layout="option"
           onPress={() => handleSelectType("project")}
@@ -75,6 +83,34 @@ export default function BookChooseType() {
           </View>
         </BookingCard>
 
+        <BookingCard
+          layout="option"
+          onPress={() => handleSelectType("priority")}
+        >
+          <View style={styles.iconWrapper}>
+            <Star size={24} color="#C2410C" />
+          </View>
+          <View>
+            <Text style={styles.optionTitle}>Đặt lịch ưu tiên</Text>
+            <Text style={styles.optionDesc}>
+              Sự kiện quan trọng (tối đa 4 slot)
+            </Text>
+          </View>
+        </BookingCard>
+
+        {/* --- THAY ĐỔI: Card MỚI "Thay đổi lịch đã đặt" --- */}
+        <BookingCard layout="option" onPress={handleChangeBooking}>
+          <View style={styles.iconWrapper}>
+            <History size={24} color="#C2410C" />
+          </View>
+          <View>
+            <Text style={styles.optionTitle}>Thay đổi lịch đã đặt</Text>
+            <Text style={styles.optionDesc}>
+              Chọn và điều chỉnh lại các slot đã đặt
+            </Text>
+          </View>
+        </BookingCard>
+
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.closeButton}
@@ -86,8 +122,8 @@ export default function BookChooseType() {
   );
 }
 
-// --- THAY ĐỔI: Cập nhật style cho 3 card ---
 const styles = StyleSheet.create({
+  // ... (styles giữ nguyên) ...
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",

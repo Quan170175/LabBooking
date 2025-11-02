@@ -29,16 +29,15 @@ const ROOMS = [
 
 export default function BookRooms() {
   const router = useRouter();
-  // --- THAY ĐỔI: Thêm các type mới, đặt default là 'project' ---
   const { type = "project" } = useLocalSearchParams<{ type: string }>();
 
   const handleSelectRoom = async (room: (typeof ROOMS)[0]) => {
-    // Logic này giữ nguyên, nó sẽ tự động lưu đúng 'type'
+    // ... (logic handleSelectRoom giữ nguyên) ...
     try {
       const currentBooking = {
         roomId: room.id,
         roomName: room.name,
-        type, // type sẽ là 'teaching_flexible', 'teaching_recurring', hoặc 'project'
+        type,
         slots: [],
         devices: [],
       };
@@ -75,7 +74,7 @@ export default function BookRooms() {
     </Svg>
   );
 
-  // --- THAY ĐỔI: Logic subtitle cho 3 loại ---
+  // --- THAY ĐỔI: Logic subtitle cho 4 loại ---
   const getSubtitle = () => {
     switch (type) {
       case "teaching_flexible":
@@ -84,6 +83,8 @@ export default function BookRooms() {
         return "Chọn lặp lại theo tuần (tối đa 20 slot)";
       case "project":
         return "Chọn linh hoạt tối đa 5 slot";
+      case "priority":
+        return "Chọn tối đa 4 slot (có thể chọn trùng lịch)";
       default:
         return "Chọn lịch của bạn";
     }
@@ -96,7 +97,7 @@ export default function BookRooms() {
       <BookingPageHeader
         icon={headerIcon}
         title="Chọn phòng lab"
-        subtitle={getSubtitle()} // Sử dụng hàm mới
+        subtitle={getSubtitle()}
       />
 
       <View style={styles.roomList}>
