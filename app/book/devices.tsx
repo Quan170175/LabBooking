@@ -21,6 +21,7 @@ import BookingProgress from "../../components/booking/BookingProgress";
 import InviteMemberModal from "../../components/booking/InviteMemberModal";
 import ConfirmationModal from "../../components/common/ConfirmationModal";
 
+// ... (Icon DeviceIcon giữ nguyên) ...
 const DeviceIcon = () => (
   <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
     <Path
@@ -39,6 +40,7 @@ const DeviceIcon = () => (
 export default function BookDevices() {
   const router = useRouter();
   const [booking, setBooking] = useState<any>(null);
+  // ... (tất cả state khác giữ nguyên) ...
   const [customDevices, setCustomDevices] = useState<CustomDevice[]>([]);
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [deviceToEdit, setDeviceToEdit] = useState<CustomDevice | null>(null);
@@ -49,7 +51,7 @@ export default function BookDevices() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCancelModalOpen, setCancelModalOpen] = useState(false);
 
-  // ... (Tất cả các hàm logic giữ nguyên: loadBookingData, CRUD devices, invite, confirm, cancel) ...
+  // ... (useEffect loadBookingData giữ nguyên - nó đã lưu toàn bộ object 'booking') ...
   useEffect(() => {
     const loadBookingData = async () => {
       try {
@@ -59,7 +61,7 @@ export default function BookDevices() {
           return;
         }
         const b = JSON.parse(bString);
-        setBooking(b);
+        setBooking(b); // 'b' chứa 'b.slots' với cờ isConflict
         if (b.devices && Array.isArray(b.devices)) {
           setCustomDevices(b.devices);
         }
@@ -76,16 +78,15 @@ export default function BookDevices() {
     loadBookingData();
   }, [router]);
 
+  // ... (Tất cả các hàm CRUD, invite, cancel... giữ nguyên) ...
   const handleOpenAddModal = () => {
     setDeviceToEdit(null);
     setDeviceModalOpen(true);
   };
-
   const handleOpenEditModal = (device: CustomDevice) => {
     setDeviceToEdit(device);
     setDeviceModalOpen(true);
   };
-
   const handleAddOrUpdateDevice = (data: Omit<CustomDevice, "id">) => {
     if (deviceToEdit) {
       setCustomDevices((prevDevices) =>
@@ -102,11 +103,9 @@ export default function BookDevices() {
     }
     setDeviceModalOpen(false);
   };
-
   const handleOpenDeleteConfirm = (id: string) => {
     setDeviceToDeleteId(id);
   };
-
   const handleConfirmDelete = () => {
     if (deviceToDeleteId) {
       setCustomDevices((prevDevices) =>
@@ -115,28 +114,49 @@ export default function BookDevices() {
     }
     setDeviceToDeleteId(null);
   };
-
   const handleInvite = (email: string) => {
     setInvited((prev) => (prev.includes(email) ? prev : [...prev, email]));
   };
+  const handleCancel = () => {
+    setCancelModalOpen(true);
+  };
+  const onConfirmCancel = async () => {
+    setCancelModalOpen(false);
+    await AsyncStorage.removeItem("currentBooking");
+    router.replace("/(tabs)" as any);
+  };
 
+  // --- THAY ĐỔI: confirmBooking kiểm tra xung đột ---
   const confirmBooking = async () => {
     setIsSubmitting(true);
     try {
       const bookingsString = await AsyncStorage.getItem("bookings");
       const bookings = bookingsString ? JSON.parse(bookingsString) : [];
+
+      // Kiểm tra xem có slot nào bị xung đột không
+      const hasConflicts = (booking?.slots || []).some(
+        (s: any) => s.isConflict === true
+      );
+
+      // Đặt status dựa trên xung đột
+      const newStatus = hasConflicts ? "pending_priority" : "pending";
+
       bookings.push({
         id: Date.now(),
         ...booking,
         devices: customDevices,
         invited,
-        status: "pending",
+        status: newStatus, // Lưu status mới
       });
       await AsyncStorage.setItem("bookings", JSON.stringify(bookings));
       await AsyncStorage.removeItem("currentBooking");
+
+      // Thông báo dựa trên status
       Alert.alert(
-        "Đặt phòng thành công!",
-        "Yêu cầu của bạn đã được gửi đi và đang chờ xác nhận.",
+        hasConflicts ? "Gửi yêu cầu ưu tiên!" : "Đặt phòng thành công!",
+        hasConflicts
+          ? "Yêu cầu của bạn đã được gửi đến Quản lý. Lịch của người dùng cũ sẽ được xử lý sau khi được duyệt."
+          : "Yêu cầu của bạn đã được gửi đi và đang chờ xác nhận.",
         [{ text: "OK", onPress: () => router.replace("/home" as any) }]
       );
     } catch (error) {
@@ -146,18 +166,10 @@ export default function BookDevices() {
       setIsSubmitting(false);
     }
   };
-
-  const handleCancel = () => {
-    setCancelModalOpen(true);
-  };
-
-  const onConfirmCancel = async () => {
-    setCancelModalOpen(false);
-    await AsyncStorage.removeItem("currentBooking");
-    router.replace("/(tabs)" as any);
-  };
+  // ----------------------------------------------------
 
   if (isLoading || !booking) {
+    // ... (Phần render loading giữ nguyên) ...
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#EA580C" />
@@ -174,18 +186,13 @@ export default function BookDevices() {
         subtitle={`Khai báo thiết bị cho ${booking.roomName}`}
       />
 
-      {/* --- THAY ĐỔI: Sử dụng style 'inviteButton' cho nút này --- */}
-      <TouchableOpacity
-        onPress={handleOpenAddModal}
-        style={styles.addButton} // Style đã được cập nhật bên dưới
-      >
+      {/* ... (Phần render "Thêm thiết bị" và danh sách thiết bị giữ nguyên) ... */}
+      <TouchableOpacity onPress={handleOpenAddModal} style={styles.addButton}>
         <View style={styles.plusIcon}>
           <Text style={styles.plusIconText}>+</Text>
         </View>
-        {/* --- THAY ĐỔI: Sử dụng style 'inviteButtonText' cho text này --- */}
         <Text style={styles.addButtonText}>Thêm thiết bị</Text>
       </TouchableOpacity>
-      {/* -------------------------------------------------------- */}
 
       <View style={styles.deviceList}>
         {customDevices.length === 0 && (
@@ -276,14 +283,12 @@ export default function BookDevices() {
         onClose={() => setInviteOpen(false)}
         onInvite={handleInvite}
       />
-
       <AddDeviceModal
         visible={isDeviceModalOpen}
         onClose={() => setDeviceModalOpen(false)}
         onSubmit={handleAddOrUpdateDevice}
         initialData={deviceToEdit}
       />
-
       <ConfirmationModal
         visible={!!deviceToDeleteId}
         title="Xóa thiết bị"
@@ -293,7 +298,6 @@ export default function BookDevices() {
         onClose={() => setDeviceToDeleteId(null)}
         onConfirm={handleConfirmDelete}
       />
-
       <ConfirmationModal
         visible={isCancelModalOpen}
         title="Hủy đặt phòng"
@@ -307,8 +311,8 @@ export default function BookDevices() {
   );
 }
 
-// --- THAY ĐỔI: Cập nhật styles ---
 const styles = StyleSheet.create({
+  // ... (Tất cả styles giữ nguyên) ...
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   content: { padding: 16, paddingBottom: 100 },
   centered: {
@@ -319,29 +323,24 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 22, fontWeight: "600", color: "#0F172A" },
   subtitle: { fontSize: 14, color: "#64748B" },
-
-  // --- THAY ĐỔI: Style 'addButton' giờ giống 'inviteButton' ---
   addButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "white", // Giống inviteButton
-    borderWidth: 1, // Giống inviteButton
-    borderColor: "#E2E8F0", // Giống inviteButton
-    paddingVertical: 8, // Giống inviteButton
-    paddingHorizontal: 12, // Giống inviteButton
-    borderRadius: 12, // Giống inviteButton
-    alignSelf: "flex-start", // Giống inviteButton
-    marginBottom: 16, // Giữ margin riêng
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+    marginBottom: 16,
   },
-  // --- THAY ĐỔI: Style 'addButtonText' giờ giống 'inviteButtonText' ---
   addButtonText: {
-    color: "#EA580C", // Giống inviteButtonText
-    fontWeight: "600", // Giống inviteButtonText
-    fontSize: 15, // Giữ nguyên (hoặc 16 nếu muốn)
+    color: "#EA580C",
+    fontWeight: "600",
+    fontSize: 15,
   },
-
-  // Danh sách thiết bị
   deviceList: { gap: 12, marginBottom: 24 },
   noDeviceText: {
     textAlign: "center",
@@ -387,8 +386,6 @@ const styles = StyleSheet.create({
   deleteText: {
     color: "#DC2626",
   },
-
-  // (Các style cho invite section, footer giữ nguyên)
   inviteSection: {
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
