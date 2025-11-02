@@ -1,3 +1,4 @@
+// (user)/login.tsx
 import {
   GoogleSignin,
   isErrorWithCode,
@@ -5,6 +6,7 @@ import {
 } from "@react-native-google-signin/google-signin";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import React, { useEffect } from "react";
 import {
   Alert,
@@ -24,12 +26,14 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
-// URL Backend từ logic ban đầu
-const BACKEND_URL = "http://192.168.1.10:5283";
+// *** 1. IMPORT apiClient ***
+// (Giả sử file api.ts nằm trong thư mục utils ở gốc)
+import apiClient from "../../api/api";
 
-// Component GoogleGlyph từ giao diện
+// Component GoogleGlyph (giữ nguyên)
 const GoogleGlyph = () => (
   <Svg height={20} width={20} viewBox="0 0 24 24">
+    {/* ... (các thẻ Path) ... */}
     <Path
       d="M23.52 12.273c0-.851-.075-1.67-.216-2.455H12v4.64h6.484a5.54 5.54 0 0 1-2.405 3.635v3.02h3.89c2.276-2.096 3.58-5.186 3.58-8.84"
       fill="#4285F4"
@@ -50,37 +54,30 @@ const GoogleGlyph = () => (
 );
 
 export default function LoginScreen() {
-  // Lấy router từ giao diện
   const router = useRouter();
 
-  // Các giá trị và style cho Animated từ giao diện
+  // (Giữ nguyên các giá trị Animated)
   const headerOpacity = useSharedValue(0);
   const headerTranslateY = useSharedValue(-100);
-
   const mainOpacity = useSharedValue(0);
   const mainTranslateY = useSharedValue(100);
-
   const footerOpacity = useSharedValue(0);
   const footerTranslateY = useSharedValue(100);
-
   const animatedHeaderStyle = useAnimatedStyle(() => ({
     opacity: headerOpacity.value,
     transform: [{ translateY: headerTranslateY.value }],
   }));
-
   const animatedMainStyle = useAnimatedStyle(() => ({
     opacity: mainOpacity.value,
     transform: [{ translateY: mainTranslateY.value }],
   }));
-
   const animatedFooterStyle = useAnimatedStyle(() => ({
     opacity: footerOpacity.value,
     transform: [{ translateY: footerTranslateY.value }],
   }));
 
-  // Gộp cả hai useEffect từ 2 file
+  // (Giữ nguyên useEffect)
   useEffect(() => {
-    // Logic 1: Cấu hình Google Sign-In
     GoogleSignin.configure({
       webClientId:
         "317167237519-3bn2trq7crhc9sm57a9f695crc9idj8e.apps.googleusercontent.com",
@@ -89,71 +86,83 @@ export default function LoginScreen() {
       scopes: ["profile", "email"],
     });
 
-    // Logic 2: Chạy hiệu ứng animation cho giao diện
     const opacityConfig = { duration: 600 };
     const springConfig = { damping: 12, stiffness: 90 };
-
     headerOpacity.value = withTiming(1, opacityConfig);
     headerTranslateY.value = withSpring(0, springConfig);
-
     mainOpacity.value = withDelay(100, withTiming(1, opacityConfig));
     mainTranslateY.value = withDelay(100, withSpring(0, springConfig));
-
     footerOpacity.value = withDelay(200, withTiming(1, opacityConfig));
     footerTranslateY.value = withDelay(200, withSpring(0, springConfig));
   }, []);
 
-  // Hàm signIn (Core Logic) từ file logic gốc
+  // *** 2. CẬP NHẬT HÀM signIn ***
   const signIn = async () => {
     try {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-
       console.log("User Info Object:", JSON.stringify(userInfo, null, 2));
 
-      // Lấy idToken một cách an toàn
       const idToken = userInfo.data ? userInfo.data.idToken : null;
 
       if (idToken) {
-        console.log("Đang gửi idToken đến backend...");
-        const response = await fetch(`${BACKEND_URL}/api/auth/google`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ idToken }),
+        console.log("Đang gửi idToken đến backend (sử dụng apiClient)...");
+
+        // *** THAY THẾ FETCH BẰNG apiClient.post ***
+        // axios tự động stringify body và parse JSON response
+        const response = await apiClient.post("/api/GoogleLoign/google", {
+          idToken: idToken,
         });
 
-        const responseBodyText = await response.text();
-        console.log("Raw Backend Response:", responseBodyText);
+        // Nếu thành công (status 2xx), data nằm trong response.data
+        const data = response.data;
+        console.log(
+          "Backend response data (đã parse):",
+          JSON.stringify(data, null, 2)
+        );
 
-        if (response.ok) {
-          const data = JSON.parse(responseBodyText);
-          console.log("Backend response data:", data);
-          Alert.alert("Đăng nhập thành công!", `Chào mừng ${data.user.name}`);
+        // (Phần lưu token giữ nguyên)
+        const accessToken = data.accessToken;
+        const refreshToken = data.refreshToken;
 
-          // TÍCH HỢP: Điều hướng sau khi đăng nhập thành công
-          router.replace("/(tabs)");
+        if (accessToken) {
+          await SecureStore.setItemAsync("accessToken", accessToken);
+          console.log("Đã lưu accessToken");
         } else {
-          try {
-            const errorData = JSON.parse(responseBodyText);
-            Alert.alert(
-              `Lỗi từ Server (${response.status})`,
-              errorData.message || "Có lỗi xảy ra."
-            );
-          } catch (e) {
-            Alert.alert(
-              `Lỗi từ Server (${response.status})`,
-              "Không thể phân tích phản hồi lỗi từ server."
-            );
-          }
+          console.warn("CẢNH BÁO: Backend không trả về 'accessToken'");
+        }
+
+        if (refreshToken) {
+          await SecureStore.setItemAsync("refreshToken", refreshToken);
+          console.log("Đã lưu refreshToken");
+        } else {
+          console.warn("CẢNH BÁO: Backend không trả về 'refreshToken'");
+        }
+
+        // (Phần điều hướng giữ nguyên)
+        if (accessToken) {
+          router.replace("/(tabs)/home");
+        } else {
+          Alert.alert(
+            "Lỗi Đăng Nhập",
+            "Đăng nhập thành công nhưng không nhận được accessToken từ server."
+          );
         }
       } else {
         Alert.alert("Lỗi", "Không lấy được idToken từ Google.");
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Thêm 'any' cho TypeScript
       console.error("Lỗi trong quá trình đăng nhập hoặc gọi API:", error);
-      if (isErrorWithCode(error)) {
+
+      // *** 3. CẬP NHẬT XỬ LÝ LỖI CHO AXIOS ***
+      if (error.response) {
+        // Lỗi đến từ server (e.g., 400, 403, 500)
+        const errorMessage =
+          error.response.data?.message || "Có lỗi xảy ra từ server.";
+        Alert.alert(`Lỗi từ Server (${error.response.status})`, errorMessage);
+      } else if (isErrorWithCode(error)) {
+        // Xử lý lỗi của Google Sign-In (GIỮ NGUYÊN)
         switch (error.code) {
           case statusCodes.SIGN_IN_CANCELLED:
             console.log("Người dùng đã hủy đăng nhập");
@@ -165,15 +174,25 @@ export default function LoginScreen() {
             Alert.alert("Lỗi", "Dịch vụ Google Play không khả dụng.");
             break;
           default:
-            Alert.alert("Lỗi đăng nhập", `Code: ${error.code}`);
+            Alert.alert("Lỗi đăng nhập Google", `Code: ${error.code}`);
         }
+      } else if (error.request) {
+        // Request đã được gửi nhưng không nhận được phản hồi (lỗi mạng)
+        Alert.alert(
+          "Lỗi Mạng",
+          "Không thể kết nối đến server. Vui lòng kiểm tra lại mạng."
+        );
       } else {
-        Alert.alert("Lỗi không xác định", "Vui lòng thử lại.");
+        // Lỗi khác
+        Alert.alert(
+          "Lỗi không xác định",
+          (error as Error).message || "Vui lòng thử lại."
+        );
       }
     }
   };
 
-  // Giao diện (return) từ file giao diện
+  // (Phần return giao diện giữ nguyên)
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
@@ -210,7 +229,6 @@ export default function LoginScreen() {
 
           <Animated.View style={[styles.footerContainer, animatedFooterStyle]}>
             <View style={styles.actionArea}>
-              {/* TÍCH HỢP: Thay đổi onPress từ handleLogin sang signIn */}
               <TouchableOpacity style={styles.button} onPress={signIn}>
                 <GoogleGlyph />
                 <Text style={styles.buttonText}>Đăng nhập bằng Google</Text>
@@ -230,7 +248,7 @@ export default function LoginScreen() {
   );
 }
 
-// Toàn bộ styles từ file giao diện
+// (Phần styles giữ nguyên)
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

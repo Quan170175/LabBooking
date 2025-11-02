@@ -27,25 +27,30 @@ export default function BookingFilterHeader({
 
       <View style={styles.filterContainer}>
         <Text style={styles.filterLabel}>Lọc:</Text>
-        {FILTERS.map((filter) => (
-          <TouchableOpacity
-            key={filter.id}
-            style={[
-              styles.filterButton,
-              statusFilter === filter.id && styles.filterButtonActive,
-            ]}
-            onPress={() => onFilterChange(filter.id)}
-          >
-            <Text
+
+        {/* --- THAY ĐỔI: Thêm 1 View bao bọc các nút --- */}
+        <View style={styles.buttonGroup}>
+          {FILTERS.map((filter) => (
+            <TouchableOpacity
+              key={filter.id}
               style={[
-                styles.filterButtonText,
-                statusFilter === filter.id && styles.filterButtonTextActive,
+                styles.filterButton,
+                statusFilter === filter.id && styles.filterButtonActive,
               ]}
+              onPress={() => onFilterChange(filter.id)}
             >
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  statusFilter === filter.id && styles.filterButtonTextActive,
+                ]}
+              >
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {/* ------------------------------------------- */}
       </View>
     </>
   );
@@ -70,13 +75,22 @@ const styles = StyleSheet.create({
   filterContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    // --- THAY ĐỔI: Bỏ gap ở đây ---
+    // gap: 10,
     marginBottom: 16,
   },
   filterLabel: {
     fontSize: 14,
     color: "#475569",
-    marginRight: 4,
+    marginRight: 8, // --- THAY ĐỔI: Tăng margin ---
+  },
+
+  // --- THAY ĐỔI: Thêm nhóm nút ---
+  buttonGroup: {
+    flex: 1, // Chiếm hết phần còn lại
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8, // Thêm gap giữa các nút
   },
   filterButton: {
     paddingVertical: 6,
@@ -85,6 +99,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderWidth: 1,
     borderColor: "#FFE8DA",
+    flex: 1, // --- THAY ĐỔI: Chia đều chiều rộng ---
   },
   filterButtonActive: {
     backgroundColor: "#EA580C",
@@ -94,6 +109,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#EA580C",
+    textAlign: "center", // --- THAY ĐỔI: Căn giữa chữ ---
   },
   filterButtonTextActive: {
     color: "white",
