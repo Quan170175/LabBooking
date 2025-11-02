@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import { CheckCircle2, Send } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -170,28 +169,6 @@ export default function SupportScreen() {
             <Text style={styles.backButtonText}>Quay lại</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      {/* Card Lịch Sử Yêu Cầu */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Lịch sử yêu cầu</Text>
-        {isLoading ? (
-          <ActivityIndicator color="#EA580C" />
-        ) : tickets.length === 0 ? (
-          <Text style={styles.emptyText}>Bạn chưa gửi yêu cầu nào.</Text>
-        ) : (
-          <View style={styles.ticketList}>
-            {tickets.map((t) => (
-              <View key={t.id} style={styles.ticketItem}>
-                <Text style={styles.ticketSubject}>{t.subject}</Text>
-                <Text style={styles.ticketDate}>
-                  {new Date(t.createdAt).toLocaleString("vi-VN")}
-                </Text>
-                <Text style={styles.ticketMessage}>{t.message}</Text>
-              </View>
-            ))}
-          </View>
-        )}
       </View>
 
       <View style={{ height: 100 }} />
