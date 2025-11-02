@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -45,14 +45,27 @@ const getMonday = (d: Date) => {
 
 export default function BookSlots() {
   const router = useRouter();
-  const { type = "teaching", roomId } = useLocalSearchParams();
+  // --- THAY ĐỔI: Cập nhật type và default ---
+  const { type = "project", roomId } = useLocalSearchParams();
+  const isRecurring = type === "teaching_recurring";
+  const isFlexibleTeaching = type === "teaching_flexible";
+  const isProject = type === "project";
+  // ------------------------------------------
 
   const [currentMonday, setCurrentMonday] = useState(getMonday(new Date()));
   const [weekDates, setWeekDates] = useState<Date[]>([]);
 
+  // State cho logic "recurring"
+  const [baseSlots, setBaseSlots] = useState<
+    { dayIndex: number; slotId: string }[]
+  >([]);
+  const [numWeeks, setNumWeeks] = useState(1);
+
+  // State cho "recurring" (danh sách đầy đủ) và "flexible" (danh sách tối đa 5 hoặc 20)
   const [selectedSlots, setSelectedSlots] = useState<
     { date: string; slotId: string }[]
   >([]);
+
   const [unavailableSlots, setUnavailableSlots] = useState<Set<string>>(
     new Set()
   );
@@ -63,7 +76,22 @@ export default function BookSlots() {
       ? ROOMS[roomId]
       : null;
 
-  // ... (useEffect và các hàm logic giữ nguyên) ...
+  // --- THAY ĐỔI: Logic maxSlots cho 3 loại ---
+  const maxSlotsTotal = useMemo(() => {
+    if (isFlexibleTeaching) return 20;
+    if (isProject) return 5;
+    if (isRecurring) return 20; // Giới hạn tổng cho recurring
+    return 5; // Default
+  }, [isFlexibleTeaching, isProject, isRecurring]);
+  // ---------------------------------------------
+
+  // --- THAY ĐỔI: Tính toán số tuần tối đa cho phép (chỉ cho recurring) ---
+  const maxWeeksAllowed = useMemo(() => {
+    if (!isRecurring || baseSlots.length === 0) return 0;
+    return Math.floor(maxSlotsTotal / baseSlots.length);
+  }, [baseSlots, isRecurring, maxSlotsTotal]);
+  // --------------------------------------------------
+
   useEffect(() => {
     const dates = [];
     for (let i = 0; i < 7; i++) {
@@ -72,8 +100,16 @@ export default function BookSlots() {
       dates.push(newDate);
     }
     setWeekDates(dates);
-  }, [currentMonday]);
 
+    // --- THAY ĐỔI: Chỉ reset lựa chọn của 'recurring' khi chuyển tuần ---
+    if (isRecurring) {
+      setBaseSlots([]);
+      setNumWeeks(1);
+      setSelectedSlots([]);
+    }
+  }, [currentMonday, isRecurring]);
+
+  // ... (useEffect loadBookedSlots giữ nguyên) ...
   useEffect(() => {
     if (!room) {
       Alert.alert("Lỗi", "Không tìm thấy thông tin phòng.", [
@@ -104,6 +140,47 @@ export default function BookSlots() {
     loadBookedSlots();
   }, [roomId, room, router]);
 
+  // --- THAY ĐỔI: useEffect này CHỈ DÀNH CHO 'recurring' ---
+  useEffect(() => {
+    if (!isRecurring) return; // Chỉ chạy cho recurring
+    if (baseSlots.length === 0) {
+      setSelectedSlots([]);
+      return;
+    }
+
+    const newSelectedSlots: { date: string; slotId: string }[] = [];
+    const firstMonday = currentMonday;
+
+    for (let week = 0; week < numWeeks; week++) {
+      for (const baseSlot of baseSlots) {
+        const targetDate = new Date(firstMonday);
+        targetDate.setDate(
+          firstMonday.getDate() + week * 7 + baseSlot.dayIndex
+        );
+        const dateString = targetDate.toISOString().split("T")[0];
+        const fullSlotKey = `${dateString}::${baseSlot.slotId}`;
+
+        if (unavailableSlots.has(fullSlotKey)) {
+          Alert.alert(
+            "Lịch bị trùng",
+            `Slot ${
+              SLOTS.find((s) => s.id === baseSlot.slotId)?.label
+            } vào ngày ${targetDate.toLocaleDateString("vi-VN")} (Tuần ${
+              week + 1
+            }) đã bị đặt.
+            
+Số tuần sẽ được reset về 1.`
+          );
+          setNumWeeks(1);
+          return;
+        }
+        newSelectedSlots.push({ date: dateString, slotId: baseSlot.slotId });
+      }
+    }
+    setSelectedSlots(newSelectedSlots);
+  }, [baseSlots, numWeeks, currentMonday, unavailableSlots, isRecurring]);
+  // ----------------------------------------------------
+
   const handlePrevWeek = () => {
     setCurrentMonday((prev) => {
       const newDate = new Date(prev);
@@ -120,9 +197,8 @@ export default function BookSlots() {
     });
   };
 
-  const maxSlots = type === "teaching" ? 10 : 1;
-
-  const toggleSlot = (date: Date, slotId: string) => {
+  // --- THAY ĐỔI: Hàm này cho 'flexible teaching' và 'project' ---
+  const toggleMultiSlot = (date: Date, slotId: string) => {
     const dateString = date.toISOString().split("T")[0];
     if (unavailableSlots.has(`${dateString}::${slotId}`)) return;
 
@@ -136,10 +212,11 @@ export default function BookSlots() {
         )
       );
     } else {
-      if (selectedSlots.length >= maxSlots) {
+      if (selectedSlots.length >= maxSlotsTotal) {
+        // Dùng maxSlotsTotal (5 hoặc 20)
         Alert.alert(
           "Đã đạt giới hạn",
-          `Bạn chỉ có thể chọn tối đa ${maxSlots} slot.`
+          `Bạn chỉ có thể chọn tối đa ${maxSlotsTotal} slot.`
         );
         return;
       }
@@ -147,7 +224,49 @@ export default function BookSlots() {
     }
   };
 
+  // --- THAY ĐỔI: Hàm này CHỈ DÀNH CHO 'recurring' ---
+  const toggleRecurringSlot = (dayIndex: number, slotId: string) => {
+    const newBaseSlots = [...baseSlots];
+    const slotIndex = newBaseSlots.findIndex(
+      (s) => s.dayIndex === dayIndex && s.slotId === slotId
+    );
+
+    if (slotIndex > -1) {
+      newBaseSlots.splice(slotIndex, 1);
+    } else {
+      newBaseSlots.push({ dayIndex, slotId });
+    }
+
+    if (newBaseSlots.length > 0) {
+      const newMaxWeeks = Math.floor(maxSlotsTotal / newBaseSlots.length);
+      if (numWeeks > newMaxWeeks) {
+        setNumWeeks(newMaxWeeks);
+      }
+    } else {
+      setNumWeeks(1);
+    }
+    setBaseSlots(newBaseSlots); // Kích hoạt useEffect
+  };
+
+  // Hàm này CHỈ DÀNH CHO 'recurring'
+  const handleChangeNumWeeks = (newWeekValue: number) => {
+    if (baseSlots.length === 0) return;
+    const clampedWeeks = Math.max(1, Math.min(newWeekValue, maxWeeksAllowed));
+    setNumWeeks(clampedWeeks); // Kích hoạt useEffect
+  };
+
+  // --- THAY ĐỔI: Hàm điều hướng chính ---
+  const handleToggleSlot = (date: Date, slotId: string, dayIndex: number) => {
+    if (isRecurring) {
+      toggleRecurringSlot(dayIndex, slotId);
+    } else {
+      // Dùng chung cho 'project' và 'teaching_flexible'
+      toggleMultiSlot(date, slotId);
+    }
+  };
+
   const goToDevices = async () => {
+    // ... (logic goToDevices giữ nguyên) ...
     if (selectedSlots.length === 0) {
       Alert.alert("Chưa chọn slot", "Vui lòng chọn ít nhất một giờ học.");
       return;
@@ -163,7 +282,39 @@ export default function BookSlots() {
     }
   };
 
+  // --- THAY ĐỔI: Cập nhật text hiển thị ---
+  const selectionInfo = useMemo(() => {
+    if (isRecurring) {
+      // Text cho 'recurring'
+      if (baseSlots.length === 0) {
+        return "Chưa chọn slot";
+      }
+      return (
+        <>
+          <Text style={{ fontWeight: "bold" }}>{baseSlots.length}</Text>{" "}
+          slot/tuần.
+          {"\n"}
+          Tổng:{" "}
+          <Text style={{ fontWeight: "bold" }}>
+            {selectedSlots.length}
+          </Text> / {maxSlotsTotal} slots
+        </>
+      );
+    }
+
+    // Text cho 'flexible'
+    return (
+      <>
+        Đã chọn:{" "}
+        <Text style={{ fontWeight: "bold" }}>{selectedSlots.length}</Text> /{" "}
+        {maxSlotsTotal} slot
+      </>
+    );
+  }, [isRecurring, selectedSlots.length, baseSlots.length, maxSlotsTotal]);
+  // -----------------------------------------
+
   if (isLoading || weekDates.length === 0 || !room) {
+    // ... (Phần render loading giữ nguyên) ...
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#EA580C" />
@@ -178,6 +329,7 @@ export default function BookSlots() {
   } - ${endDate.getDate()}/${endDate.getMonth() + 1}/${endDate.getFullYear()}`;
 
   const headerIcon = (
+    // ... (SVG icon giữ nguyên) ...
     <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <Path
         d="M8 2V5"
@@ -218,7 +370,6 @@ export default function BookSlots() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <BookingProgress step={2} />
 
-      {/* Sử dụng BookingPageHeader */}
       <BookingPageHeader
         icon={headerIcon}
         title={room.name}
@@ -236,30 +387,41 @@ export default function BookSlots() {
       </View>
 
       <View style={styles.calendarContainer}>
-        {/* ... (Phần lưới calendar giữ nguyên) ... */}
+        {/* ... (Phần render lưới calendar) ... */}
         <View style={styles.weekdaysHeader}>
-          {weekDates.map((date, index) => (
+          {weekDates.map((date, dayIndex) => (
             <View key={date.toISOString()} style={styles.dayHeader}>
-              <Text style={styles.dayNameText}>{weekdays_short[index]}</Text>
+              <Text style={styles.dayNameText}>{weekdays_short[dayIndex]}</Text>
               <Text style={styles.dateNumText}>{date.getDate()}</Text>
             </View>
           ))}
         </View>
+
         <View style={styles.slotsGrid}>
-          {weekDates.map((date) => (
+          {weekDates.map((date, dayIndex) => (
             <View key={date.toISOString()} style={styles.dayColumn}>
               {SLOTS.map((slot) => {
                 const dateString = date.toISOString().split("T")[0];
                 const isUnavailable = unavailableSlots.has(
                   `${dateString}::${slot.id}`
                 );
-                const isSelected = selectedSlots.some(
-                  (s) => s.date === dateString && s.slotId === slot.id
-                );
+
+                // --- THAY ĐỔI: Logic 'isSelected' cho 3 loại ---
+                const isSelected = isRecurring
+                  ? baseSlots.some(
+                      // 'recurring' kiểm tra mẫu
+                      (s) => s.dayIndex === dayIndex && s.slotId === slot.id
+                    )
+                  : selectedSlots.some(
+                      // 'flexible' kiểm tra chính xác
+                      (s) => s.date === dateString && s.slotId === slot.id
+                    );
+                // ------------------------------------------
+
                 return (
                   <TouchableOpacity
                     key={slot.id}
-                    onPress={() => toggleSlot(date, slot.id)}
+                    onPress={() => handleToggleSlot(date, slot.id, dayIndex)}
                     disabled={isUnavailable}
                     style={[
                       styles.slotButton,
@@ -273,6 +435,7 @@ export default function BookSlots() {
                     <Text
                       style={[
                         styles.slotLabel,
+                        isUnavailable && styles.unavailableSlotText,
                         isSelected && styles.selectedSlotText,
                       ]}
                     >
@@ -287,6 +450,7 @@ export default function BookSlots() {
       </View>
 
       <View style={styles.legend}>
+        {/* ... (Phần legend giữ nguyên) ... */}
         <View style={styles.legendItem}>
           <View style={[styles.legendBox, styles.availableSlot]} />
           <Text style={styles.legendText}>Có thể chọn</Text>
@@ -301,13 +465,44 @@ export default function BookSlots() {
         </View>
       </View>
 
+      {/* --- THAY ĐỔI: Chỉ hiển thị Bộ chọn tuần cho 'recurring' --- */}
+      {isRecurring && (
+        <View style={styles.weekSelectorContainer}>
+          <Text style={styles.weekSelectorLabel}>Số tuần lặp lại:</Text>
+          <View style={styles.weekSelectorControls}>
+            <TouchableOpacity
+              onPress={() => handleChangeNumWeeks(numWeeks - 1)}
+              disabled={numWeeks <= 1 || baseSlots.length === 0}
+              style={[
+                styles.weekNavButton,
+                (numWeeks <= 1 || baseSlots.length === 0) &&
+                  styles.disabledButton,
+              ]}
+            >
+              <Text style={styles.weekNavText}>-</Text>
+            </TouchableOpacity>
+            <Text style={styles.weekCountText}>
+              <Text style={{ fontWeight: "bold" }}>{numWeeks}</Text>
+              {maxWeeksAllowed > 0 ? ` / ${maxWeeksAllowed}` : ""} tuần
+            </Text>
+            <TouchableOpacity
+              onPress={() => handleChangeNumWeeks(numWeeks + 1)}
+              disabled={numWeeks >= maxWeeksAllowed || baseSlots.length === 0}
+              style={[
+                styles.weekNavButton,
+                (numWeeks >= maxWeeksAllowed || baseSlots.length === 0) &&
+                  styles.disabledButton,
+              ]}
+            >
+              <Text style={styles.weekNavText}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      {/* ------------------------------------ */}
+
       <View style={styles.footer}>
-        <Text style={styles.selectionText}>
-          Đã chọn:{" "}
-          <Text style={{ fontWeight: "bold" }}>{selectedSlots.length}</Text>{" "}
-          slot
-        </Text>
-        {/* Sử dụng BookingButton */}
+        <Text style={styles.selectionText}>{selectionInfo}</Text>
         <BookingButton
           label="Tiếp theo"
           onPress={goToDevices}
@@ -319,6 +514,7 @@ export default function BookSlots() {
 }
 
 const styles = StyleSheet.create({
+  // ... (Toàn bộ styles giữ nguyên) ...
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   content: { padding: 16, paddingBottom: 100 },
   centered: {
@@ -387,9 +583,10 @@ const styles = StyleSheet.create({
   },
   availableSlot: { backgroundColor: "#fff", borderColor: "#F1F5F9" },
   selectedSlot: { backgroundColor: "#EA580C", borderColor: "#EA580C" },
-  unavailableSlot: { backgroundColor: "#E2E8F0", borderColor: "#E2E8F0" },
+  unavailableSlot: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
   slotLabel: { fontSize: 13, fontWeight: "500", color: "#0F172A" },
   selectedSlotText: { color: "#fff" },
+  unavailableSlotText: { color: "#94A3B8" },
   legend: {
     marginTop: 16,
     display: "flex",
@@ -411,11 +608,52 @@ const styles = StyleSheet.create({
     borderColor: "#F1F5F9",
   },
   legendText: { fontSize: 13, color: "#475569" },
+  weekSelectorContainer: {
+    marginTop: 20,
+    padding: 12,
+    backgroundColor: "white",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#FFE8DA",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  weekSelectorLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#0F172A",
+  },
+  weekSelectorControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  weekNavButton: {
+    width: 32,
+    height: 32,
+    backgroundColor: "#FFEDD5",
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  weekNavText: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#EA580C",
+  },
+  weekCountText: {
+    fontSize: 15,
+    color: "#0F172A",
+  },
+  disabledButton: {
+    backgroundColor: "#F1F5F9",
+  },
   footer: {
     marginTop: 24,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  selectionText: { fontSize: 14, color: "#64748B" },
+  selectionText: { fontSize: 14, color: "#64748B", flex: 1 },
 });

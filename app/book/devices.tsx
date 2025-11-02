@@ -11,6 +11,9 @@ import {
   View,
 } from "react-native";
 import { Path, Svg } from "react-native-svg";
+import AddDeviceModal, {
+  CustomDevice,
+} from "../../components/booking/AddDeviceModal";
 import BookingButton from "../../components/booking/BookingButton";
 import BookingCard from "../../components/booking/BookingCard";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
@@ -18,43 +21,35 @@ import BookingProgress from "../../components/booking/BookingProgress";
 import InviteMemberModal from "../../components/booking/InviteMemberModal";
 import ConfirmationModal from "../../components/common/ConfirmationModal";
 
-// ... (Dữ liệu giả lập ROOMS giữ nguyên) ...
-const ROOMS: any = {
-  lab1: {
-    id: "lab1",
-    name: "Phòng Lab A101",
-    devices: [
-      { id: "d1", name: "Laptop", qty: 10, desc: "Laptop sinh viên (Windows)" },
-      { id: "d2", name: "Máy chiếu", qty: 2, desc: "Máy chiếu HD" },
-      { id: "d3", name: "Bộ kit IoT", qty: 5, desc: "Cảm biến và board" },
-    ],
-  },
-  lab2: {
-    id: "lab2",
-    name: "Phòng Lab B202",
-    devices: [
-      { id: "d4", name: "PC", qty: 20, desc: "Máy trạm cài đặt sẵn" },
-      { id: "d5", name: "Router", qty: 3, desc: "Thiết bị mạng" },
-    ],
-  },
-};
+const DeviceIcon = () => (
+  <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7z"
+      stroke="#C2410C"
+      strokeWidth="1.5"
+    />
+    <Path
+      d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 .94l-.31 1.14a2 2 0 0 1-2 .14l-.13-.07a2 2 0 0 1-.8-1.9l.13-1.14a1.65 1.65 0 0 0-.6-1.22l-.9-.9a1.65 1.65 0 0 0-1.22-.6l-1.14.13a2 2 0 0 1-1.9-.8l-.07-.13a2 2 0 0 1 .14-2l1.14-.31a1.65 1.65 0 0 0 .94-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06c.45.45 1.2.57 1.82.33l1.14-.31a2 2 0 0 1 2 .14l.13.07a2 2 0 0 1 .8 1.9l-.13 1.14c-.09.38.02.79.33 1.1l.9.9c.31.31.72.42 1.1.33l1.14-.13a2 2 0 0 1 2 .8l.07.13a2 2 0 0 1-.14 2l-1.14.31c-.38.09-.7.33-1 .66z"
+      stroke="#C2410C"
+      strokeWidth="1.2"
+    />
+  </Svg>
+);
 
 export default function BookDevices() {
   const router = useRouter();
   const [booking, setBooking] = useState<any>(null);
-  const [selectedDevices, setSelectedDevices] = useState<
-    Record<string, number>
-  >({});
+  const [customDevices, setCustomDevices] = useState<CustomDevice[]>([]);
+  const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
+  const [deviceToEdit, setDeviceToEdit] = useState<CustomDevice | null>(null);
+  const [deviceToDeleteId, setDeviceToDeleteId] = useState<string | null>(null);
   const [invited, setInvited] = useState<string[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
-  // 2. State cho loading khi submit và state mở/đóng modal
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCancelModalOpen, setCancelModalOpen] = useState(false);
-  // (Đã loại bỏ isDelaying)
 
-  // ... (useEffect loadBookingData giữ nguyên) ...
+  // ... (Tất cả các hàm logic giữ nguyên: loadBookingData, CRUD devices, invite, confirm, cancel) ...
   useEffect(() => {
     const loadBookingData = async () => {
       try {
@@ -65,19 +60,9 @@ export default function BookDevices() {
         }
         const b = JSON.parse(bString);
         setBooking(b);
-
-        if (Array.isArray(b.devices)) {
-          const map: Record<string, number> = {};
-          for (const item of b.devices) {
-            if (typeof item === "string") map[item] = 1;
-            else if (item && typeof item === "object")
-              map[item.id] = item.qty || 1;
-          }
-          setSelectedDevices(map);
-        } else if (b.devices && typeof b.devices === "object") {
-          setSelectedDevices(b.devices);
+        if (b.devices && Array.isArray(b.devices)) {
+          setCustomDevices(b.devices);
         }
-
         if (b.invited && Array.isArray(b.invited)) {
           setInvited(b.invited);
         }
@@ -89,33 +74,46 @@ export default function BookDevices() {
       }
     };
     loadBookingData();
-  }, []);
+  }, [router]);
 
-  // (Đã loại bỏ useEffect 5s delay)
-
-  // ... (Các hàm toggleDevice, setQty, handleInvite giữ nguyên) ...
-  const toggleDevice = (id: string) => {
-    setSelectedDevices((prev) => {
-      const next = { ...prev };
-      if (typeof next[id] === "number") {
-        delete next[id];
-      } else {
-        next[id] = 1;
-      }
-      return next;
-    });
+  const handleOpenAddModal = () => {
+    setDeviceToEdit(null);
+    setDeviceModalOpen(true);
   };
 
-  const setQty = (id: string, qty: number, maxQty: number) => {
-    setSelectedDevices((prev) => {
-      const newQty = Math.max(0, Math.min(qty, maxQty));
-      if (newQty === 0) {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      }
-      return { ...prev, [id]: newQty };
-    });
+  const handleOpenEditModal = (device: CustomDevice) => {
+    setDeviceToEdit(device);
+    setDeviceModalOpen(true);
+  };
+
+  const handleAddOrUpdateDevice = (data: Omit<CustomDevice, "id">) => {
+    if (deviceToEdit) {
+      setCustomDevices((prevDevices) =>
+        prevDevices.map((d) =>
+          d.id === deviceToEdit.id ? { ...d, ...data } : d
+        )
+      );
+    } else {
+      const newDevice: CustomDevice = {
+        id: Date.now().toString(),
+        ...data,
+      };
+      setCustomDevices((prevDevices) => [...prevDevices, newDevice]);
+    }
+    setDeviceModalOpen(false);
+  };
+
+  const handleOpenDeleteConfirm = (id: string) => {
+    setDeviceToDeleteId(id);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deviceToDeleteId) {
+      setCustomDevices((prevDevices) =>
+        prevDevices.filter((d) => d.id !== deviceToDeleteId)
+      );
+    }
+    setDeviceToDeleteId(null);
   };
 
   const handleInvite = (email: string) => {
@@ -125,24 +123,17 @@ export default function BookDevices() {
   const confirmBooking = async () => {
     setIsSubmitting(true);
     try {
-      // ... (logic confirmBooking giữ nguyên) ...
       const bookingsString = await AsyncStorage.getItem("bookings");
       const bookings = bookingsString ? JSON.parse(bookingsString) : [];
-      const devicesArray = Object.entries(selectedDevices).map(([id, qty]) => ({
-        id,
-        qty,
-      }));
-
       bookings.push({
         id: Date.now(),
         ...booking,
-        devices: devicesArray,
+        devices: customDevices,
         invited,
         status: "pending",
       });
       await AsyncStorage.setItem("bookings", JSON.stringify(bookings));
       await AsyncStorage.removeItem("currentBooking");
-
       Alert.alert(
         "Đặt phòng thành công!",
         "Yêu cầu của bạn đã được gửi đi và đang chờ xác nhận.",
@@ -156,19 +147,16 @@ export default function BookDevices() {
     }
   };
 
-  // 3. Cập nhật hàm xử lý Hủy và xác nhận Hủy
   const handleCancel = () => {
-    setCancelModalOpen(true); // Chỉ cần mở modal
+    setCancelModalOpen(true);
   };
 
   const onConfirmCancel = async () => {
-    setCancelModalOpen(false); // Đóng modal
+    setCancelModalOpen(false);
     await AsyncStorage.removeItem("currentBooking");
     router.replace("/(tabs)" as any);
   };
-  // ----------------------------------------------
 
-  // ... (Phần render loading, headerIcon, ...)
   if (isLoading || !booking) {
     return (
       <View style={styles.centered}>
@@ -177,80 +165,68 @@ export default function BookDevices() {
     );
   }
 
-  const room = ROOMS[booking.roomId];
-
-  const headerIcon = (
-    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7z"
-        stroke="#EA580C"
-        strokeWidth="1.5"
-      />
-      <Path
-        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 .94l-.31 1.14a2 2 0 0 1-2 .14l-.13-.07a2 2 0 0 1-.8-1.9l.13-1.14a1.65 1.65 0 0 0-.6-1.22l-.9-.9a1.65 1.65 0 0 0-1.22-.6l-1.14.13a2 2 0 0 1-1.9-.8l-.07-.13a2 2 0 0 1 .14-2l1.14-.31a1.65 1.65 0 0 0 .94-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06c.45.45 1.2.57 1.82.33l1.14-.31a2 2 0 0 1 2 .14l.13.07a2 2 0 0 1 .8 1.9l-.13 1.14c-.09.38.02.79.33 1.1l.9.9c.31.31.72.42 1.1.33l1.14-.13a2 2 0 0 1 2 .8l.07.13a2 2 0 0 1-.14 2l-1.14.31c-.38.09-.7.33-1 .66z"
-        stroke="#EA580C"
-        strokeWidth="1.2"
-      />
-    </Svg>
-  );
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <BookingProgress step={3} />
       <BookingPageHeader
-        icon={headerIcon}
-        title="Thiết bị có thể mượn"
-        subtitle={`Chọn thiết bị cho ${room.name}`}
+        icon={<DeviceIcon />}
+        title="Thiết bị mang vào"
+        subtitle={`Khai báo thiết bị cho ${booking.roomName}`}
       />
 
-      {/* ... (Phần Device List và Invite Section giữ nguyên) ... */}
+      {/* --- THAY ĐỔI: Sử dụng style 'inviteButton' cho nút này --- */}
+      <TouchableOpacity
+        onPress={handleOpenAddModal}
+        style={styles.addButton} // Style đã được cập nhật bên dưới
+      >
+        <View style={styles.plusIcon}>
+          <Text style={styles.plusIconText}>+</Text>
+        </View>
+        {/* --- THAY ĐỔI: Sử dụng style 'inviteButtonText' cho text này --- */}
+        <Text style={styles.addButtonText}>Thêm thiết bị</Text>
+      </TouchableOpacity>
+      {/* -------------------------------------------------------- */}
+
       <View style={styles.deviceList}>
-        {room.devices.map((d: any) => {
-          const isSelected = typeof selectedDevices[d.id] === "number";
-          return (
-            <BookingCard key={d.id}>
-              <View style={styles.deviceInfo}>
-                <TouchableOpacity
-                  onPress={() => toggleDevice(d.id)}
-                  style={styles.checkboxBase}
-                >
-                  {isSelected && <View style={styles.checkboxChecked} />}
-                </TouchableOpacity>
-                <View>
-                  <Text style={styles.deviceName}>{d.name}</Text>
-                  <Text style={styles.deviceDesc}>
-                    {d.desc} • SL: {d.qty}
-                  </Text>
-                </View>
+        {customDevices.length === 0 && (
+          <Text style={styles.noDeviceText}>Bạn chưa thêm thiết bị nào.</Text>
+        )}
+
+        {customDevices.map((d) => (
+          <BookingCard key={d.id} layout="default">
+            <View style={styles.deviceInfoContainer}>
+              <View style={styles.deviceIcon}>
+                <DeviceIcon />
               </View>
-              {isSelected && (
-                <View style={styles.quantityControl}>
-                  <TouchableOpacity
-                    onPress={() =>
-                      setQty(d.id, (selectedDevices[d.id] || 1) - 1, d.qty)
-                    }
-                    style={styles.qtyButton}
-                  >
-                    <Text style={styles.qtyButtonText}>-</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.qtyText}>{selectedDevices[d.id]}</Text>
-                  <TouchableOpacity
-                    onPress={() =>
-                      setQty(d.id, (selectedDevices[d.id] || 1) + 1, d.qty)
-                    }
-                    style={[styles.qtyButton, styles.qtyButtonPlus]}
-                  >
-                    <Text style={[styles.qtyButtonText, { color: "white" }]}>
-                      +
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </BookingCard>
-          );
-        })}
+              <View style={styles.deviceTextWrapper}>
+                <Text style={styles.deviceName}>{d.name}</Text>
+                <Text style={styles.deviceDesc}>
+                  {d.desc || "Không có mô tả"} • SL: {d.qty}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.cardActions}>
+              <TouchableOpacity
+                onPress={() => handleOpenEditModal(d)}
+                style={styles.cardButton}
+              >
+                <Text style={styles.cardButtonText}>Cập nhật</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleOpenDeleteConfirm(d.id)}
+                style={styles.cardButton}
+              >
+                <Text style={[styles.cardButtonText, styles.deleteText]}>
+                  Xóa
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </BookingCard>
+        ))}
       </View>
 
+      {/* ... (Phần Invite Section giữ nguyên) ... */}
       {booking?.type === "project" && (
         <View style={styles.inviteSection}>
           <Text style={styles.title}>Thêm thành viên</Text>
@@ -278,11 +254,12 @@ export default function BookDevices() {
         </View>
       )}
 
+      {/* ... (Phần Footer và Modals giữ nguyên) ... */}
       <View style={styles.footer}>
         <BookingButton
           label="Hủy"
           variant="secondary"
-          onPress={handleCancel} // Mở modal
+          onPress={handleCancel}
           disabled={isSubmitting}
         />
         <BookingButton
@@ -300,6 +277,23 @@ export default function BookDevices() {
         onInvite={handleInvite}
       />
 
+      <AddDeviceModal
+        visible={isDeviceModalOpen}
+        onClose={() => setDeviceModalOpen(false)}
+        onSubmit={handleAddOrUpdateDevice}
+        initialData={deviceToEdit}
+      />
+
+      <ConfirmationModal
+        visible={!!deviceToDeleteId}
+        title="Xóa thiết bị"
+        message="Bạn có chắc chắn muốn xóa thiết bị này khỏi danh sách?"
+        confirmText="Xác nhận Xóa"
+        cancelText="Không"
+        onClose={() => setDeviceToDeleteId(null)}
+        onConfirm={handleConfirmDelete}
+      />
+
       <ConfirmationModal
         visible={isCancelModalOpen}
         title="Hủy đặt phòng"
@@ -313,7 +307,7 @@ export default function BookDevices() {
   );
 }
 
-// ... (Styles giữ nguyên) ...
+// --- THAY ĐỔI: Cập nhật styles ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   content: { padding: 16, paddingBottom: 100 },
@@ -325,42 +319,77 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 22, fontWeight: "600", color: "#0F172A" },
   subtitle: { fontSize: 14, color: "#64748B" },
+
+  // --- THAY ĐỔI: Style 'addButton' giờ giống 'inviteButton' ---
+  addButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "white", // Giống inviteButton
+    borderWidth: 1, // Giống inviteButton
+    borderColor: "#E2E8F0", // Giống inviteButton
+    paddingVertical: 8, // Giống inviteButton
+    paddingHorizontal: 12, // Giống inviteButton
+    borderRadius: 12, // Giống inviteButton
+    alignSelf: "flex-start", // Giống inviteButton
+    marginBottom: 16, // Giữ margin riêng
+  },
+  // --- THAY ĐỔI: Style 'addButtonText' giờ giống 'inviteButtonText' ---
+  addButtonText: {
+    color: "#EA580C", // Giống inviteButtonText
+    fontWeight: "600", // Giống inviteButtonText
+    fontSize: 15, // Giữ nguyên (hoặc 16 nếu muốn)
+  },
+
+  // Danh sách thiết bị
   deviceList: { gap: 12, marginBottom: 24 },
-  deviceInfo: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  deviceName: { fontWeight: "600", color: "#0F172A", fontSize: 16 },
-  deviceDesc: { fontSize: 13, color: "#64748B", marginTop: 2 },
-  checkboxBase: {
-    width: 24,
-    height: 24,
-    justifyContent: "center",
+  noDeviceText: {
+    textAlign: "center",
+    color: "#64748B",
+    fontSize: 15,
+    paddingVertical: 20,
+  },
+  deviceInfoContainer: {
+    flexDirection: "row",
     alignItems: "center",
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#CBD5E1",
-    backgroundColor: "#F8FAFC",
+    gap: 12,
+    flex: 1,
   },
-  checkboxChecked: {
-    width: 14,
-    height: 14,
-    backgroundColor: "#EA580C",
-    borderRadius: 4,
-  },
-  quantityControl: { flexDirection: "row", alignItems: "center", gap: 8 },
-  qtyButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    justifyContent: "center",
+  deviceIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
+    justifyContent: "center",
   },
-  qtyButtonPlus: { backgroundColor: "#EA580C", borderColor: "#EA580C" },
-  qtyButtonText: { fontSize: 18, fontWeight: "500" },
-  qtyText: { width: 30, textAlign: "center", fontSize: 16, fontWeight: "600" },
+  deviceTextWrapper: {
+    flex: 1,
+  },
+  deviceName: {
+    fontWeight: "600",
+    color: "#0F172A",
+    fontSize: 16,
+    marginBottom: 2,
+  },
+  deviceDesc: { fontSize: 13, color: "#64748B" },
+  cardActions: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  cardButton: {},
+  cardButtonText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#0F172A",
+  },
+  deleteText: {
+    color: "#DC2626",
+  },
+
+  // (Các style cho invite section, footer giữ nguyên)
   inviteSection: {
-    marginTop: 24,
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
     paddingTop: 24,

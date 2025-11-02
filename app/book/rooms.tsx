@@ -13,6 +13,7 @@ import BookingCard from "../../components/booking/BookingCard";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
 import BookingProgress from "../../components/booking/BookingProgress";
 
+// ... (ROOMS data giữ nguyên) ...
 const ROOMS = [
   {
     id: "lab1",
@@ -28,14 +29,16 @@ const ROOMS = [
 
 export default function BookRooms() {
   const router = useRouter();
-  const { type = "teaching" } = useLocalSearchParams<{ type: string }>();
+  // --- THAY ĐỔI: Thêm các type mới, đặt default là 'project' ---
+  const { type = "project" } = useLocalSearchParams<{ type: string }>();
 
   const handleSelectRoom = async (room: (typeof ROOMS)[0]) => {
+    // Logic này giữ nguyên, nó sẽ tự động lưu đúng 'type'
     try {
       const currentBooking = {
         roomId: room.id,
         roomName: room.name,
-        type,
+        type, // type sẽ là 'teaching_flexible', 'teaching_recurring', hoặc 'project'
         slots: [],
         devices: [],
       };
@@ -53,6 +56,7 @@ export default function BookRooms() {
   };
 
   const headerIcon = (
+    // ... (SVG icon giữ nguyên) ...
     <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <Path
         d="M8.2 2V6M16.2 2V6M21.2 14V6c0-.53-.21-1.04-.59-1.41C20.24 4.21 19.73 4 19.2 4H5.2c-.53 0-1.04.21-1.41.59C3.41 4.96 3.2 5.47 3.2 6v14c0 .53.21 1.04.59 1.41.37.38.88.59 1.41.59h8"
@@ -71,24 +75,34 @@ export default function BookRooms() {
     </Svg>
   );
 
+  // --- THAY ĐỔI: Logic subtitle cho 3 loại ---
+  const getSubtitle = () => {
+    switch (type) {
+      case "teaching_flexible":
+        return "Chọn linh hoạt tối đa 20 slot";
+      case "teaching_recurring":
+        return "Chọn lặp lại theo tuần (tối đa 20 slot)";
+      case "project":
+        return "Chọn linh hoạt tối đa 5 slot";
+      default:
+        return "Chọn lịch của bạn";
+    }
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <BookingProgress step={1} />
 
-      {/* Sử dụng BookingPageHeader */}
       <BookingPageHeader
         icon={headerIcon}
         title="Chọn phòng lab"
-        subtitle={
-          type === "teaching"
-            ? "Bạn có thể chọn nhiều slot (tối đa 10)"
-            : "Chỉ được chọn 1 slot cho dự án"
-        }
+        subtitle={getSubtitle()} // Sử dụng hàm mới
       />
 
       <View style={styles.roomList}>
         {ROOMS.map((room) => (
           <BookingCard key={room.id}>
+            {/* ... (Phần render room list giữ nguyên) ... */}
             <View style={styles.roomInfo}>
               <View style={styles.roomIcon}>
                 <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -127,6 +141,7 @@ export default function BookRooms() {
 }
 
 const styles = StyleSheet.create({
+  // ... (Styles giữ nguyên) ...
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   content: { padding: 16, paddingBottom: 100 },
   roomList: { gap: 16 },
