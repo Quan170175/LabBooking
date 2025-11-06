@@ -41,7 +41,7 @@
         {
           // (Tùy chọn) Biểu tượng thông báo cho Android
           // Đặt đường dẫn đến file icon 96x96 (png) của bạn trong thư mục assets
-          "icon": "./assets/images/notification-icon.png",
+          "icon": "./assets/images/FLMS.png",
 
           // (Tùy chọn) Màu cho biểu tượng (sử dụng mã hex)
           "color": "#ffffff"
@@ -57,7 +57,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/FLMS.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
