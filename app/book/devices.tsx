@@ -18,10 +18,11 @@ import BookingButton from "../../components/booking/BookingButton";
 import BookingCard from "../../components/booking/BookingCard";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
 import BookingProgress from "../../components/booking/BookingProgress";
-import InviteMemberModal from "../../components/booking/InviteMemberModal";
+import InviteMemberModal, {
+  GuestInvite,
+} from "../../components/booking/InviteMemberModal";
 import ConfirmationModal from "../../components/common/ConfirmationModal";
 
-// ... (Icon DeviceIcon giữ nguyên) ...
 const DeviceIcon = () => (
   <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
     <Path
@@ -40,18 +41,16 @@ const DeviceIcon = () => (
 export default function BookDevices() {
   const router = useRouter();
   const [booking, setBooking] = useState<any>(null);
-  // ... (tất cả state khác giữ nguyên) ...
   const [customDevices, setCustomDevices] = useState<CustomDevice[]>([]);
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [deviceToEdit, setDeviceToEdit] = useState<CustomDevice | null>(null);
   const [deviceToDeleteId, setDeviceToDeleteId] = useState<string | null>(null);
-  const [invited, setInvited] = useState<string[]>([]);
+  const [invited, setInvited] = useState<GuestInvite[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCancelModalOpen, setCancelModalOpen] = useState(false);
 
-  // ... (useEffect loadBookingData giữ nguyên - nó đã lưu toàn bộ object 'booking') ...
   useEffect(() => {
     const loadBookingData = async () => {
       try {
@@ -61,12 +60,16 @@ export default function BookDevices() {
           return;
         }
         const b = JSON.parse(bString);
-        setBooking(b); // 'b' chứa 'b.slots' với cờ isConflict
+        setBooking(b);
+
         if (b.devices && Array.isArray(b.devices)) {
           setCustomDevices(b.devices);
         }
         if (b.invited && Array.isArray(b.invited)) {
-          setInvited(b.invited);
+          const validGuests = b.invited.filter(
+            (item: any) => typeof item === "object" && item.email
+          );
+          setInvited(validGuests);
         }
       } catch (error) {
         console.error("Lỗi khi tải dữ liệu đặt phòng:", error);
@@ -78,7 +81,7 @@ export default function BookDevices() {
     loadBookingData();
   }, [router]);
 
-  // ... (Tất cả các hàm CRUD, invite, cancel... giữ nguyên) ...
+  // (Các hàm CRUD thiết bị giữ nguyên)
   const handleOpenAddModal = () => {
     setDeviceToEdit(null);
     setDeviceModalOpen(true);
@@ -114,19 +117,13 @@ export default function BookDevices() {
     }
     setDeviceToDeleteId(null);
   };
-  const handleInvite = (email: string) => {
-    setInvited((prev) => (prev.includes(email) ? prev : [...prev, email]));
-  };
-  const handleCancel = () => {
-    setCancelModalOpen(true);
-  };
-  const onConfirmCancel = async () => {
-    setCancelModalOpen(false);
-    await AsyncStorage.removeItem("currentBooking");
-    router.replace("/(tabs)" as any);
+
+  const handleInvite = (guest: GuestInvite) => {
+    setInvited((prev) =>
+      prev.some((g) => g.email === guest.email) ? prev : [...prev, guest]
+    );
   };
 
-  // --- THAY ĐỔI: confirmBooking kiểm tra xung đột ---
   const confirmBooking = async () => {
     setIsSubmitting(true);
     try {
@@ -145,13 +142,13 @@ export default function BookDevices() {
         id: Date.now(),
         ...booking,
         devices: customDevices,
-        invited,
+        invited: invited,
         status: newStatus, // Lưu status mới
       });
+
       await AsyncStorage.setItem("bookings", JSON.stringify(bookings));
       await AsyncStorage.removeItem("currentBooking");
 
-      // Thông báo dựa trên status
       Alert.alert(
         hasConflicts ? "Gửi yêu cầu ưu tiên!" : "Đặt phòng thành công!",
         hasConflicts
@@ -166,10 +163,18 @@ export default function BookDevices() {
       setIsSubmitting(false);
     }
   };
-  // ----------------------------------------------------
+
+  const handleCancel = () => {
+    setCancelModalOpen(true);
+  };
+
+  const onConfirmCancel = async () => {
+    setCancelModalOpen(false);
+    await AsyncStorage.removeItem("currentBooking");
+    router.replace("/(tabs)" as any);
+  };
 
   if (isLoading || !booking) {
-    // ... (Phần render loading giữ nguyên) ...
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#EA580C" />
@@ -186,19 +191,17 @@ export default function BookDevices() {
         subtitle={`Khai báo thiết bị cho ${booking.roomName}`}
       />
 
-      {/* ... (Phần render "Thêm thiết bị" và danh sách thiết bị giữ nguyên) ... */}
+      {/* (Phần Thêm/Danh sách thiết bị giữ nguyên) */}
       <TouchableOpacity onPress={handleOpenAddModal} style={styles.addButton}>
         <View style={styles.plusIcon}>
           <Text style={styles.plusIconText}>+</Text>
         </View>
         <Text style={styles.addButtonText}>Thêm thiết bị</Text>
       </TouchableOpacity>
-
       <View style={styles.deviceList}>
         {customDevices.length === 0 && (
           <Text style={styles.noDeviceText}>Bạn chưa thêm thiết bị nào.</Text>
         )}
-
         {customDevices.map((d) => (
           <BookingCard key={d.id} layout="default">
             <View style={styles.deviceInfoContainer}>
@@ -212,7 +215,6 @@ export default function BookDevices() {
                 </Text>
               </View>
             </View>
-
             <View style={styles.cardActions}>
               <TouchableOpacity
                 onPress={() => handleOpenEditModal(d)}
@@ -233,35 +235,36 @@ export default function BookDevices() {
         ))}
       </View>
 
-      {/* ... (Phần Invite Section giữ nguyên) ... */}
-      {booking?.type === "project" && (
-        <View style={styles.inviteSection}>
-          <Text style={styles.title}>Thêm thành viên</Text>
-          <Text style={styles.subtitle}>
-            Mời thành viên tham gia bằng email
-          </Text>
-          <TouchableOpacity
-            onPress={() => setInviteOpen(true)}
-            style={styles.inviteButton}
-          >
-            <View style={styles.plusIcon}>
-              <Text style={styles.plusIconText}>+</Text>
-            </View>
-            <Text style={styles.inviteButtonText}>Thêm thành viên</Text>
-          </TouchableOpacity>
-          {invited.length > 0 && (
-            <View style={styles.invitedList}>
-              {invited.map((email) => (
-                <View key={email} style={styles.invitedTag}>
-                  <Text style={styles.invitedTagText}>{email}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
+      {/* === PHẦN THAY ĐỔI (INVITE SECTION) === */}
+      {/* --- THAY ĐỔI: Đã xóa điều kiện "booking?.type === 'project'" --- */}
+      <View style={styles.inviteSection}>
+        <Text style={styles.title}>Mời khách mời</Text>
+        <Text style={styles.subtitle}>Thêm khách mời vào lịch</Text>
 
-      {/* ... (Phần Footer và Modals giữ nguyên) ... */}
+        <TouchableOpacity
+          onPress={() => setInviteOpen(true)}
+          style={styles.inviteButton}
+        >
+          <View style={styles.plusIcon}>
+            <Text style={styles.plusIconText}>+</Text>
+          </View>
+          <Text style={styles.inviteButtonText}>Thêm khách mời</Text>
+        </TouchableOpacity>
+
+        {invited.length > 0 && (
+          <View style={styles.invitedList}>
+            {invited.map((guest) => (
+              <View key={guest.email} style={styles.invitedTag}>
+                <Text style={styles.invitedTagText}>{guest.name}</Text>
+                <Text style={styles.invitedTagEmail}> ({guest.email})</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+      {/* === HẾT PHẦN THAY ĐỔI === */}
+
+      {/* (Footer giữ nguyên) */}
       <View style={styles.footer}>
         <BookingButton
           label="Hủy"
@@ -278,6 +281,7 @@ export default function BookDevices() {
         />
       </View>
 
+      {/* (Các modal khác giữ nguyên) */}
       <InviteMemberModal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
@@ -312,7 +316,6 @@ export default function BookDevices() {
 }
 
 const styles = StyleSheet.create({
-  // ... (Tất cả styles giữ nguyên) ...
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   content: { padding: 16, paddingBottom: 100 },
   centered: {
@@ -421,12 +424,23 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   invitedTag: {
+    flexDirection: "row",
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: "#FFF7ED",
     borderRadius: 16,
+    alignItems: "baseline",
   },
-  invitedTagText: { color: "#C2410C", fontSize: 12 },
+  invitedTagText: {
+    color: "#C2410C",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  invitedTagEmail: {
+    color: "#EA580C",
+    fontSize: 12,
+    marginLeft: 4,
+  },
   footer: {
     flexDirection: "row",
     justifyContent: "flex-end",

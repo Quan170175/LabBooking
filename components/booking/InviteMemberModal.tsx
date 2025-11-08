@@ -1,77 +1,129 @@
 import React, { useEffect, useState } from "react";
 import {
+  Keyboard,
   Modal,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
+import BookingButton from "./BookingButton";
 
-type Props = {
-  open: boolean;
-  onClose: () => void;
-  onInvite: (email: string) => void;
+// Định nghĩa cấu trúc cho "Khách mời"
+export type GuestInvite = {
+  email: string;
+  name: string;
+  purpose: string;
 };
 
-export default function InviteMemberModal({ open, onClose, onInvite }: Props) {
+type InviteGuestModalProps = {
+  open: boolean;
+  onClose: () => void;
+  onInvite: (guest: GuestInvite) => void;
+};
+
+export default function InviteMemberModal({
+  open,
+  onClose,
+  onInvite,
+}: InviteGuestModalProps) {
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [purpose, setPurpose] = useState("");
   const [error, setError] = useState("");
 
+  // Reset form khi modal mở
   useEffect(() => {
     if (open) {
       setEmail("");
+      setName("");
+      setPurpose("");
       setError("");
     }
   }, [open]);
 
-  const submit = () => {
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return setError("Email không hợp lệ");
+  const handleInvitePress = () => {
+    setError("");
+    // Validate
+    if (!email.trim() || !email.includes("@")) {
+      setError("Vui lòng nhập một email hợp lệ.");
+      return;
     }
-    onInvite(email.trim());
+    if (!name.trim()) {
+      setError("Vui lòng nhập tên khách mời.");
+      return;
+    }
+    if (!purpose.trim()) {
+      setError("Vui lòng nhập mục đích.");
+      return;
+    }
+
+    // Gửi object GuestInvite về
+    onInvite({ email, name, purpose });
     onClose();
   };
 
   return (
     <Modal
-      visible={open}
       transparent
       animationType="fade"
+      visible={open}
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.modalContent}>
-          <Text style={styles.title}>Mời thành viên</Text>
-          <Text style={styles.subtitle}>
-            Nhập email để gửi lời mời tham gia đặt phòng.
-          </Text>
-          <TextInput
-            value={email}
-            onChangeText={(text) => {
-              setEmail(text);
-              setError("");
-            }}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            placeholder="user@example.com"
-            style={[styles.input, error ? { borderColor: "red" } : {}]}
-          />
-          {error && <Text style={styles.errorText}>{error}</Text>}
-          <View style={styles.actions}>
-            <TouchableOpacity
+      <Pressable style={styles.overlay} onPress={Keyboard.dismiss}>
+        <Pressable style={styles.container}>
+          <Text style={styles.title}>Mời khách mời</Text>
+          {!!error && <Text style={styles.errorText}>{error}</Text>}
+
+          {/* --- TRƯỜNG MỚI --- */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Email khách mời *</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="vidu@fpt.edu.vn"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Tên khách mời *</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Nguyễn Văn A"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Mục đích *</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]} // Style cho ô lớn
+              value={purpose}
+              onChangeText={setPurpose}
+              placeholder="Vd: Tham gia thuyết trình dự án..."
+              multiline
+            />
+          </View>
+          {/* ----------------- */}
+
+          <View style={styles.buttonContainer}>
+            <BookingButton
+              label="Hủy"
+              variant="secondary"
               onPress={onClose}
-              style={[styles.button, styles.cancelButton]}
-            >
-              <Text style={{ fontWeight: "600" }}>Hủy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={submit}
-              style={[styles.button, styles.inviteButton]}
-            >
-              <Text style={styles.inviteButtonText}>Gửi mời</Text>
-            </TouchableOpacity>
+              style={styles.button}
+            />
+            <BookingButton
+              label="Thêm khách"
+              variant="primary"
+              onPress={handleInvitePress}
+              style={styles.button}
+            />
           </View>
         </Pressable>
       </Pressable>
@@ -82,39 +134,58 @@ export default function InviteMemberModal({ open, onClose, onInvite }: Props) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
+    padding: 24,
   },
-  modalContent: {
-    width: "90%",
+  container: {
+    width: "100%",
     backgroundColor: "white",
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
+    gap: 16,
   },
   title: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "bold",
-    color: "#0F172A",
-    marginBottom: 4,
+    color: "#1E293B",
+    textAlign: "center",
+    marginBottom: 8,
   },
-  subtitle: { fontSize: 14, color: "#64748B", marginBottom: 16 },
+  inputGroup: {
+    gap: 6,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#475569",
+  },
   input: {
     borderWidth: 1,
     borderColor: "#CBD5E1",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 4,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    backgroundColor: "#F8FAFC",
   },
-  errorText: { color: "red", fontSize: 12 },
-  actions: {
+  textArea: {
+    height: 80, // Cao hơn
+    textAlignVertical: "top", // Bắt đầu gõ từ trên xuống
+  },
+  buttonContainer: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 8,
+    justifyContent: "space-between",
+    gap: 12,
     marginTop: 16,
   },
-  button: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  cancelButton: { backgroundColor: "#F1F5F9" },
-  inviteButton: { backgroundColor: "#EA580C" },
-  inviteButtonText: { color: "white", fontWeight: "bold" },
+  button: {
+    flex: 1,
+  },
+  errorText: {
+    color: "#DC2626",
+    textAlign: "center",
+    fontSize: 13,
+  },
 });
