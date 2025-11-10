@@ -184,14 +184,7 @@ export default function Home() {
     <ScrollView
       contentContainerStyle={styles.root}
       showsVerticalScrollIndicator={false}
-    >
-      {/* 8. Thêm View để hiển thị Token */}
-      <View style={styles.tokenContainer}>
-        <Text style={styles.tokenTitle}>Your Expo Push Token:</Text>
-        <Text style={styles.tokenText} selectable={true}>
-          {expoPushToken || "Đang lấy token..."}
-        </Text>
-      </View>
+    >      
 
       {/* Hero */}
       <View style={styles.hero}>
