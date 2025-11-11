@@ -8,25 +8,33 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import {
   Alert,
+  Button, // --- CÓ LIÊN QUAN ĐẾN NOTIFICATION (để test) ---
   ScrollView,
   StyleSheet,
-  Text,
-  Button,
+  Text, // --- CÓ LIÊN QUAN ĐẾN NOTIFICATION (để test) ---
   TouchableOpacity,
   View,
 } from "react-native";
 import FeatureTile from "../../../components/home/FeatureTile";
+
+// --- START: NOTIFICATION LOGIC ---
+// (Tất cả code liên quan đến thông báo được gom ở đây)
+
+// 1. Import các hàm từ service
 import {
   registerPushTokenOnServer,
   triggerTestNotification,
-} from "../../../services/apiserver";
-import { registerForPushNotificationsAsync } from "../../../services/notificationService";
+} from "../../../services/apiserver"; // <-- Dịch vụ gọi API
+import { registerForPushNotificationsAsync } from "../../../services/notificationService"; // <-- Dịch vụ Expo Notification
 
+// 2. Hằng số Auth Token (dùng để test)
+// 🛑 QUAN TRỌNG: DÁN AUTH TOKEN (JWT) CÒN HẠN CỦA BẠN VÀO ĐÂY
 const FAKE_AUTH_TOKEN_FOR_TESTING =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjI2YWUxZDc5LWUxNjktNDM4Ny04NDE5LTk1MWIxMGU4MDc4MiIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6Im5naGlhaHRAZ21haWwuY29tIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6Im5naGlhaHRAZ21haWwuY29tIiwiQXNwTmV0LklkZW50aXR5LlNlY3VyaXR5U3RhbXAiOiJHSFU0TVBLNkEyTUVDMzVUM1VNTUpRUkY3Tlg2SExITCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkFkbWluIiwiZXhwIjoxNzYyNzc1MjM0LCJpc3MiOiJodHRwczovL2xvY2FsaG9zdDo3MDg5IiwiYXVkIjoiTGFiQm9va2luZyJ9.JvzjeDXBOPyXFDgO3WKkf7kthXlyi7EJgr-XfBUIzO8";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjI2YWUxZDc5LWUxNjktNDM4Ny04NDE5LTk1MWIxMGU4MDc4MiIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6Im5naGlhaHRAZ21haWwuY29tIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6Im5naGlhaHRAZ21haWwuY29tIiwiQXNwTmV0LklkZW50aXR5LlNlY3VyaXR5U3RhbXAiOiJHSFU0TVBLNkEyTUVDMzVUM1VNTUpRUkY3Tlg2SExITCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkFkbWluIiwiZXhwIjoxNzYyODM5MjE0LCJpc3MiOiJodHRwczovL2xvY2FsaG9zdDo3MDg5IiwiYXVkIjoiTGFiQm9va2luZyJ9.3ANZyc0nY0sFS66jJCBnK3Gy9y_S-PiUBW0dYkWQfPQ";
+// --- END: NOTIFICATION LOGIC ---
 
 const featureGroups = [
   {
@@ -81,15 +89,14 @@ const featureGroups = [
 
 export default function Home() {
   const router = useRouter();
-  const [expoPushToken, setExpoPushToken] = useState("");
+  // --- START: NOTIFICATION LOGIC ---
 
   useEffect(() => {
     async function getTokenAndRegister() {
       const token = await registerForPushNotificationsAsync();
-      if (token) {
-        setExpoPushToken(token);
-        console.log("Your Expo Push Token:", token);
 
+      if (token) {
+        console.log("Your Expo Push Token:", token);
         if (
           FAKE_AUTH_TOKEN_FOR_TESTING ===
           "DÁN_TOKEN_JWT_CÒN_HẠN_CỦA_BẠN_VÀO_ĐÂY"
@@ -100,7 +107,6 @@ export default function Home() {
           );
         } else {
           console.log("Sẵn sàng gửi token lên server:", token);
-          // Tự động gọi hàm gửi lên BE [cite: 613]
           registerPushTokenOnServer(token, FAKE_AUTH_TOKEN_FOR_TESTING);
         }
       } else {
@@ -108,8 +114,9 @@ export default function Home() {
       }
     }
     getTokenAndRegister();
-  }, []);
+  }, []); // Mảng rỗng đảm bảo chạy 1 lần
 
+  // 6. Hàm xử lý nhấn nút Test
   const handleTestButtonPress = () => {
     console.log("Nút test đã được nhấn!");
     if (
@@ -125,6 +132,8 @@ export default function Home() {
     // Gọi API test
     triggerTestNotification(FAKE_AUTH_TOKEN_FOR_TESTING);
   };
+
+  // --- END: NOTIFICATION LOGIC ---
 
   return (
     <ScrollView
@@ -158,14 +167,16 @@ export default function Home() {
         </View>
       </View>
 
-      {/* MỚI: Nút Test (theo Bước 8 [cite: 656]) */}
+      {/* --- START: NOTIFICATION LOGIC --- */}
+      {/* 7. Giao diện nút Test */}
       <View style={styles.buttonContainer}>
         <Button
           title="Gửi thông báo Test cho tôi!"
           onPress={handleTestButtonPress}
-          color="#ea580c" // Dùng màu cam cho hợp theme
+          color="#ea580c"
         />
       </View>
+      {/* --- END: NOTIFICATION LOGIC --- */}
 
       {/* Feature Grid */}
       <View style={styles.section}>
