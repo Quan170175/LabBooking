@@ -10,7 +10,8 @@
  * Cách chuẩn nhất là sử dụng Biến môi trường (Environment Variables)
  * Ví dụ: process.env.EXPO_PUBLIC_API_URL
  */
-const API_BASE_URL = "http://192.168.1.3:7089";
+// const API_BASE_URL = "http://192.168.1.3:7089";
+const API_BASE_URL = "https://developerops.xyz";
 
 /**
  * Gửi Expo Push Token của thiết bị lên server để đăng ký.
