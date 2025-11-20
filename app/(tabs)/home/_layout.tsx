@@ -3,9 +3,12 @@
 import { Stack } from "expo-router";
 import React from "react";
 // Sửa đường dẫn import này cho đúng với vị trí AppHeader của bạn
+import { useNotificationObservers } from "@/services/notificationService";
 import AppHeader from "../../../components/common/AppHeader";
 
 export default function HomeStackLayout() {
+  useNotificationObservers();
+
   return (
     <Stack>
       <Stack.Screen

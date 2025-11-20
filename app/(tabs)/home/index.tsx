@@ -8,33 +8,33 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect } from "react";
 import {
   Alert,
-  Platform,
+  Button, // --- CÓ LIÊN QUAN ĐẾN NOTIFICATION (để test) ---
   ScrollView,
   StyleSheet,
-  Text,
+  Text, // --- CÓ LIÊN QUAN ĐẾN NOTIFICATION (để test) ---
   TouchableOpacity,
   View,
 } from "react-native";
 import FeatureTile from "../../../components/home/FeatureTile";
 
-import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
+// --- START: NOTIFICATION LOGIC ---
+// (Tất cả code liên quan đến thông báo được gom ở đây)
 
-// Cấu hình cách thông báo hiển thị khi app đang chạy (foreground)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true, // Hiển thị pop-up
-    shouldPlaySound: true, // Phát âm thanh
-    shouldSetBadge: false, // (iOS) Hiển thị số trên icon app
+// 1. Import các hàm từ service
+import {
+  registerPushTokenOnServer,
+  triggerTestNotification,
+} from "../../../services/apiserver"; // <-- Dịch vụ gọi API
+import { registerForPushNotificationsAsync } from "../../../services/notificationService"; // <-- Dịch vụ Expo Notification
 
-    // THÊM 2 DÒNG NÀY ĐỂ SỬA LỖI
-    shouldShowBanner: false, // Tắt banner (vì đã có pop-up)
-    shouldShowList: false, // Tắt hiển thị ở list (vì đã có pop-up)
-  }),
-});
+// 2. Hằng số Auth Token (dùng để test)
+// 🛑 QUAN TRỌNG: DÁN AUTH TOKEN (JWT) CÒN HẠN CỦA BẠN VÀO ĐÂY
+const FAKE_AUTH_TOKEN_FOR_TESTING =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6Ijk0NzY4ZjJmLWE0NWUtNDFkNC1iNDhlLTc4NjJhMzM3ZmE0ZSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6Im5naGlhaHRAZ21haWwuY29tIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6Im5naGlhaHRAZ21haWwuY29tIiwiQXNwTmV0LklkZW50aXR5LlNlY3VyaXR5U3RhbXAiOiJLUFEyM0FFTUpHSjU3TlZITk1NRVNOTDJXNU1EQVlSSSIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlVzZXIiLCJleHAiOjE3NjMwMDQ1NDMsImlzcyI6Imh0dHBzOi8vbG9jYWxob3N0OjcwODkiLCJhdWQiOiJMYWJCb29raW5nIn0.djnYhobbhG_8Flaa10Cg28jufk9lqKefk8nyoq4xUs8";
+// --- END: NOTIFICATION LOGIC ---
 
 const featureGroups = [
   {
@@ -89,110 +89,57 @@ const featureGroups = [
 
 export default function Home() {
   const router = useRouter();
+  // --- START: NOTIFICATION LOGIC ---
 
-  // 6. Thêm State và Ref để quản lý token/notification
-  const [expoPushToken, setExpoPushToken] = useState("");
-  const notificationListener = useRef<Notifications.EventSubscription>(null);
-  const responseListener = useRef<Notifications.EventSubscription>(null);
-
-  // 7. Thêm useEffect để chạy logic lấy token khi component mount
   useEffect(() => {
-    // Hàm đăng ký và lấy token
-    async function registerForPushNotificationsAsync() {
-      let token;
+    async function getTokenAndRegister() {
+      const token = await registerForPushNotificationsAsync();
 
-      // Chỉ hoạt động trên THIẾT BỊ VẬT LÝ
-      if (!Device.isDevice) {
-        Alert.alert(
-          "Lỗi",
-          "Phải sử dụng thiết bị vật lý để nhận Push Notifications"
-        );
-        return;
-      }
-
-      // Kiểm tra quyền
-      const { status: existingStatus } =
-        await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-
-      // Hỏi quyền nếu chưa cấp
-      if (existingStatus !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== "granted") {
-        Alert.alert(
-          "Lỗi",
-          "Không thể lấy push token vì người dùng từ chối quyền!"
-        );
-        return;
-      }
-
-      // Lấy Expo Push Token
-      try {
-        // Lấy Project ID từ cấu hình app
-        // File app.json của bạn có projectId tại: extra.eas.projectId
-
-        token = (await Notifications.getExpoPushTokenAsync()).data;
-
+      if (token) {
         console.log("Your Expo Push Token:", token);
-        setExpoPushToken(token);
-      } catch (e) {
-        let message = "Đã xảy ra lỗi không xác định";
-        if (e instanceof Error) {
-          message = e.message;
+        if (
+          FAKE_AUTH_TOKEN_FOR_TESTING ===
+          "DÁN_TOKEN_JWT_CÒN_HẠN_CỦA_BẠN_VÀO_ĐÂY"
+        ) {
+          Alert.alert(
+            "Lưu ý",
+            "Bạn cần dán Auth Token thật vào file index.tsx để test gửi token."
+          );
+        } else {
+          console.log("Sẵn sàng gửi token lên server:", token);
+          registerPushTokenOnServer(token, FAKE_AUTH_TOKEN_FOR_TESTING);
         }
-        Alert.alert("Lỗi khi lấy Expo Push Token", message);
+      } else {
+        console.log("Không thể lấy Expo Push Token.");
       }
-
-      // Cấu hình Kênh (Channel) cho Android
-      if (Platform.OS === "android") {
-        Notifications.setNotificationChannelAsync("default", {
-          name: "default",
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: "#FF231F7C",
-        });
-      }
-
-      return token;
     }
+    getTokenAndRegister();
+  }, []); // Mảng rỗng đảm bảo chạy 1 lần
 
-    // Chạy hàm lấy token
-    registerForPushNotificationsAsync();
+  // 6. Hàm xử lý nhấn nút Test
+  const handleTestButtonPress = () => {
+    console.log("Nút test đã được nhấn!");
+    if (
+      FAKE_AUTH_TOKEN_FOR_TESTING.length < 50 ||
+      FAKE_AUTH_TOKEN_FOR_TESTING === "DÁN_TOKEN_JWT_CÒN_HẠN_CỦA_BẠN_VÀO_ĐÂY"
+    ) {
+      Alert.alert(
+        "Lỗi",
+        "Vui lòng cung cấp Auth Token hợp lệ trong code để test."
+      );
+      return;
+    }
+    // Gọi API test
+    triggerTestNotification(FAKE_AUTH_TOKEN_FOR_TESTING);
+  };
 
-    // Listener khi nhận được thông báo (app đang chạy)
-    notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
-        console.log("Notification received:", notification);
-      });
-
-    // Listener khi người dùng tương tác với thông báo (nhấn vào)
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        console.log("Notification response received:", response);
-      });
-
-    // Hủy đăng ký listener khi component unmount
-    return () => {
-      notificationListener.current?.remove();
-      responseListener.current?.remove();
-    };
-  }, []); // Mảng rỗng đảm bảo effect này chỉ chạy 1 lần
+  // --- END: NOTIFICATION LOGIC ---
 
   return (
     <ScrollView
       contentContainerStyle={styles.root}
       showsVerticalScrollIndicator={false}
     >
-      {/* 8. Thêm View để hiển thị Token */}
-      <View style={styles.tokenContainer}>
-        <Text style={styles.tokenTitle}>Your Expo Push Token:</Text>
-        <Text style={styles.tokenText} selectable={true}>
-          {expoPushToken || "Đang lấy token..."}
-        </Text>
-      </View>
-
       {/* Hero */}
       <View style={styles.hero}>
         <View style={styles.heroLeft}>
@@ -219,6 +166,17 @@ export default function Home() {
           </View>
         </View>
       </View>
+
+      {/* --- START: NOTIFICATION LOGIC --- */}
+      {/* 7. Giao diện nút Test */}
+      <View style={styles.buttonContainer}>
+        <Button
+          title="Gửi thông báo Test cho tôi!"
+          onPress={handleTestButtonPress}
+          color="#ea580c"
+        />
+      </View>
+      {/* --- END: NOTIFICATION LOGIC --- */}
 
       {/* Feature Grid */}
       <View style={styles.section}>
@@ -247,6 +205,13 @@ export default function Home() {
 // ... (Styles giữ nguyên) ...
 const styles = StyleSheet.create({
   root: { padding: 16, paddingBottom: 40, backgroundColor: "#fff7ed" },
+
+  // MỚI: Thêm style cho nút Test (theo Bước 8 [cite: 657])
+  buttonContainer: {
+    marginVertical: 10,
+    paddingHorizontal: 16, // Thêm padding cho_khớp_với_layout
+  },
+
   tokenContainer: {
     backgroundColor: "#eee",
     padding: 12,
