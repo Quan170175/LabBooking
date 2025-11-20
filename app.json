@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "LabBookingProject",
+    "name": "FLMS",
     "slug": "LabBookingProject",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/flms.jpg",
     "scheme": "labbookingproject",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -20,15 +20,12 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/flms.jpg",
+        "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.fpt.labbooking",
-      // "usesCleartextTraffic": false
       "googleServicesFile": "./google-services.json"
     },
     "web": {
@@ -39,11 +36,7 @@
       [
         "expo-notifications",
         {
-          // (Tùy chọn) Biểu tượng thông báo cho Android
-          // Đặt đường dẫn đến file icon 96x96 (png) của bạn trong thư mục assets
           "icon": "./assets/images/notification-icon.png",
-
-          // (Tùy chọn) Màu cho biểu tượng (sử dụng mã hex)
           "color": "#ffffff"
         }
       ],
@@ -57,7 +50,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
