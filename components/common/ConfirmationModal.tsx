@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+// Đảm bảo đường dẫn này đúng với cấu trúc dự án của bạn
 import BookingButton from "../booking/BookingButton";
 
 type ConfirmationModalProps = {
@@ -12,6 +13,9 @@ type ConfirmationModalProps = {
   onConfirm: () => void;
 };
 
+// Đặt thời gian đếm ngược ban đầu (giây)
+const INITIAL_COUNTDOWN = 3;
+
 export default function ConfirmationModal({
   visible,
   title,
@@ -21,18 +25,31 @@ export default function ConfirmationModal({
   onClose,
   onConfirm,
 }: ConfirmationModalProps) {
-  const [isLoading, setIsLoading] = useState(true);
+  const [countdown, setCountdown] = useState(INITIAL_COUNTDOWN);
 
   useEffect(() => {
     if (visible) {
-      setIsLoading(true);
-      const timer = setTimeout(() => {
-        setIsLoading(false);
-      }, 5000);
+      // Reset về 3 mỗi khi mở modal
+      setCountdown(INITIAL_COUNTDOWN);
 
-      return () => clearTimeout(timer);
+      const interval = setInterval(() => {
+        setCountdown((prevCount) => {
+          if (prevCount <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prevCount - 1; // Giảm 1
+        });
+      }, 1000); // 1 giây
+
+      // Dọn dẹp interval khi modal đóng
+      return () => clearInterval(interval);
     }
   }, [visible]);
+
+  const isCountingDown = countdown > 0;
+  // Đảm bảo label là string (ví dụ: "3") để BookingButton render
+  const buttonLabel = isCountingDown ? `${countdown}` : confirmText;
 
   return (
     <Modal
@@ -43,9 +60,8 @@ export default function ConfirmationModal({
     >
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.container}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
-
+          <Text style={styles.title}>{title || ""}</Text>
+          <Text style={styles.message}>{message || ""}</Text>
           <View style={styles.buttonContainer}>
             <BookingButton
               label={cancelText}
@@ -54,11 +70,11 @@ export default function ConfirmationModal({
               style={styles.button}
             />
             <BookingButton
-              label={confirmText}
+              label={buttonLabel} // Hiển thị số đếm ngược
               variant="primary"
               onPress={onConfirm}
-              disabled={isLoading}
-              isLoading={isLoading}
+              disabled={isCountingDown} // Vô hiệu hóa khi đếm
+              isLoading={false} // Tắt spinner
               style={styles.button}
             />
           </View>
@@ -68,6 +84,7 @@ export default function ConfirmationModal({
   );
 }
 
+// Styles của ConfirmationModal
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -108,6 +125,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   button: {
-    flex: 1, // Chia đều 2 nút
+    flex: 1,
   },
 });
