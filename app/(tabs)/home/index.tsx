@@ -6,336 +6,372 @@ import {
   ClipboardList,
   Clock3,
   ShieldCheck,
-  Sparkles,
+  LifeBuoy,
+  LayoutDashboard,
 } from "lucide-react-native";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  Button, // --- CÓ LIÊN QUAN ĐẾN NOTIFICATION (để test) ---
+  Image,
   ScrollView,
   StyleSheet,
-  Text, // --- CÓ LIÊN QUAN ĐẾN NOTIFICATION (để test) ---
+  Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
+import * as SecureStore from "expo-secure-store";
+import { jwtDecode } from "jwt-decode";
+import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated"; // Thêm Animation
+
 import FeatureTile from "../../../components/home/FeatureTile";
+import { registerPushTokenOnServer } from "../../../services/apiserver";
+import { registerForPushNotificationsAsync } from "../../../services/notificationService";
 
-// --- START: NOTIFICATION LOGIC ---
-// (Tất cả code liên quan đến thông báo được gom ở đây)
+// 1. ĐỊNH NGHĨA ROLES
+const ROLES = {
+  STUDENT: "Student",
+  LECTURER: "Lecturer",
+  MANAGER: "Manager",
+  USER: "User",
+};
 
-// 1. Import các hàm từ service
-import {
-  registerPushTokenOnServer,
-  triggerTestNotification,
-} from "../../../services/apiserver"; // <-- Dịch vụ gọi API
-import { registerForPushNotificationsAsync } from "../../../services/notificationService"; // <-- Dịch vụ Expo Notification
-
-// 2. Hằng số Auth Token (dùng để test)
-// 🛑 QUAN TRỌNG: DÁN AUTH TOKEN (JWT) CÒN HẠN CỦA BẠN VÀO ĐÂY
-const FAKE_AUTH_TOKEN_FOR_TESTING =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6Ijk0NzY4ZjJmLWE0NWUtNDFkNC1iNDhlLTc4NjJhMzM3ZmE0ZSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6Im5naGlhaHRAZ21haWwuY29tIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6Im5naGlhaHRAZ21haWwuY29tIiwiQXNwTmV0LklkZW50aXR5LlNlY3VyaXR5U3RhbXAiOiJLUFEyM0FFTUpHSjU3TlZITk1NRVNOTDJXNU1EQVlSSSIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlVzZXIiLCJleHAiOjE3NjMwMDQ1NDMsImlzcyI6Imh0dHBzOi8vbG9jYWxob3N0OjcwODkiLCJhdWQiOiJMYWJCb29raW5nIn0.djnYhobbhG_8Flaa10Cg28jufk9lqKefk8nyoq4xUs8";
-// --- END: NOTIFICATION LOGIC ---
-
-const featureGroups = [
+// 2. CẤU HÌNH MENU THEO SECTIONS (Phân loại)
+const APP_SECTIONS = [
   {
-    to: "/book/choose-type",
-    title: "Đặt Lab",
-    description: "Chọn phòng, giờ học",
-    icon: CalendarCheck2,
+    id: "booking",
+    title: "Hoạt động đặt phòng",
+    description: "Các chức năng chính để đăng ký phòng Lab",
+    items: [
+      {
+        to: "/book/choose-type",
+        title: "Đặt Lab",
+        description: "Chọn phòng, giờ học",
+        icon: CalendarCheck2,
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.USER],
+      },
+      {
+        to: "/home/history",
+        title: "Lịch sử đặt",
+        description: "Quản lý yêu cầu",
+        icon: Clock3,
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.USER],
+      },
+      {
+        to: "/home/availability",
+        title: "Tình trạng phòng",
+        description: "Check phòng trống",
+        icon: ClipboardList,
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.USER],
+      },
+      {
+        to: "/home/timetable",
+        title: "Thời khóa biểu",
+        description: "Lịch toàn trường",
+        icon: CalendarDays,
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.USER],
+      },
+    ],
   },
   {
-    to: "/home/history",
-    title: "Lịch sử đặt",
-    description: "Quản lý yêu cầu",
-    icon: Clock3,
+    id: "info",
+    title: "Tài nguyên & Hỗ trợ",
+    description: "Tài liệu hướng dẫn và trợ giúp",
+    items: [
+      {
+        to: "/home/resources",
+        title: "Tài liệu lab",
+        description: "Hướng dẫn & SOP",
+        icon: BookOpen,
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.USER],
+      },
+      {
+        to: "/home/support",
+        title: "Hỗ trợ",
+        description: "Gửi yêu cầu giúp đỡ",
+        icon: LifeBuoy,
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.USER],
+      },
+    ],
   },
   {
-    to: "/home/availability",
-    title: "Tình trạng phòng",
-    description: "Lab còn trống",
-    icon: ClipboardList,
-  },
-  {
-    to: "/home/timetable",
-    title: "Thời khóa biểu",
-    description: "Đồng bộ lịch học",
-    icon: CalendarDays,
-  },
-  {
-    to: "/home/resources",
-    title: "Tài liệu lab",
-    description: "Hướng dẫn & SOP",
-    icon: BookOpen,
-  },
-  {
-    to: "/home/support",
-    title: "Hỗ trợ",
-    description: "Gửi yêu cầu giúp đỡ",
-    icon: ShieldCheck,
-  },
-  {
-    to: "/approvals",
-    title: "Phê duyệt", // <-- Bạn có thể đổi title
-    description: "Quản lý các yêu cầu phê duyệt", // <-- Bạn có thể đổi mô tả
-    icon: BookOpen, // <-- Bạn cần import icon này (ví dụ: CheckSquare từ lucide-react-native)
-  },
-  {
-    to: "/security-incidents",
-    title: "Sự cố bảo mật", // <-- Bạn có thể đổi title
-    description: "Báo cáo và quản lý sự cố", // <-- Bạn có thể đổi mô tả
-    icon: BookOpen, // <-- Bạn cũng cần import icon này
+    id: "admin",
+    title: "Khu vực quản lý",
+    description: "Chức năng dành riêng cho Manager",
+    items: [
+      {
+        to: "/approvals",
+        title: "Phê duyệt",
+        description: "Duyệt yêu cầu",
+        icon: LayoutDashboard,
+        allowedRoles: [ROLES.MANAGER],
+      },
+      {
+        to: "/security-incidents",
+        title: "Sự cố bảo mật",
+        description: "Báo cáo sự cố",
+        icon: ShieldCheck,
+        allowedRoles: [ROLES.MANAGER],
+      },
+    ],
   },
 ];
 
 export default function Home() {
   const router = useRouter();
-  // --- START: NOTIFICATION LOGIC ---
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState<string>("");
 
+  // --- INIT LOGIC ---
   useEffect(() => {
-    async function getTokenAndRegister() {
-      const token = await registerForPushNotificationsAsync();
-
-      if (token) {
-        console.log("Your Expo Push Token:", token);
-        if (
-          FAKE_AUTH_TOKEN_FOR_TESTING ===
-          "DÁN_TOKEN_JWT_CÒN_HẠN_CỦA_BẠN_VÀO_ĐÂY"
-        ) {
-          Alert.alert(
-            "Lưu ý",
-            "Bạn cần dán Auth Token thật vào file index.tsx để test gửi token."
-          );
-        } else {
-          console.log("Sẵn sàng gửi token lên server:", token);
-          registerPushTokenOnServer(token, FAKE_AUTH_TOKEN_FOR_TESTING);
+    async function initializeApp() {
+      try {
+        setLoading(true);
+        const token = await SecureStore.getItemAsync("accessToken");
+        if (!token) {
+          setLoading(false);
+          return;
         }
-      } else {
-        console.log("Không thể lấy Expo Push Token.");
+
+        const decoded: any = jwtDecode(token);
+        const roleKey =
+          "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
+        const nameKey =
+          "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name";
+
+        const role = decoded[roleKey] || decoded.role || "Student";
+        const name = decoded[nameKey] || decoded.name || "User";
+
+        setUserRole(role);
+        setUserName(name);
+
+        const pushToken = await registerForPushNotificationsAsync();
+        if (pushToken) {
+          await registerPushTokenOnServer(pushToken, token);
+        }
+      } catch (error) {
+        console.error("Lỗi khởi tạo Home:", error);
+      } finally {
+        setLoading(false);
       }
     }
-    getTokenAndRegister();
-  }, []); // Mảng rỗng đảm bảo chạy 1 lần
+    initializeApp();
+  }, []);
 
-  // 6. Hàm xử lý nhấn nút Test
-  const handleTestButtonPress = () => {
-    console.log("Nút test đã được nhấn!");
-    if (
-      FAKE_AUTH_TOKEN_FOR_TESTING.length < 50 ||
-      FAKE_AUTH_TOKEN_FOR_TESTING === "DÁN_TOKEN_JWT_CÒN_HẠN_CỦA_BẠN_VÀO_ĐÂY"
-    ) {
-      Alert.alert(
-        "Lỗi",
-        "Vui lòng cung cấp Auth Token hợp lệ trong code để test."
-      );
-      return;
-    }
-    // Gọi API test
-    triggerTestNotification(FAKE_AUTH_TOKEN_FOR_TESTING);
+  // Hàm lấy lời chào theo giờ
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Chào buổi sáng";
+    if (hour < 18) return "Chào buổi chiều";
+    return "Chào buổi tối";
   };
 
-  // --- END: NOTIFICATION LOGIC ---
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.root,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#ea580c" />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
       contentContainerStyle={styles.root}
       showsVerticalScrollIndicator={false}
     >
-      {/* Hero */}
-      <View style={styles.hero}>
-        <View style={styles.heroLeft}>
-          <View style={styles.heroIcon}>
-            <Sparkles size={18} color="white" />
+      {/* --- HERO SECTION (ANIMATED) --- */}
+      <Animated.View
+        entering={FadeInDown.duration(800).springify()}
+        style={styles.hero}
+      >
+        <View style={styles.heroContent}>
+          <View style={styles.heroHeaderRow}>
+            <View style={styles.heroIcon}>
+              <Image
+                source={require("../../../assets/images/flms.png")}
+                style={styles.heroImage}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.greetingText}>{getGreeting()},</Text>
+              <Text style={styles.userNameText} numberOfLines={1}>
+                {userName.split("@")[0]}
+              </Text>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.heroSmall}>FPT University</Text>
-            <Text style={styles.heroTitle}>
-              Chào mừng đến hệ thống Lab Booking
-            </Text>
-            <Text style={styles.heroDesc}>
-              Đặt phòng thực hành, theo dõi lịch và cập nhật thông báo ngay trên
-              điện thoại của bạn.
-            </Text>
 
+          <Text style={styles.heroDesc}>
+            {userRole === ROLES.MANAGER
+              ? "Hệ thống đang hoạt động ổn định. Kiểm tra các yêu cầu cần duyệt bên dưới."
+              : "Đặt phòng thực hành, theo dõi lịch và cập nhật thông báo ngay trên điện thoại."}
+          </Text>
+
+          {/* Nút CTA chỉ hiện cho Student/Lecturer */}
+          {userRole !== ROLES.MANAGER && (
             <TouchableOpacity
               style={styles.cta}
               onPress={() => router.push("/book/choose-type" as any)}
             >
-              <CalendarCheck2 size={16} color="#ea580c" />
-              <Text style={styles.ctaText}> Bắt đầu đặt Lab</Text>
+              <CalendarCheck2 size={18} color="#ea580c" strokeWidth={2.5} />
+              <Text style={styles.ctaText}>Đặt Lab Ngay</Text>
             </TouchableOpacity>
-          </View>
+          )}
         </View>
-      </View>
+      </Animated.View>
 
-      {/* --- START: NOTIFICATION LOGIC --- */}
-      {/* 7. Giao diện nút Test */}
-      <View style={styles.buttonContainer}>
-        <Button
-          title="Gửi thông báo Test cho tôi!"
-          onPress={handleTestButtonPress}
-          color="#ea580c"
-        />
-      </View>
-      {/* --- END: NOTIFICATION LOGIC --- */}
+      {/* --- SECTIONS LOOP --- */}
+      {APP_SECTIONS.map((section, sectionIndex) => {
+        // Lọc các items trong section dựa trên Role
+        const validItems = section.items.filter((item) =>
+          userRole ? item.allowedRoles.includes(userRole) : false
+        );
 
-      {/* Feature Grid */}
-      <View style={styles.section}>
-        <View style={{ marginBottom: 8 }}>
-          <Text style={styles.mainTitle}>Tiện ích chính</Text>
-          <Text style={styles.mainSub}>
-            Truy cập nhanh vào mọi chức năng bạn cần cho việc đặt và quản lý
-            phòng lab.
-          </Text>
-        </View>
+        // Nếu section không có item nào phù hợp với Role thì ẩn đi
+        if (validItems.length === 0) return null;
 
-        <View style={styles.grid}>
-          {featureGroups.map((f) => (
-            <View key={f.to} style={styles.gridItem}>
-              <FeatureTile {...f} />
+        return (
+          <Animated.View
+            key={section.id}
+            entering={FadeInUp.delay(sectionIndex * 200).duration(600)}
+            style={styles.sectionContainer}
+          >
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              {/* <Text style={styles.sectionDesc}>{section.description}</Text> */}
             </View>
-          ))}
-        </View>
-      </View>
 
-      <View style={{ height: 120 }} />
+            <View style={styles.grid}>
+              {validItems.map((item) => (
+                <View key={item.to} style={styles.gridItem}>
+                  <FeatureTile {...item} />
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        );
+      })}
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
 
-// ... (Styles giữ nguyên) ...
+// STYLES
 const styles = StyleSheet.create({
-  root: { padding: 16, paddingBottom: 40, backgroundColor: "#fff7ed" },
-
-  // MỚI: Thêm style cho nút Test (theo Bước 8 [cite: 657])
-  buttonContainer: {
-    marginVertical: 10,
-    paddingHorizontal: 16, // Thêm padding cho_khớp_với_layout
+  root: {
+    padding: 16,
+    paddingTop: 20, // Tăng padding top chút
+    paddingBottom: 40,
+    backgroundColor: "#fff7ed",
+    flexGrow: 1,
   },
 
-  tokenContainer: {
-    backgroundColor: "#eee",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderColor: "#ddd",
-    borderWidth: 1,
-  },
-  tokenTitle: {
-    fontWeight: "bold",
-    color: "#333",
-  },
-  tokenText: {
-    marginTop: 4,
-    color: "#555",
-    fontSize: 12,
-  },
+  // Hero Styles
   hero: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: "#f97316",
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 6,
+    borderRadius: 24,
+    backgroundColor: "#f97316", // Màu cam chủ đạo
+    marginBottom: 24,
+    shadowColor: "#f97316",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+    overflow: "hidden",
   },
-  heroLeft: { flexDirection: "row", gap: 12, alignItems: "flex-start" } as any,
+  heroContent: {
+    padding: 20,
+  },
+  heroHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   heroIcon: {
-    height: 48,
-    width: 48,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    height: 56,
+    width: 56,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
   },
-  heroSmall: {
-    color: "rgba(255,255,255,0.85)",
+  heroImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 16,
+    resizeMode: "cover",
+  },
+  greetingText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 14,
+    fontWeight: "600",
     textTransform: "uppercase",
-    fontSize: 12,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
-  heroTitle: { color: "white", fontSize: 20, fontWeight: "800", marginTop: 6 },
-  heroDesc: { color: "rgba(255,255,255,0.9)", marginTop: 6 },
+  userNameText: {
+    color: "white",
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  heroDesc: {
+    color: "rgba(255,255,255,0.95)",
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
   cta: {
-    marginTop: 10,
     backgroundColor: "white",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 99, // Pill shape
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  ctaText: { color: "#ea580c", fontWeight: "700" },
-
-  section: { marginTop: 6 },
-  gridRow: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
-  highlightCard: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 10,
-    backgroundColor: "white",
-    padding: 12,
-    borderRadius: 14,
-    alignItems: "center",
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: "#ffedd5",
-  },
-  highlightIcon: {
-    height: 40,
-    width: 40,
-    borderRadius: 10,
-    backgroundColor: "#fff7ed",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  highlightTitle: { fontSize: 14, fontWeight: "700" },
-  highlightDesc: { fontSize: 12, color: "#64748b" },
-
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
-
-  bulletCard: {
-    flexDirection: "row",
-    gap: 12,
-    backgroundColor: "white",
-    padding: 12,
-    borderRadius: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#f1f5f9",
-  },
-  bulletIcon: {
-    height: 36,
-    width: 36,
-    borderRadius: 18,
-    backgroundColor: "#fff7ed",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bulletTitle: { fontSize: 14, fontWeight: "700" },
-  bulletDetail: { fontSize: 12, color: "#64748b", marginTop: 4 },
-  bulletTime: {
-    marginTop: 6,
+  ctaText: {
     color: "#ea580c",
-    fontWeight: "600",
-    fontSize: 12,
+    fontWeight: "700",
+    fontSize: 15,
   },
 
-  mainTitle: { fontSize: 20, fontWeight: "800", color: "#0f172a" },
-  mainSub: { fontSize: 13, color: "#64748b", marginTop: 4 },
-
+  // Section Styles
+  sectionContainer: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: -0.5,
+  },
+  sectionDesc: {
+    fontSize: 13,
+    color: "#64748b",
+    marginTop: 2,
+  },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 10,
+    rowGap: 12, // Khoảng cách dòng
   },
-  gridItem: { width: "48%", marginBottom: 12 },
+  gridItem: {
+    width: "48%", // 2 cột
+  },
 });
