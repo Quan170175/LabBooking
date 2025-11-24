@@ -59,13 +59,6 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => <UserRound size={20} color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: "Chức năng",
-          tabBarIcon: ({ color }) => <Menu size={20} color={color} />,
-        }}
-      />
     </Tabs>
   );
 }

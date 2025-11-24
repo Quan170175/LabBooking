@@ -4,7 +4,7 @@
     "slug": "LabBookingProject",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/flms.jpg",
+    "icon": "./assets/images/flms.png",
     "scheme": "labbookingproject",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -20,7 +20,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/flms.jpg",
+        "foregroundImage": "./assets/images/flms.png",
         "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
@@ -50,12 +50,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/icon.png",
+          "image": "./assets/images/flms.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#FFF7ED",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#FFF7ED"
           }
         }
       ],

@@ -14,33 +14,36 @@ import {
   View,
 } from "react-native";
 
-// --- Dữ liệu giả lập (Lấy từ các file trước) ---
-// (Bạn nên đưa SLOTS vào file constants chung)
+// --- IMPORT COMPONENT MỚI ---
+// (Hãy đảm bảo đường dẫn này đúng với nơi bạn tạo file SlotTimeInfo.tsx)
+import SlotTimeInfo from "../../../components/home/SlotTimeInfo";
+
+// --- CẤU HÌNH CỐ ĐỊNH ---
 const SLOTS = [
   { id: "slot1", label: "Slot 1" },
   { id: "slot2", label: "Slot 2" },
   { id: "slot3", label: "Slot 3" },
   { id: "slot4", label: "Slot 4" },
 ];
+
 const weekdays_short = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+
 const getMonday = (d: Date) => {
   d = new Date(d);
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   return new Date(d.setDate(diff));
 };
-// --------------------
+
+// -------------------------
 
 export default function TimetableScreen() {
   const [currentMonday, setCurrentMonday] = useState(getMonday(new Date()));
   const [weekDates, setWeekDates] = useState<Date[]>([]);
-
-  // State để lưu *tất cả* booking
   const [allBookings, setAllBookings] = useState<any[]>([]);
-
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Tải TẤT CẢ booking một lần
+  // 1. Load data
   useEffect(() => {
     const loadAllBookings = async () => {
       setIsLoading(true);
@@ -58,22 +61,21 @@ export default function TimetableScreen() {
     loadAllBookings();
   }, []);
 
-  // --- THAY ĐỔI: Gộp tất cả slot đã đặt vào MỘT Set ---
+  // 2. Tính toán slot đã đặt (Gộp tất cả các phòng lại để xem tổng quan)
   const allUnavailableSlots = useMemo(() => {
     const newUnavailableSlots = new Set<string>();
-
-    // Lặp qua tất cả booking của tất cả các phòng
     allBookings.forEach((b: any) => {
+      // Nếu booking bị từ chối hoặc hủy thì không tính là unavailable
+      if (b.status === "rejected" || b.status === "cancelled") return;
+
       (b.slots || []).forEach((s: any) => {
-        // Chỉ lưu date::slotId, không quan tâm phòng nào
         newUnavailableSlots.add(`${s.date}::${s.slotId}`);
       });
     });
-
     return newUnavailableSlots;
-  }, [allBookings]); // Tính toán lại khi booking thay đổi
+  }, [allBookings]);
 
-  // 3. Cập nhật ngày trong tuần khi đổi tuần
+  // 3. Xử lý lịch tuần
   useEffect(() => {
     const dates = [];
     for (let i = 0; i < 7; i++) {
@@ -84,7 +86,6 @@ export default function TimetableScreen() {
     setWeekDates(dates);
   }, [currentMonday]);
 
-  // 4. Hàm điều hướng tuần
   const handlePrevWeek = () => {
     setCurrentMonday((prev) => {
       const newDate = new Date(prev);
@@ -123,11 +124,11 @@ export default function TimetableScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Thời khóa biểu chung</Text>
         <Text style={styles.subtitle}>
-          Xem tình trạng slot đã được đặt (tại bất kỳ phòng nào)
+          Xem tình trạng slot của toàn bộ hệ thống
         </Text>
       </View>
 
-      {/* --- LỊCH (CALENDAR) --- */}
+      {/* Navigation */}
       <View style={styles.calendarNav}>
         <TouchableOpacity onPress={handlePrevWeek} style={styles.navButton}>
           <ChevronLeft size={20} color="#EA580C" />
@@ -138,7 +139,7 @@ export default function TimetableScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* --- THAY ĐỔI: Chỉ render MỘT lịch duy nhất --- */}
+      {/* Calendar Grid */}
       <View style={styles.calendarContainer}>
         <View style={styles.weekdaysHeader}>
           {weekDates.map((date, dayIndex) => (
@@ -153,8 +154,12 @@ export default function TimetableScreen() {
           {weekDates.map((date) => (
             <View key={date.toISOString()} style={styles.dayColumn}>
               {SLOTS.map((slot) => {
-                const dateString = date.toISOString().split("T")[0];
-                // Kiểm tra trong Set tổng
+                // Sửa lỗi timezone bằng hàm format date local (giống các file khác)
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, "0");
+                const day = String(date.getDate()).padStart(2, "0");
+                const dateString = `${year}-${month}-${day}`;
+
                 const isBooked = allUnavailableSlots.has(
                   `${dateString}::${slot.id}`
                 );
@@ -178,24 +183,28 @@ export default function TimetableScreen() {
           ))}
         </View>
       </View>
-      {/* ------------------------------------------- */}
 
-      {/* --- CHÚ THÍCH (LEGEND) --- */}
-      <View style={styles.legend}>
+      {/* --- PHẦN 1: CHÚ THÍCH MÀU SẮC --- */}
+      <View style={styles.legendRow}>
         <View style={styles.legendItem}>
           <View style={[styles.legendBox, styles.availableSlot]} />
           <Text style={styles.legendText}>Còn trống</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendBox, styles.unavailableSlot]} />
-          <Text style={styles.legendText}>Đã đặt (ít nhất 1 phòng)</Text>
+          <Text style={styles.legendText}>Đã được đặt</Text>
         </View>
+      </View>
+
+      {/* --- PHẦN 2: KHUNG GIỜ HOẠT ĐỘNG (COMPONENT TÁI SỬ DỤNG) --- */}
+      <View style={styles.infoSection}>
+        <SlotTimeInfo />
       </View>
     </ScrollView>
   );
 }
 
-// --- StyleSheet ---
+// --- Styles (Đã xóa các style thừa) ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   content: { padding: 16, paddingBottom: 100 },
@@ -207,10 +216,10 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 16,
-    marginTop: 16,
+    marginTop: 8,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "800",
     color: "#0F172A",
     marginBottom: 4,
@@ -224,16 +233,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 8,
-    paddingVertical: 12,
-    marginBottom: 16,
+    paddingVertical: 10,
+    marginBottom: 12,
     backgroundColor: "white",
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#FFE8DA",
   },
-  navButton: {
-    padding: 8,
-  },
+  navButton: { padding: 8 },
   dateRangeText: {
     fontSize: 14,
     fontWeight: "600",
@@ -245,6 +252,11 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: "#FFE8DA",
+    shadowColor: "#EA580C",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   weekdaysHeader: {
     flexDirection: "row",
@@ -258,38 +270,38 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   dayNameText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
     color: "#64748B",
   },
   dateNumText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: "#1E293B",
   },
-  slotsGrid: { flexDirection: "row", gap: 8 },
-  dayColumn: { flex: 1, gap: 8 },
+  slotsGrid: { flexDirection: "row", gap: 6 },
+  dayColumn: { flex: 1, gap: 6 },
   slotButton: {
     width: "100%",
-    height: 40,
-    borderRadius: 8,
+    height: 36,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   availableSlot: { backgroundColor: "#fff", borderColor: "#F1F5F9" },
   unavailableSlot: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
-  slotLabel: { fontSize: 13, fontWeight: "500", color: "#0F172A" },
-  unavailableSlotText: { color: "#94A3B8" },
-  legend: {
-    marginTop: 16,
-    display: "flex",
+  slotLabel: { fontSize: 11, fontWeight: "500", color: "#0F172A" },
+  unavailableSlotText: { color: "#CBD5E1" },
+
+  // --- STYLES CHO LEGEND ---
+  legendRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    gap: 8,
+    marginTop: 16,
+    marginBottom: 4,
   },
   legendItem: {
-    display: "flex",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -299,7 +311,12 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
   },
   legendText: { fontSize: 13, color: "#475569" },
+
+  // --- STYLES CHO CONTAINER CHỨA INFO ---
+  infoSection: {
+    marginTop: 12,
+    // Không cần style nền/border ở đây nữa vì component con đã tự lo
+  },
 });

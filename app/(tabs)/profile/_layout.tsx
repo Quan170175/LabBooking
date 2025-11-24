@@ -6,11 +6,8 @@ import AppHeader from "../../../components/common/AppHeader";
 export default function ProfileStackLayout() {
   return (
     <Stack>
-      <Stack.Screen
-        name="index" // Trỏ đến app/(tabs)/profile/index.tsx
-        options={{ header: () => <AppHeader /> }}
-      />
-      {/* Thêm các màn hình con của profile (nếu có) vào đây */}
+      <Stack.Screen name="index" options={{ header: () => <AppHeader /> }} />
+      <Stack.Screen name="details" options={{ header: () => <AppHeader /> }} />
     </Stack>
   );
 }

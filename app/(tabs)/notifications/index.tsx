@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { Bell, Check, ChevronRight, Clock4 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Alert,
   ScrollView,
@@ -8,9 +8,35 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
+// Không cần import SecureStore ở đây nữa vì api.ts đã lo
+// import * as SecureStore from "expo-secure-store";
 
-// Cập nhật interface
+// 🟢 1. IMPORT API CLIENT (Đảm bảo đường dẫn đúng với file api.ts của bạn)
+import apiClient from "../../../utils/api";
+
+// --- CẤU HÌNH API ---
+// Chỉ cần endpoint, Base URL đã có trong apiClient
+const API_ENDPOINT = "/api/Notifications";
+
+// --- INTERFACES (GIỮ NGUYÊN) ---
+interface ApiNotification {
+  id: string;
+  title: string;
+  message: string;
+  dataPayload: string;
+  isRead: boolean;
+  createdAt?: string;
+  createdDt?: string;
+}
+
+interface ApiResponse {
+  items: ApiNotification[];
+  totalItemsCount: number;
+}
+
 interface NotificationItem {
   id: string;
   title: string;
@@ -18,7 +44,6 @@ interface NotificationItem {
   time: string;
   read: boolean;
   type: "info" | "actionable_reschedule";
-  // Thông tin cho việc dời lịch
   affectedBooking?: {
     originalBookingId: string;
     roomId: string;
@@ -27,70 +52,52 @@ interface NotificationItem {
   };
 }
 
-// Dữ liệu giả định mới
-const notificationsData: NotificationItem[] = [
-  {
-    id: "100",
-    title: "Yêu cầu dời lịch của bạn!",
-    description:
-      "Lịch của bạn tại phòng Lab A101 (Slot 1, 04/10/2025) đã bị trùng với một sự kiện ưu tiên. Vui lòng chọn Hủy lịch hoặc Đổi sang một slot khác.",
-    time: "03/10/2025 09:15",
-    read: false,
-    type: "actionable_reschedule",
-    affectedBooking: {
-      originalBookingId: "booking123", // ID của booking gốc
-      roomId: "lab1",
-      roomName: "Phòng Lab A101",
-      slotsLostCount: 1, // Số slot đã bị lấy đi
-    },
+// --- DỮ LIỆU CỐ ĐỊNH (GIỮ NGUYÊN) ---
+const ACTIONABLE_NOTIFICATION: NotificationItem = {
+  id: "100",
+  title: "Yêu cầu dời lịch của bạn!",
+  description:
+    "Lịch của bạn tại phòng Lab A101 (Slot 1, 04/10/2025) đã bị trùng với một sự kiện ưu tiên. Vui lòng chọn Hủy lịch hoặc Đổi sang một slot khác.",
+  time: "03/10/2025 09:15",
+  read: false,
+  type: "actionable_reschedule",
+  affectedBooking: {
+    originalBookingId: "booking123",
+    roomId: "lab1",
+    roomName: "Phòng Lab A101",
+    slotsLostCount: 1,
   },
-  {
-    id: "1",
-    title: "Thông báo lịch bảo trì phòng Lab A501",
-    description:
-      "Chiều thứ 5 (02/10) phòng A501 sẽ tạm ngưng phục vụ để bảo trì hệ thống máy in 3D.",
-    time: "02/10/2025 16:39",
-    read: false,
-    type: "info",
-  },
-  {
-    id: "2",
-    title: "Cập nhật lịch hoạt động Lab IoT",
-    description:
-      "Môn Internet of Things học phần 2 chuyển sang phòng B203 trong tuần này.",
-    time: "23/09/2025 13:58",
-    read: false,
-    type: "info",
-  },
-  {
-    id: "3",
-    title: "Kết quả kiểm tra thiết bị tuần 37",
-    description:
-      "Thiết bị cảm biến trong Lab AI đã đạt chuẩn, có thể đặt vào các buổi tối.",
-    time: "18/09/2025 15:19",
-    read: true,
-    type: "info",
-  },
-  {
-    id: "4",
-    title: "Tạm ngưng đăng ký Lab Robotics",
-    description:
-      "Lab Robotics sẽ đóng cửa ngày 17/09 để nâng cấp cánh tay robot công nghiệp.",
-    time: "17/09/2025 09:31",
-    read: true,
-    type: "info",
-  },
-];
+};
 
-// Component Card (đã cập nhật)
+// --- HELPER FORMAT DATE (GIỮ NGUYÊN) ---
+const formatDate = (dateString?: string) => {
+  if (!dateString) return "";
+  try {
+    const date = new Date(dateString);
+    return `${date.getDate().toString().padStart(2, "0")}/${(
+      date.getMonth() + 1
+    )
+      .toString()
+      .padStart(2, "0")}/${date.getFullYear()} ${date
+      .getHours()
+      .toString()
+      .padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
+  } catch (e) {
+    return dateString || "";
+  }
+};
+
+// --- COMPONENT CARD (GIỮ NGUYÊN) ---
 function NotificationCard({
   notification,
   onCancel,
   onReschedule,
+  onMarkRead,
 }: {
   notification: NotificationItem;
   onCancel: (id: string) => void;
   onReschedule: (id: string, booking: any) => void;
+  onMarkRead: (id: string) => void;
 }) {
   const isActionable =
     notification.type === "actionable_reschedule" && !notification.read;
@@ -98,13 +105,12 @@ function NotificationCard({
   return (
     <TouchableOpacity
       style={[styles.card, notification.read && styles.cardRead]}
-      // Chỉ cho phép bấm vào card (để đổi lịch) nếu nó "actionable"
-      disabled={!isActionable}
-      onPress={
-        isActionable
-          ? () => onReschedule(notification.id, notification.affectedBooking)
-          : undefined
-      }
+      onPress={() => {
+        onMarkRead(notification.id);
+        if (isActionable) {
+          onReschedule(notification.id, notification.affectedBooking);
+        }
+      }}
     >
       <View
         style={[
@@ -140,7 +146,6 @@ function NotificationCard({
           {notification.description}
         </Text>
 
-        {/* Nút hành động */}
         {isActionable && (
           <View style={styles.actionButtonContainer}>
             <TouchableOpacity
@@ -175,87 +180,142 @@ function NotificationCard({
   );
 }
 
-// Component Screen
+// --- MAIN SCREEN ---
 export default function NotificationsScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
 
-  // Quản lý danh sách bằng state
-  const [notifications, setNotifications] = useState(notificationsData);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([
+    ACTIONABLE_NOTIFICATION,
+  ]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // --- 1. LẤY DANH SÁCH THÔNG BÁO (DÙNG API CLIENT) ---
+  const fetchNotifications = async () => {
+    try {
+      // 🟢 KHÔNG CẦN: Lấy token thủ công. apiClient tự làm.
+
+      // 🟢 THAY ĐỔI: Dùng apiClient.get
+      // Axios cho phép truyền params dưới dạng object, sạch hơn query string
+      const response = await apiClient.get<ApiResponse>(API_ENDPOINT, {
+        params: {
+          PageNumber: 1,
+          PageSize: 5,
+        },
+      });
+
+      // Axios trả về data nằm trong response.data
+      const data = response.data;
+
+      if (data && data.items) {
+        const mappedData: NotificationItem[] = data.items.map((item) => ({
+          id: item.id,
+          title: item.title,
+          description: item.message,
+          time: formatDate(item.createdAt || item.createdDt),
+          read: item.isRead,
+          type: "info",
+        }));
+        setNotifications([ACTIONABLE_NOTIFICATION, ...mappedData]);
+      }
+    } catch (error: any) {
+      // Interceptor của apiClient sẽ lo việc refresh token hoặc logout nếu cần.
+      // Ở đây ta chỉ log lỗi nếu nó không phải 401 (vì 401 interceptor xử lý rồi)
+      console.error("Lỗi khi tải thông báo:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // --- 2. HÀM GỌI API ĐÁNH DẤU ĐÃ ĐỌC (DÙNG API CLIENT PUT) ---
+  const handleMarkAsRead = async (id: string) => {
+    const targetItem = notifications.find((i) => i.id === id);
+    if (targetItem?.read) return;
+
+    // 2.1. Optimistic Update (Cập nhật UI trước)
+    setNotifications((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, read: true } : item))
+    );
+
+    if (id === "100") return;
+
+    // 2.2. Gọi API ngầm
+    try {
+      // 🟢 THAY ĐỔI: Dùng apiClient.put
+      const url = `${API_ENDPOINT}/${id}/read`;
+      console.log("Marking as read:", url);
+
+      // apiClient tự động gắn Authorization Header
+      await apiClient.put(url);
+
+      console.log("Marked read success");
+    } catch (error) {
+      console.error("API Mark Read Error:", error);
+      // Nếu cần, có thể revert UI lại ở đây
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchNotifications();
+  }, []);
 
   const unread = notifications.filter((item) => !item.read);
   const list = activeTab === "all" ? notifications : unread;
 
-  // Xử lý Hủy lịch
   const handleCancel = (id: string) => {
-    Alert.alert(
-      "Xác nhận Hủy lịch",
-      "Bạn có chắc chắn muốn hủy lịch này không? Hành động này không thể hoàn tác.",
-      [
-        { text: "Không", style: "cancel" },
-        {
-          text: "Xác nhận Hủy",
-          style: "destructive",
-          onPress: () => {
-            // Cập nhật state, đánh dấu là đã đọc
-            setNotifications(
-              notifications.map((item) =>
-                item.id === id
-                  ? {
-                      ...item,
-                      read: true,
-                      title: `(Đã hủy) ${item.title}`,
-                      type: "info", // Chuyển về info, ẩn nút đi
-                    }
-                  : item
-              )
-            );
-            // (Tại đây bạn có thể gọi API để xóa booking gốc)
-          },
-        },
-      ]
-    );
+    Alert.alert("Xác nhận", "Bạn muốn hủy lịch này?", [
+      { text: "Không", style: "cancel" },
+      {
+        text: "Có",
+        style: "destructive",
+        onPress: () => handleMarkAsRead(id),
+      },
+    ]);
   };
 
-  // Xử lý Đổi lịch
   const handleReschedule = (id: string, booking: any) => {
-    // 1. Đánh dấu thông báo là đã đọc
-    setNotifications(
-      notifications.map((item) =>
-        item.id === id ? { ...item, read: true } : item
-      )
-    );
-
-    // 2. Điều hướng người dùng về trang ĐỔI LỊCH MỚI
+    handleMarkAsRead(id);
     router.push({
-      pathname: "/book/reschedule-slots" as any, // Route mới
+      pathname: "/book/reschedule-slots" as any,
       params: {
         roomId: booking.roomId,
         roomName: booking.roomName,
-        slotsToPick: booking.slotsLostCount || 1, // Truyền số slot cần chọn
-        bookingId: booking.originalBookingId, // Truyền ID của booking gốc
+        slotsToPick: booking.slotsLostCount || 1,
+        bookingId: booking.originalBookingId,
       },
     });
   };
 
   const renderContent = () => {
+    if (loading && !refreshing)
+      return (
+        <ActivityIndicator
+          size="large"
+          color="#f97316"
+          style={{ marginTop: 40 }}
+        />
+      );
     if (list.length === 0) {
       return (
         <View style={styles.emptyStateContainer}>
-          <Text style={styles.emptyStateTitle}>Bạn đã đọc hết thông báo</Text>
-          <Text style={styles.emptyStateSubtitle}>
-            Đừng quên kiểm tra lại sau để cập nhật thông tin mới.
-          </Text>
+          <Text style={styles.emptyStateTitle}>Không có thông báo</Text>
         </View>
       );
     }
-
     return list.map((notification) => (
       <NotificationCard
         key={notification.id}
         notification={notification}
         onCancel={handleCancel}
         onReschedule={handleReschedule}
+        onMarkRead={handleMarkAsRead}
       />
     ));
   };
@@ -264,12 +324,17 @@ export default function NotificationsScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={["#f97316"]}
+        />
+      }
     >
       <View style={styles.header}>
         <Text style={styles.title}>Thông báo</Text>
-        <Text style={styles.subtitle}>
-          Theo dõi mọi cập nhật về lịch và trạng thái phòng lab
-        </Text>
+        <Text style={styles.subtitle}>Theo dõi mọi cập nhật về lịch</Text>
       </View>
 
       <View style={styles.tabsContainer}>
@@ -307,23 +372,10 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff7ed",
-  },
-  contentContainer: {
-    padding: 16,
-    paddingBottom: 120,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#1e293b",
-  },
+  container: { flex: 1, backgroundColor: "#fff7ed" },
+  contentContainer: { padding: 16, paddingBottom: 120 },
+  header: { alignItems: "center", marginBottom: 24 },
+  title: { fontSize: 22, fontWeight: "bold", color: "#1e293b" },
   subtitle: {
     fontSize: 14,
     color: "#64748b",
@@ -345,21 +397,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  activeTab: {
-    backgroundColor: "#f97316",
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#475569",
-  },
-  activeTabText: {
-    color: "white",
-  },
-  listContainer: {
-    marginTop: 16,
-    gap: 12,
-  },
+  activeTab: { backgroundColor: "#f97316" },
+  tabText: { fontSize: 14, fontWeight: "600", color: "#475569" },
+  activeTabText: { color: "white" },
+  listContainer: { marginTop: 16, gap: 12 },
   card: {
     flexDirection: "row",
     gap: 12,
@@ -369,10 +410,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ffedd5",
   },
-  cardRead: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#f1f5f9",
-  },
+  cardRead: { backgroundColor: "#f8fafc", borderColor: "#f1f5f9" },
   iconContainer: {
     height: 40,
     width: 40,
@@ -383,55 +421,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 2,
   },
-  iconContainerRead: {
-    backgroundColor: "#f1f5f9",
-  },
-  iconContainerActionable: {
-    borderColor: "#ea580c",
-    borderWidth: 1,
-  },
-  cardContent: {
-    flex: 1,
-    gap: 4,
-  },
+  iconContainerRead: { backgroundColor: "#f1f5f9" },
+  iconContainerActionable: { borderColor: "#ea580c", borderWidth: 1 },
+  cardContent: { flex: 1, gap: 4 },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 8,
   },
-  cardTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1e293b",
-  },
-  cardTitleRead: {
-    color: "#64748b",
-  },
-  cardDescription: {
-    fontSize: 14,
-    color: "#64748b",
-    lineHeight: 20,
-  },
-  cardDescRead: {
-    color: "#94a3b8",
-  },
+  cardTitle: { flex: 1, fontSize: 16, fontWeight: "600", color: "#1e293b" },
+  cardTitleRead: { color: "#64748b" },
+  cardDescription: { fontSize: 14, color: "#64748b", lineHeight: 20 },
+  cardDescRead: { color: "#94a3b8" },
   cardFooter: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     marginTop: 4,
   },
-  cardTime: {
-    fontSize: 12,
-    color: "#94a3b8",
-  },
-  actionButtonContainer: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 12,
-  },
+  cardTime: { fontSize: 12, color: "#94a3b8" },
+  actionButtonContainer: { flexDirection: "row", gap: 10, marginTop: 12 },
   actionButton: {
     flex: 1,
     paddingVertical: 10,
@@ -439,24 +449,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  actionButtonText: { fontSize: 14, fontWeight: "600" },
   cancelButton: {
     backgroundColor: "#f1f5f9",
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
-  cancelButtonText: {
-    color: "#334155",
-  },
-  rescheduleButton: {
-    backgroundColor: "#ea580c",
-  },
-  rescheduleButtonText: {
-    color: "white",
-  },
+  cancelButtonText: { color: "#334155" },
+  rescheduleButton: { backgroundColor: "#ea580c" },
+  rescheduleButtonText: { color: "white" },
   emptyStateContainer: {
     borderWidth: 1,
     borderColor: "#fed7aa",
@@ -466,14 +467,5 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: "center",
   },
-  emptyStateTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#c2410c",
-  },
-  emptyStateSubtitle: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#ea580c",
-  },
+  emptyStateTitle: { fontSize: 14, fontWeight: "600", color: "#c2410c" },
 });
