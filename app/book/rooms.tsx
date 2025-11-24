@@ -1,7 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React from "react";
+// --- THAY ĐỔI 1: Imports ---
+import axios from "axios"; // Thêm
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator, // Thêm
+  Alert, // Thêm (để báo lỗi)
   ScrollView,
   StyleSheet,
   Text,
@@ -13,30 +17,52 @@ import BookingCard from "../../components/booking/BookingCard";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
 import BookingProgress from "../../components/booking/BookingProgress";
 
-// ... (ROOMS data giữ nguyên) ...
-const ROOMS = [
-  {
-    id: "lab1",
-    name: "Phòng Lab A101",
-    desc: "30 máy tính, 3 máy chủ, 2 máy in",
-  },
-  {
-    id: "lab2",
-    name: "Phòng Lab B202",
-    desc: "20 máy tính, thiết bị mạng, 1 máy in",
-  },
-];
+// --- THAY ĐỔI 2: Thêm API Client ---
+const apiClient = axios.create({
+  baseURL: "https://localhost:7089/api",
+});
+
+// --- THAY ĐỔI 3: Xóa Dữ Liệu Giả Lập ---
+// const ROOMS = [ ... ]; // Xóa
 
 export default function BookRooms() {
   const router = useRouter();
   const { type = "project" } = useLocalSearchParams<{ type: string }>();
 
-  const handleSelectRoom = async (room: (typeof ROOMS)[0]) => {
-    // ... (logic handleSelectRoom giữ nguyên) ...
+  // --- THAY ĐỔI 4: Thêm State cho Dữ Liệu API ---
+  const [rooms, setRooms] = useState<any[]>([]); // Lưu danh sách phòng
+  const [isLoading, setIsLoading] = useState(true); // Trạng thái loading
+
+  // --- THAY ĐỔI 5: Thêm useEffect để Tải Dữ Liệu ---
+  useEffect(() => {
+    const loadRooms = async () => {
+      setIsLoading(true);
+      try {
+        // Gọi API thật
+        const response = await apiClient.get("/LabRooms?PageNumber=1&PageSize=10");
+        // Dữ liệu phòng nằm trong 'items'
+        setRooms(response.data.items);
+      } catch (e: any) {
+        console.error("Lỗi khi tải danh sách phòng:", e);
+        Alert.alert(
+          "Lỗi API",
+          `Không thể tải danh sách phòng: ${e.message}`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadRooms();
+  }, []); // [] = Chạy 1 lần khi component được tải
+
+  // --- THAY ĐỔI 6: Cập nhật `handleSelectRoom` ---
+  // (Thay `room.name` bằng `room.labName`)
+  const handleSelectRoom = async (room: any) => {
     try {
       const currentBooking = {
         roomId: room.id,
-        roomName: room.name,
+        roomName: room.labName, // <-- Sửa ở đây
         type,
         slots: [],
         devices: [],
@@ -74,8 +100,8 @@ export default function BookRooms() {
     </Svg>
   );
 
-  // --- THAY ĐỔI: Logic subtitle cho 4 loại ---
   const getSubtitle = () => {
+    // ... (Logic subtitle giữ nguyên) ...
     switch (type) {
       case "teaching_flexible":
         return "Chọn linh hoạt tối đa 20 slot";
@@ -90,6 +116,15 @@ export default function BookRooms() {
     }
   };
 
+  // --- THAY ĐỔI 7: Thêm Trạng Thái Loading ---
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#EA580C" />
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <BookingProgress step={1} />
@@ -100,49 +135,58 @@ export default function BookRooms() {
         subtitle={getSubtitle()}
       />
 
+      {/* --- THAY ĐỔI 8: Dùng `rooms.map` và dữ liệu thật --- */}
       <View style={styles.roomList}>
-        {ROOMS.map((room) => (
-          <BookingCard key={room.id}>
-            {/* ... (Phần render room list giữ nguyên) ... */}
-            <View style={styles.roomInfo}>
-              <View style={styles.roomIcon}>
-                <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M15.2 2H9.2C8.65 2 8.2 2.45 8.2 3v2c0 .55.45 1 1 1h5c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1zM16.2 4h2c.55 0 1 .45 1 1v15c0 .55-.45 1-1 1h-12c-.55 0-1-.45-1-1V5c0-.55.45-1 1-1h2"
-                    stroke="#EA580C"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <Path
-                    d="M12.2 11h4M12.2 16h4M8.2 11h.01M8.2 16h.01"
-                    stroke="#EA580C"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
+        {rooms.map((room) => {
+          // Tạo mô tả (desc) từ dữ liệu API
+          let desc = `${room.location} - ${room.maximumLimit} chỗ ngồi`;
+          if (room.equipments && room.equipments.length > 0) {
+            desc += ` (${room.equipments.length} thiết bị)`;
+          }
+
+          return (
+            <BookingCard key={room.id}>
+              <View style={styles.roomInfo}>
+                <View style={styles.roomIcon}>
+                  {/* ... (SVG icon giữ nguyên) ... */}
+                  <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <Path
+                      d="M15.2 2H9.2C8.65 2 8.2 2.45 8.2 3v2c0 .55.45 1 1 1h5c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1zM16.2 4h2c.55 0 1 .45 1 1v15c0 .55-.45 1-1 1h-12c-.55 0-1-.45-1-1V5c0-.55.45-1 1-1h2"
+                      stroke="#EA580C"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <Path
+                      d="M12.2 11h4M12.2 16h4M8.2 11h.01M8.2 16h.01"
+                      stroke="#EA580C"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                </View>
+                <View>
+                  <Text style={styles.roomName}>{room.labName}</Text>
+                  <Text style={styles.roomDesc}>{desc}</Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.roomName}>{room.name}</Text>
-                <Text style={styles.roomDesc}>{room.desc}</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => handleSelectRoom(room)}
-              style={styles.selectButton}
-            >
-              <Text style={styles.selectButtonText}>Chọn</Text>
-            </TouchableOpacity>
-          </BookingCard>
-        ))}
+              <TouchableOpacity
+                onPress={() => handleSelectRoom(room)}
+                style={styles.selectButton}
+              >
+                <Text style={styles.selectButtonText}>Chọn</Text>
+              </TouchableOpacity>
+            </BookingCard>
+          );
+        })}
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  // ... (Styles giữ nguyên) ...
+  // ... (Styles cũ giữ nguyên) ...
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   content: { padding: 16, paddingBottom: 100 },
   roomList: { gap: 16 },
@@ -166,4 +210,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   selectButtonText: { color: "#C2410C", fontWeight: "600" },
+
+  // --- THAY ĐỔI 9: Thêm style cho loading ---
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });

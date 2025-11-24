@@ -78,7 +78,7 @@ export default function BookChooseType() {
           <View>
             <Text style={styles.optionTitle}>Đặt lịch dự án</Text>
             <Text style={styles.optionDesc}>
-              Chọn linh hoạt tối đa 5 slot, mời thành viên
+              Chọn linh hoạt tối đa 10 slot, mời thành viên
             </Text>
           </View>
         </BookingCard>
@@ -93,7 +93,7 @@ export default function BookChooseType() {
           <View>
             <Text style={styles.optionTitle}>Đặt lịch ưu tiên</Text>
             <Text style={styles.optionDesc}>
-              Sự kiện quan trọng (tối đa 4 slot)
+              Sự kiện quan trọng (tối đa 10 slot)
             </Text>
           </View>
         </BookingCard>

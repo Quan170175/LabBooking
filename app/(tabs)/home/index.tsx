@@ -73,6 +73,18 @@ const featureGroups = [
     description: "Gửi yêu cầu giúp đỡ",
     icon: ShieldCheck,
   },
+  {
+    to: "/manager/approvals",
+    title: "Phê duyệt", // <-- Bạn có thể đổi title
+    description: "Quản lý các yêu cầu phê duyệt", // <-- Bạn có thể đổi mô tả
+    icon: BookOpen, // <-- Bạn cần import icon này (ví dụ: CheckSquare từ lucide-react-native)
+  },
+  {
+    to: "/manager/security-incidents",
+    title: "Sự cố bảo mật", // <-- Bạn có thể đổi title
+    description: "Báo cáo và quản lý sự cố", // <-- Bạn có thể đổi mô tả
+    icon: BookOpen, // <-- Bạn cũng cần import icon này
+  },
   // {
   //   to: "/home/community",
   //   title: "Cộng đồng",
