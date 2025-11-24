@@ -1,3 +1,4 @@
+// (profile)/index.tsx - ĐÃ SỬA LỖI
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
@@ -9,7 +10,8 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react-native";
-import React, { useState } from "react"; // 1. Import useState
+// 1. Import thêm useEffect
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -18,11 +20,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-// (Không cần import ActivityIndicator nữa)
-// 2. Import component Modal mới
+// 2. Import component Modal
 import ConfirmationModal from "../../../components/common/ConfirmationModal";
 
-// ... (Kiểu dữ liệu Setting và mảng settings giữ nguyên) ...
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import * as SecureStore from "expo-secure-store";
+
 type Setting = {
   icon: React.ElementType;
   title: string;
@@ -61,6 +64,21 @@ export default function Profile() {
 
   const [isLogoutModalOpen, setLogoutModalOpen] = useState(false);
 
+  useEffect(() => {
+    try {
+      GoogleSignin.configure({
+        webClientId:
+          "317167237519-3bn2trq7crhc9sm57a9f695crc9idj8e.apps.googleusercontent.com",
+        iosClientId:
+          "317167237519-9e80jt1rdcqkdbane352msd5gfnpti95.apps.googleusercontent.com",
+        scopes: ["profile", "email"],
+      });
+    } catch (error) {
+      console.error("Lỗi khi cấu hình Google Sign-In ở Profile:", error);
+    }
+  }, []);
+  // *** KẾT THÚC PHẦN SỬA LỖI ***
+
   const handleNavigation = (path: string) => {
     if (path === "/profile/details") {
       router.push(path as any);
@@ -76,9 +94,36 @@ export default function Profile() {
     setLogoutModalOpen(true);
   };
 
-  const onConfirmLogout = () => {
+  const onConfirmLogout = async () => {
     setLogoutModalOpen(false);
-    router.replace("/login" as any);
+    console.log("Bắt đầu quá trình đăng xuất...");
+
+    try {
+      // 1. Thu hồi quyền (để bắt buộc chọn lại tài khoản lần sau)
+      await GoogleSignin.revokeAccess();
+      console.log("Đã thu hồi quyền Google");
+
+      // 2. Đăng xuất khỏi SDK Google Sign-In
+      await GoogleSignin.signOut();
+      console.log("Đã đăng xuất khỏi Google SDK");
+
+      // 3. Xóa token khỏi SecureStore
+      await SecureStore.deleteItemAsync("accessToken");
+      await SecureStore.deleteItemAsync("refreshToken");
+      console.log("Đã xóa token cục bộ");
+    } catch (error) {
+      console.error("Lỗi trong quá trình đăng xuất:", error);
+      // Ngay cả khi có lỗi, vẫn nên cố gắng xóa token cục bộ
+      try {
+        await SecureStore.deleteItemAsync("accessToken");
+        await SecureStore.deleteItemAsync("refreshToken");
+      } catch (e) {
+        console.error("Lỗi khi cố gắng xóa token lần 2:", e);
+      }
+    } finally {
+      // 4. Điều hướng về trang Login
+      router.replace("/login" as any);
+    }
   };
 
   return (
@@ -164,6 +209,7 @@ export default function Profile() {
   );
 }
 
+// (Phần styles giữ nguyên không đổi)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
