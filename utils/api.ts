@@ -1,12 +1,12 @@
 // utils/api.ts
 import axios, { AxiosError } from "axios";
-import { router } from "expo-router"; // Dùng để điều hướng khi hết hạn refresh
+// *** 1. XÓA DÒNG "import { router } from "expo-router";" Ở ĐÂY ***
 import * as SecureStore from "expo-secure-store";
 
 // URL Backend của bạn
 const BACKEND_URL = "https://developerops.xyz";
 
-// 1. Tạo một 'instance' của axios
+// Tạo một 'instance' của axios (Giữ nguyên)
 const apiClient = axios.create({
   baseURL: BACKEND_URL,
   headers: {
@@ -14,7 +14,7 @@ const apiClient = axios.create({
   },
 });
 
-// 2. Cấu hình Request Interceptor (Gửi AccessToken tự động)
+// Request Interceptor (Giữ nguyên)
 apiClient.interceptors.request.use(
   async (config) => {
     const accessToken = await SecureStore.getItemAsync("accessToken");
@@ -28,7 +28,7 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Biến cờ và hàng đợi để xử lý nhiều request cùng lúc khi token hết hạn
+// Hàng đợi (Giữ nguyên)
 let isRefreshing = false;
 let failedQueue: {
   resolve: (value: string) => void;
@@ -49,19 +49,17 @@ const processQueue = (
   failedQueue = [];
 };
 
-// 3. Cấu hình Response Interceptor (Xử lý lỗi 401 và Refresh Token)
+// Response Interceptor (Đây là nơi sửa)
 apiClient.interceptors.response.use(
   (response) => {
-    // Nếu request thành công, trả về response
     return response;
   },
   async (error: AxiosError) => {
-    const originalRequest = error.config as any; // Thêm 'any' để truy cập _retry
+    const originalRequest = error.config as any;
 
-    // Chỉ xử lý lỗi 401 (Unauthorized) và request đó CHƯA được thử lại
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
-        // Nếu đang refresh, đẩy request vào hàng đợi
+        // (Phần này giữ nguyên)
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
@@ -74,7 +72,7 @@ apiClient.interceptors.response.use(
           });
       }
 
-      originalRequest._retry = true; // Đánh dấu là đã thử lại
+      originalRequest._retry = true;
       isRefreshing = true;
 
       try {
@@ -83,40 +81,35 @@ apiClient.interceptors.response.use(
 
         if (!refreshToken) {
           console.log("Không tìm thấy refreshToken, đang đăng xuất.");
-          // Xóa mọi token cũ
           await SecureStore.deleteItemAsync("accessToken");
           await SecureStore.deleteItemAsync("refreshToken");
-          // Điều hướng về màn hình Login (dựa theo cấu trúc file của bạn)
+
+          const { router } = require("expo-router");
           router.replace("/login");
+
           return Promise.reject(error);
         }
 
-        console.log("Đang gọi API /api/GoogleLoign/refresh-token...");
+        console.log("Đang gọi API /api/auth/refresh-token...");
 
-        // 4. Tự động gọi API refresh token
         const refreshResponse = await axios.post(
-          `${BACKEND_URL}/api/GoogleLoign/refresh-token`,
+          `${BACKEND_URL}/api/auth/refresh-token`,
           {
             refreshToken: refreshToken,
           }
         );
 
-        // *** ĐÃ BỎ refreshTokenExpiry ***
         const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
           refreshResponse.data;
 
-        // 5. Lưu token MỚI vào SecureStore
         console.log("Đã nhận được token mới. Đang lưu...");
         await SecureStore.setItemAsync("accessToken", newAccessToken);
         await SecureStore.setItemAsync("refreshToken", newRefreshToken);
-        // *** ĐÃ BỎ refreshTokenExpiry ***
 
-        // 6. Cập nhật header default của apiClient
         apiClient.defaults.headers.common[
           "Authorization"
         ] = `Bearer ${newAccessToken}`;
 
-        // 7. Xử lý hàng đợi và thực hiện lại request gốc
         processQueue(null, newAccessToken);
         isRefreshing = false;
 
@@ -128,13 +121,11 @@ apiClient.interceptors.response.use(
           "Lỗi nghiêm trọng khi refresh token:",
           refreshError.message
         );
-        // Xóa mọi token cũ
         await SecureStore.deleteItemAsync("accessToken");
         await SecureStore.deleteItemAsync("refreshToken");
-        // *** ĐÃ BỎ refreshTokenExpiry ***
 
-        // Đưa người dùng về màn hình login
-        router.replace("/login"); // Cập nhật đường dẫn login của bạn
+        const { router } = require("expo-router");
+        router.replace("/login");
 
         isRefreshing = false;
         processQueue(refreshError, null);

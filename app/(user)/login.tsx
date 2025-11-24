@@ -20,20 +20,16 @@ import {
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
-  withSpring,
-  withTiming,
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
-// *** 1. IMPORT apiClient ***
-// (Giả sử file api.ts nằm trong thư mục utils ở gốc)
-import apiClient from "../../api/api";
+// *** IMPORT apiClient ***
+// (Đảm bảo đường dẫn này đúng với cấu trúc dự án của bạn)
+import apiClient from "../../utils/api";
 
-// Component GoogleGlyph (giữ nguyên)
+// Component GoogleGlyph
 const GoogleGlyph = () => (
   <Svg height={20} width={20} viewBox="0 0 24 24">
-    {/* ... (các thẻ Path) ... */}
     <Path
       d="M23.52 12.273c0-.851-.075-1.67-.216-2.455H12v4.64h6.484a5.54 5.54 0 0 1-2.405 3.635v3.02h3.89c2.276-2.096 3.58-5.186 3.58-8.84"
       fill="#4285F4"
@@ -56,13 +52,15 @@ const GoogleGlyph = () => (
 export default function LoginScreen() {
   const router = useRouter();
 
-  // (Giữ nguyên các giá trị Animated)
-  const headerOpacity = useSharedValue(0);
-  const headerTranslateY = useSharedValue(-100);
-  const mainOpacity = useSharedValue(0);
-  const mainTranslateY = useSharedValue(100);
-  const footerOpacity = useSharedValue(0);
-  const footerTranslateY = useSharedValue(100);
+  // Animation Values
+  // Set mặc định là 1 và 0 để hiện ngay lập tức (vì đã có animation ở index.tsx rồi)
+  const headerOpacity = useSharedValue(1);
+  const headerTranslateY = useSharedValue(0);
+  const mainOpacity = useSharedValue(1);
+  const mainTranslateY = useSharedValue(0);
+  const footerOpacity = useSharedValue(1);
+  const footerTranslateY = useSharedValue(0);
+
   const animatedHeaderStyle = useAnimatedStyle(() => ({
     opacity: headerOpacity.value,
     transform: [{ translateY: headerTranslateY.value }],
@@ -76,27 +74,14 @@ export default function LoginScreen() {
     transform: [{ translateY: footerTranslateY.value }],
   }));
 
-  // (Giữ nguyên useEffect)
   useEffect(() => {
     GoogleSignin.configure({
-      webClientId:
-        "317167237519-3bn2trq7crhc9sm57a9f695crc9idj8e.apps.googleusercontent.com",
-      iosClientId:
-        "317167237519-9e80jt1rdcqkdbane352msd5gfnpti95.apps.googleusercontent.com",
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
       scopes: ["profile", "email"],
     });
-
-    const opacityConfig = { duration: 600 };
-    const springConfig = { damping: 12, stiffness: 90 };
-    headerOpacity.value = withTiming(1, opacityConfig);
-    headerTranslateY.value = withSpring(0, springConfig);
-    mainOpacity.value = withDelay(100, withTiming(1, opacityConfig));
-    mainTranslateY.value = withDelay(100, withSpring(0, springConfig));
-    footerOpacity.value = withDelay(200, withTiming(1, opacityConfig));
-    footerTranslateY.value = withDelay(200, withSpring(0, springConfig));
   }, []);
 
-  // *** 2. CẬP NHẬT HÀM signIn ***
   const signIn = async () => {
     try {
       await GoogleSignin.hasPlayServices();
@@ -108,20 +93,16 @@ export default function LoginScreen() {
       if (idToken) {
         console.log("Đang gửi idToken đến backend (sử dụng apiClient)...");
 
-        // *** THAY THẾ FETCH BẰNG apiClient.post ***
-        // axios tự động stringify body và parse JSON response
-        const response = await apiClient.post("/api/GoogleLoign/google", {
+        const response = await apiClient.post("/api/auth/google", {
           idToken: idToken,
         });
 
-        // Nếu thành công (status 2xx), data nằm trong response.data
         const data = response.data;
         console.log(
           "Backend response data (đã parse):",
           JSON.stringify(data, null, 2)
         );
 
-        // (Phần lưu token giữ nguyên)
         const accessToken = data.accessToken;
         const refreshToken = data.refreshToken;
 
@@ -139,7 +120,6 @@ export default function LoginScreen() {
           console.warn("CẢNH BÁO: Backend không trả về 'refreshToken'");
         }
 
-        // (Phần điều hướng giữ nguyên)
         if (accessToken) {
           router.replace("/(tabs)/home");
         } else {
@@ -152,17 +132,13 @@ export default function LoginScreen() {
         Alert.alert("Lỗi", "Không lấy được idToken từ Google.");
       }
     } catch (error: any) {
-      // Thêm 'any' cho TypeScript
       console.error("Lỗi trong quá trình đăng nhập hoặc gọi API:", error);
 
-      // *** 3. CẬP NHẬT XỬ LÝ LỖI CHO AXIOS ***
       if (error.response) {
-        // Lỗi đến từ server (e.g., 400, 403, 500)
         const errorMessage =
           error.response.data?.message || "Có lỗi xảy ra từ server.";
         Alert.alert(`Lỗi từ Server (${error.response.status})`, errorMessage);
       } else if (isErrorWithCode(error)) {
-        // Xử lý lỗi của Google Sign-In (GIỮ NGUYÊN)
         switch (error.code) {
           case statusCodes.SIGN_IN_CANCELLED:
             console.log("Người dùng đã hủy đăng nhập");
@@ -177,13 +153,11 @@ export default function LoginScreen() {
             Alert.alert("Lỗi đăng nhập Google", `Code: ${error.code}`);
         }
       } else if (error.request) {
-        // Request đã được gửi nhưng không nhận được phản hồi (lỗi mạng)
         Alert.alert(
           "Lỗi Mạng",
           "Không thể kết nối đến server. Vui lòng kiểm tra lại mạng."
         );
       } else {
-        // Lỗi khác
         Alert.alert(
           "Lỗi không xác định",
           (error as Error).message || "Vui lòng thử lại."
@@ -192,7 +166,6 @@ export default function LoginScreen() {
     }
   };
 
-  // (Phần return giao diện giữ nguyên)
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
@@ -229,10 +202,22 @@ export default function LoginScreen() {
 
           <Animated.View style={[styles.footerContainer, animatedFooterStyle]}>
             <View style={styles.actionArea}>
+              {/* Nút Google Sign In */}
               <TouchableOpacity style={styles.button} onPress={signIn}>
                 <GoogleGlyph />
                 <Text style={styles.buttonText}>Đăng nhập bằng Google</Text>
               </TouchableOpacity>
+
+              {/* --- NÚT SECURITY LOGIN (Đã sửa style đồng bộ) --- */}
+              <TouchableOpacity
+                style={[styles.button, { marginTop: 12 }]}
+                onPress={() => router.push("/security-login" as any)}
+              >
+                {/* Có thể thêm icon khóa ở đây nếu muốn */}
+                <Text style={styles.buttonText}>Đăng nhập cho Security</Text>
+              </TouchableOpacity>
+              {/* ------------------------------ */}
+
               <Text style={styles.termsText}>
                 Việc đăng nhập đồng nghĩa bạn đồng ý với Điều khoản sử dụng và
                 Chính sách bảo mật của FPT University.
@@ -248,7 +233,6 @@ export default function LoginScreen() {
   );
 }
 
-// (Phần styles giữ nguyên)
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -283,7 +267,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     height: "100%",
-    paddingVertical: 40,
+    // PaddingTop đẩy nội dung xuống một chút từ header
+    paddingTop: 40,
+    // PaddingBottom LỚN để đẩy 2 nút lên cao
+    paddingBottom: 100,
   },
   headerContainer: {
     width: "100%",
@@ -391,6 +378,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
     lineHeight: 18,
+    marginTop: 12,
   },
   footerText: {
     color: "#94A3B8",
