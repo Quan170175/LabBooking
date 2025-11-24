@@ -26,6 +26,7 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated"; // Th�
 import FeatureTile from "../../../components/home/FeatureTile";
 import { registerPushTokenOnServer } from "../../../services/apiserver";
 import { registerForPushNotificationsAsync } from "../../../services/notificationService";
+import "../../../assets/images/flms.png";
 
 // 1. ĐỊNH NGHĨA ROLES
 const ROLES = {
