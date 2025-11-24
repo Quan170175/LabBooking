@@ -1,10 +1,8 @@
 import { Tag, Trash2 } from "lucide-react-native";
-// --- THAY ĐỔI: Thêm useState, useMemo ---
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 // Đường dẫn: app/components/home -> utils
 import { Booking } from "../../utils/bookingTypes";
-// --- THAY ĐỔI: Xóa formatSlots, chỉ giữ isApproved ---
 import { isApproved } from "../../utils/bookingUtils";
 // Đường dẫn: app/components/home -> app/components/common
 import BookingDetailsInfo from "../common/BookingDetailsInfo";
@@ -14,7 +12,7 @@ type Props = {
   onRemove: (id: number) => void;
 };
 
-// --- THAY ĐỔI: Tạo map để hiển thị tên Slot ---
+// Map hiển thị tên Slot
 const SLOTS_MAP: { [key: string]: string } = {
   slot1: "Slot 1",
   slot2: "Slot 2",
@@ -22,10 +20,8 @@ const SLOTS_MAP: { [key: string]: string } = {
   slot4: "Slot 4",
 };
 
-// --- THAY ĐỔI: Hàm format ngày tháng ---
 const formatDate = (dateString: string) => {
   try {
-    // Sửa lỗi 'undefined' bằng cách dùng 'date' (không phải 'day')
     return new Date(dateString).toLocaleDateString("vi-VN", {
       day: "2-digit",
       month: "2-digit",
@@ -37,30 +33,22 @@ const formatDate = (dateString: string) => {
 
 export default function BookingHistoryCard({ booking: b, onRemove }: Props) {
   const approved = isApproved(b);
-  // --- THAY ĐỔI: State cho "Xem chi tiết" ---
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // --- THAY ĐỔI: Logic hiển thị slot đã sửa lỗi ---
+  // Logic hiển thị slot
   const slotsDisplay = useMemo(() => {
     if (!b.slots || b.slots.length === 0) return ["Không có slot."];
-
-    // Map slot (sửa lỗi 'undefined' bằng cách dùng slot.date)
     const formatted = b.slots.map((slot: any) => {
       const label = SLOTS_MAP[slot.slotId] || slot.slotId;
-      const date = formatDate(slot.date); // Lấy 'date' thay vì 'day'
+      const date = formatDate(slot.date);
       return `${label} (ngày ${date})`;
     });
-
-    if (isExpanded) return formatted; // Hiển thị tất cả nếu mở rộng
-
-    // Giới hạn 2 dòng
+    if (isExpanded) return formatted;
     if (formatted.length > 2) {
       return [formatted[0], `...và ${formatted.length - 1} slot khác.`];
     }
-
-    return formatted; // Hiển thị 1-2 slot
+    return formatted;
   }, [b.slots, isExpanded]);
-  // ------------------------------------------
 
   return (
     <View style={styles.card}>
@@ -76,16 +64,13 @@ export default function BookingHistoryCard({ booking: b, onRemove }: Props) {
                 {b.roomName || b.roomId}
               </Text>
 
-              {/* --- THAY ĐỔI: Hiển thị slot đã được format --- */}
               <Text
                 style={styles.cardSlots}
                 numberOfLines={isExpanded ? 10 : 2}
               >
                 {slotsDisplay.join("\n")}
               </Text>
-              {/* ----------------------------------------- */}
 
-              {/* --- THAY ĐỔI: Thêm nút Xem chi tiết --- */}
               {b.slots.length > 2 && (
                 <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)}>
                   <Text style={styles.toggleText}>
@@ -93,7 +78,6 @@ export default function BookingHistoryCard({ booking: b, onRemove }: Props) {
                   </Text>
                 </TouchableOpacity>
               )}
-              {/* ------------------------------------- */}
             </View>
 
             <View style={styles.cardActions}>
@@ -128,22 +112,31 @@ export default function BookingHistoryCard({ booking: b, onRemove }: Props) {
             <BookingDetailsInfo type={b.type} devices={b.devices} />
           </View>
 
+          {/* --- PHẦN SỬA LỖI OBJECTS NOT VALID AS REACT CHILD --- */}
           {b.invited && b.invited.length > 0 && (
             <View style={styles.invitedContainer}>
-              {b.invited.map((e: string) => (
-                <View key={e} style={styles.invitedBadge}>
-                  <Text style={styles.invitedText}>{e}</Text>
-                </View>
-              ))}
+              {b.invited.map((guest: any, index: number) => {
+                // Kiểm tra xem guest là string (cũ) hay object (mới)
+                const guestName =
+                  typeof guest === "string" ? guest : guest.name;
+                const key =
+                  typeof guest === "string" ? guest : guest.email || index;
+
+                return (
+                  <View key={key} style={styles.invitedBadge}>
+                    <Text style={styles.invitedText}>{guestName}</Text>
+                  </View>
+                );
+              })}
             </View>
           )}
+          {/* ----------------------------------------------------- */}
         </View>
       </View>
     </View>
   );
 }
 
-// --- StyleSheet ---
 const styles = StyleSheet.create({
   card: {
     backgroundColor: "white",
@@ -187,16 +180,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#64748B",
     marginTop: 2,
-    lineHeight: 18, // --- THAY ĐỔI: Thêm lineHeight ---
+    lineHeight: 18,
   },
-  // --- THAY ĐỔI: Thêm style cho nút "Xem chi tiết" ---
   toggleText: {
     fontSize: 13,
     fontWeight: "600",
     color: "#EA580C",
     marginTop: 4,
   },
-  // ---------------------------------------------
   cardActions: {
     alignItems: "flex-end",
     flexShrink: 0,
