@@ -1,34 +1,65 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+
+// Components
 import ManagerApprovalCard from "../../components/manager/ManagerApprovalCard";
 import ManagerChangeCard from "../../components/manager/ManagerChangeCard";
-import ManagerPriorityCard from "../../components/manager/ManagerPriorityCard";
-import { Booking } from "../../utils/bookingTypes";
+
+// API Config
+const apiClient = axios.create({ baseURL: "https://developerops.xyz/api" });
 
 type ActiveTab = "standard" | "priority" | "change";
 
 export default function ManagerApprovalsScreen() {
   const [isLoading, setIsLoading] = useState(true);
-  const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [allRequests, setAllRequests] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<ActiveTab>("standard");
 
-  // 1. Tải tất cả booking một lần
+  // Lab ID của Manager (Thường lấy từ Context/Storage sau khi login)
+  const managerLabId = "427b0284-4aa9-4f21-b2f3-cb8d851a72cb";
+
+  // --- 1. LOAD DATA TỪ 2 API SONG SONG ---
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const b = await AsyncStorage.getItem("bookings");
-      const all = JSON.parse(b || "[]");
-      setAllBookings(all);
+      const [resBookings, resChanges] = await Promise.all([
+        // API 1: Lấy đơn đặt mới (Booking)
+        apiClient.get("/Bookings/pending", { params: { labId: managerLabId } }),
+        // API 2: Lấy yêu cầu thay đổi (ChangeRequest)
+        apiClient.get("/BookingChangeRequest/pending", {
+          params: { labId: managerLabId },
+        }),
+      ]);
+
+      // Đánh dấu loại (Tagging) để dễ filter
+      const listBookings = resBookings.data.map((b: any) => ({
+        ...b,
+        uiType: "BOOKING",
+      }));
+      const listChanges = resChanges.data.map((c: any) => ({
+        ...c,
+        uiType: "CHANGE_REQUEST",
+      }));
+
+      // Gộp và Sắp xếp (Mới nhất lên đầu)
+      const combined = [...listBookings, ...listChanges].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      setAllRequests(combined);
     } catch (e) {
-      console.error("Failed to load bookings", e);
+      console.error("Load approvals error:", e);
+      Alert.alert("Lỗi", "Không tải được danh sách yêu cầu.");
     } finally {
       setIsLoading(false);
     }
@@ -38,81 +69,63 @@ export default function ManagerApprovalsScreen() {
     loadData();
   }, []);
 
-  // 2. Phân loại booking vào 3 danh sách
+  // --- 2. FILTER DATA THEO TABS ---
   const standardBookings = useMemo(
-    () => allBookings.filter((b) => b.status === "pending"),
-    [allBookings]
-  );
-  const priorityBookings = useMemo(
-    () => allBookings.filter((b) => b.status === "pending_priority"),
-    [allBookings]
-  );
-  const changeBookings = useMemo(
     () =>
-      allBookings.filter(
-        (b) => b.status === "pending_change" || b.type === "reschedule_request"
+      allRequests.filter(
+        (b) => b.uiType === "BOOKING" && b.type !== "UniversityEvent"
       ),
-    [allBookings]
+    [allRequests]
   );
 
-  // 3. Hàm xử lý (Duyệt / Từ chối)
-  const handleApproval = async (bookingId: number, approve: boolean) => {
+  const priorityBookings = useMemo(
+    () =>
+      allRequests.filter(
+        (b) => b.uiType === "BOOKING" && b.type === "UniversityEvent"
+      ),
+    [allRequests]
+  );
+
+  const changeBookings = useMemo(
+    () => allRequests.filter((b) => b.uiType === "CHANGE_REQUEST"),
+    [allRequests]
+  );
+
+  // --- 3. XỬ LÝ DUYỆT/TỪ CHỐI ---
+  const handleAction = async (item: any, isApprove: boolean) => {
     try {
-      let bookingsToUpdate = [...allBookings];
-      const targetBooking = bookingsToUpdate.find((b) => b.id === bookingId);
-      if (!targetBooking) return;
+      // Xác định Endpoint dựa vào loại UI
+      let endpoint = "";
 
-      const newStatus = approve ? "approved" : "rejected";
-
-      // Logic cho từng loại
-      if (targetBooking.status === "pending_priority" && approve) {
-        // DUYỆT ƯU TIÊN:
-        targetBooking.status = "approved";
-
-        // Tìm và "hủy" các booking bị ảnh hưởng
-        const prioritySlotKeys = new Set(
-          targetBooking.slots.map((s: any) => `${s.date}::${s.slotId}`)
-        );
-
-        bookingsToUpdate = bookingsToUpdate.map((b) => {
-          if (b.id === targetBooking.id || b.status !== "approved") return b;
-
-          const hasConflict = b.slots.some((s: any) =>
-            prioritySlotKeys.has(`${s.date}::${s.slotId}`)
-          );
-
-          if (hasConflict) {
-            // TODO: Gửi thông báo cho user (b.id)
-            return { ...b, status: "needs_reschedule" };
-          }
-          return b;
-        });
-      } else if (targetBooking.status === "pending_change" && approve) {
-        // DUYỆT THAY ĐỔI:
-        targetBooking.status = "approved";
-        targetBooking.type = targetBooking.type?.replace("_request", "");
-        // Xóa thông tin 'changeInfo' sau khi đã duyệt
-        delete targetBooking.changeInfo;
-      } else if (targetBooking.type === "reschedule_request" && approve) {
-        // DUYỆT ĐỔI LỊCH (BỊ BUỘC):
-        // (Logic này có thể phức tạp, ví dụ: xóa booking gốc)
-        targetBooking.status = "approved";
-        targetBooking.type = "project"; // Hoặc type gốc
+      if (item.uiType === "CHANGE_REQUEST") {
+        // Gọi API duyệt Change Request
+        endpoint = `/BookingChangeRequests/${item.id}/${
+          isApprove ? "approve" : "reject"
+        }`;
       } else {
-        // DUYỆT THƯỜNG / TỪ CHỐI TẤT CẢ:
-        targetBooking.status = newStatus;
+        // Gọi API duyệt Booking mới
+        endpoint = `/Bookings/${item.id}/${isApprove ? "approve" : "reject"}`;
       }
 
-      await AsyncStorage.setItem("bookings", JSON.stringify(bookingsToUpdate));
-      loadData(); // Tải lại toàn bộ
-    } catch (e) {
-      console.error("Failed to approve/reject", e);
+      console.log(`🚀 Calling: ${endpoint}`);
+      // Gọi API (Giả sử dùng PUT)
+      await apiClient.put(endpoint);
+
+      Alert.alert(
+        "Thành công",
+        `Đã ${isApprove ? "duyệt" : "từ chối"} yêu cầu.`
+      );
+      loadData(); // Reload lại danh sách
+    } catch (error: any) {
+      console.error(error);
+      const msg = error.response?.data?.message || "Lỗi hệ thống khi xử lý.";
+      Alert.alert("Thất bại", msg);
     }
   };
 
-  // 4. Render danh sách dựa trên Tab
+  // --- 4. RENDER LIST ---
   const renderList = () => {
-    if (isLoading) {
+    if (isLoading)
       return (
         <ActivityIndicator
           style={styles.centered}
@@ -120,66 +133,61 @@ export default function ManagerApprovalsScreen() {
           color="#EA580C"
         />
       );
+
+    let data = [];
+    let EmptyComp = null;
+    let renderItem: any = null;
+
+    switch (activeTab) {
+      case "standard":
+        data = standardBookings;
+        EmptyComp = <Text style={styles.emptyText}>Không có đơn đặt mới.</Text>;
+        renderItem = ({ item }: any) => (
+          <ManagerApprovalCard
+            booking={item}
+            onApprove={() => handleAction(item, true)}
+            onReject={() => handleAction(item, false)}
+          />
+        );
+        break;
+
+      // case "priority":
+      //     data = priorityBookings;
+      //     EmptyComp = <Text style={styles.emptyText}>Không có sự kiện ưu tiên.</Text>;
+      //     renderItem = ({ item }: any) => (
+      //         <ManagerPriorityCard
+      //             booking={item}
+      //             onApprove={() => handleAction(item, true)}
+      //             onReject={() => handleAction(item, false)}
+      //         />
+      //     );
+      //     break;
+
+      case "change":
+        data = changeBookings;
+        EmptyComp = (
+          <Text style={styles.emptyText}>Không có yêu cầu thay đổi.</Text>
+        );
+        renderItem = ({ item }: any) => (
+          // Sử dụng Card mới chúng ta vừa viết
+          <ManagerChangeCard
+            request={item}
+            onApprove={() => handleAction(item, true)}
+            onReject={() => handleAction(item, false)}
+          />
+        );
+        break;
     }
 
-    if (activeTab === "standard") {
-      return (
-        <FlatList
-          data={standardBookings}
-          renderItem={({ item }) => (
-            <ManagerApprovalCard
-              booking={item}
-              onApprove={() => handleApproval(item.id, true)}
-              onReject={() => handleApproval(item.id, false)}
-            />
-          )}
-          keyExtractor={(item) => item.id.toString()}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>Không có yêu cầu đặt mới.</Text>
-          }
-        />
-      );
-    }
-
-    if (activeTab === "priority") {
-      return (
-        <FlatList
-          data={priorityBookings}
-          renderItem={({ item }) => (
-            <ManagerPriorityCard
-              booking={item}
-              allBookings={allBookings} // Gửi tất cả booking để card tự tìm xung đột
-              onApprove={() => handleApproval(item.id, true)}
-              onReject={() => handleApproval(item.id, false)}
-            />
-          )}
-          keyExtractor={(item) => item.id.toString()}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>Không có yêu cầu ưu tiên.</Text>
-          }
-        />
-      );
-    }
-
-    if (activeTab === "change") {
-      return (
-        <FlatList
-          data={changeBookings}
-          renderItem={({ item }) => (
-            <ManagerChangeCard
-              booking={item}
-              onApprove={() => handleApproval(item.id, true)}
-              onReject={() => handleApproval(item.id, false)}
-            />
-          )}
-          keyExtractor={(item) => item.id.toString()}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>Không có yêu cầu thay đổi.</Text>
-          }
-        />
-      );
-    }
-    return null;
+    return (
+      <FlatList
+        data={data}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={EmptyComp}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      />
+    );
   };
 
   return (
@@ -188,7 +196,7 @@ export default function ManagerApprovalsScreen() {
         <Text style={styles.title}>Duyệt yêu cầu</Text>
       </View>
 
-      {/* --- THANH TABS --- */}
+      {/* Tab Selector */}
       <View style={styles.tabContainer}>
         <TabButton
           title="Lịch mới"
@@ -196,13 +204,7 @@ export default function ManagerApprovalsScreen() {
           isActive={activeTab === "standard"}
           onPress={() => setActiveTab("standard")}
         />
-        <TabButton
-          title="Ưu tiên"
-          count={priorityBookings.length}
-          isActive={activeTab === "priority"}
-          onPress={() => setActiveTab("priority")}
-          isPriority // Thêm style
-        />
+        {/* <TabButton title="Ưu tiên" count={priorityBookings.length} isActive={activeTab === "priority"} onPress={() => setActiveTab("priority")} isPriority /> */}
         <TabButton
           title="Thay đổi"
           count={changeBookings.length}
@@ -216,7 +218,7 @@ export default function ManagerApprovalsScreen() {
   );
 }
 
-// Component TabButton
+// Tab Component (Giữ nguyên)
 const TabButton = ({
   title,
   count,
@@ -277,20 +279,10 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
     gap: 8,
   },
-  tabActive: {
-    borderBottomColor: "#EA580C",
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#64748B",
-  },
-  tabTextActive: {
-    color: "#EA580C",
-  },
-  tabTextPriority: {
-    color: "#D97706",
-  },
+  tabActive: { borderBottomColor: "#EA580C" },
+  tabText: { fontSize: 14, fontWeight: "600", color: "#64748B" },
+  tabTextActive: { color: "#EA580C" },
+  tabTextPriority: { color: "#D97706" },
   badge: {
     borderRadius: 99,
     paddingHorizontal: 6,
@@ -298,22 +290,10 @@ const styles = StyleSheet.create({
     minWidth: 20,
     alignItems: "center",
   },
-  badgeDefault: {
-    backgroundColor: "#E0F2FE",
-  },
-  badgePriority: {
-    backgroundColor: "#FEF9C3",
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#0369A1",
-  },
-  listContainer: {
-    flex: 1, // Đảm bảo list chiếm hết phần còn lại
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
+  badgeDefault: { backgroundColor: "#E0F2FE" },
+  badgePriority: { backgroundColor: "#FEF9C3" },
+  badgeText: { fontSize: 12, fontWeight: "600", color: "#0369A1" },
+  listContainer: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   emptyText: {
     textAlign: "center",
     color: "#64748B",
