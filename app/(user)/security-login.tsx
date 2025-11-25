@@ -32,7 +32,7 @@ export default function SecurityLoginScreen() {
   const router = useRouter();
 
   // State cho form
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -63,7 +63,7 @@ export default function SecurityLoginScreen() {
   }, []);
 
   const handleSecurityLogin = async () => {
-    if (!username || !password) {
+    if (!email || !password) {
       Alert.alert("Thông báo", "Vui lòng nhập đầy đủ tài khoản và mật khẩu.");
       return;
     }
@@ -75,9 +75,9 @@ export default function SecurityLoginScreen() {
       // GỌI API LOGIN THƯỜNG
       // Giả sử endpoint là /api/auth/login
       const response = await apiClient.post("/api/auth/login", {
-        username: username,
+        email: email,
         password: password,
-        role: "security", // Tùy chọn: nếu backend cần phân biệt
+        // role: "security", // Tùy chọn: nếu backend cần phân biệt
       });
 
       const data = response.data;
@@ -120,7 +120,8 @@ export default function SecurityLoginScreen() {
         <View style={[styles.glow, styles.glowBottom]} />
 
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          // Đã loại bỏ behavior cho Android, chỉ giữ lại cho iOS (nếu cần điều chỉnh vị trí)
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.content}
         >
           {/* HEADER */}
@@ -136,7 +137,7 @@ export default function SecurityLoginScreen() {
             </View>
           </Animated.View>
 
-          {/* MAIN FORM */}
+          {/* MAIN FORM - KHÔNG DÙNG SCROLLVIEW */}
           <Animated.View style={[styles.main, animatedMainStyle]}>
             <Text style={styles.welcomeText}>RESTRICTED ACCESS</Text>
             <Text style={styles.mainTitle}>Đăng nhập Bảo Vệ</Text>
@@ -148,8 +149,8 @@ export default function SecurityLoginScreen() {
                   style={styles.input}
                   placeholder="Nhập tên tài khoản..."
                   placeholderTextColor="#94A3B8"
-                  value={username}
-                  onChangeText={setUsername}
+                  value={email}
+                  onChangeText={setEmail}
                   autoCapitalize="none"
                 />
               </View>
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 400,
     alignItems: "center",
-    justifyContent: "space-between", // Phân bố header, form, footer
+    justifyContent: "space-between", // <--- Quan trọng: Giúp cố định Header, Form, Footer
     paddingVertical: 20,
     paddingHorizontal: 24,
   },

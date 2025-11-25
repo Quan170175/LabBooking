@@ -214,7 +214,7 @@ export default function LoginScreen() {
                 onPress={() => router.push("/security-login" as any)}
               >
                 {/* Có thể thêm icon khóa ở đây nếu muốn */}
-                <Text style={styles.buttonText}>Đăng nhập cho Security</Text>
+                <Text style={styles.buttonText}>Đăng nhập cho bảo vệ</Text>
               </TouchableOpacity>
               {/* ------------------------------ */}
 
