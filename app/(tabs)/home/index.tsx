@@ -8,6 +8,8 @@ import {
   ShieldCheck,
   LifeBuoy,
   LayoutDashboard,
+  Monitor,
+  Wrench,
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -99,45 +101,59 @@ const APP_SECTIONS = [
     description: "Chức năng dành riêng cho Manager",
     items: [
       {
-        to: "/approvals",
+        to: "/(tabs)/home/approvals",
         title: "Phê duyệt",
         description: "Duyệt yêu cầu",
         icon: LayoutDashboard,
-        allowedRoles: [ROLES.MANAGER],
+        allowedRoles: [ROLES.USER],
       },
       {
-        to: "/security-incidents",
+        to: "/(tabs)/home/security-incidents",
         title: "Sự cố bảo mật",
         description: "Báo cáo sự cố",
         icon: ShieldCheck,
-        allowedRoles: [ROLES.MANAGER],
+        allowedRoles: [ROLES.USER],
+      },
+      {
+        to: "/(tabs)/home/(manager)/create-room-maintenance",
+        title: "Bảo trì phòng",
+        description: "Đóng phòng để sửa chữa",
+        icon: Wrench, // Nhớ import Wrench từ lucide-react-native
+        allowedRoles: [ROLES.USER],
+      },
+      {
+        to: "/(tabs)/home/(manager)/create-equipment-maintenance",
+        title: "Bảo trì thiết bị",
+        description: "Sửa chữa thiết bị hỏng",
+        icon: Monitor, // Nhớ import Monitor từ lucide-react-native
+        allowedRoles: [ROLES.USER],
       },
     ],
   },
   {
     id: "security",
-    title: "Khu vực An ninh", // Đổi tên cho chuyên nghiệp hơn
+    title: "Khu vực An ninh",
     description: "Chức năng dành riêng cho Bảo vệ",
     items: [
       {
-        to: "/(security)/door-requests", // Đã sửa đường dẫn
-        title: "Yêu cầu mở cửa", // Đổi title cho đúng chức năng
+        to: "/(tabs)/home/door-requests",
+        title: "Yêu cầu mở cửa",
         description: "Xử lý yêu cầu ra vào",
-        icon: LayoutDashboard, // Hoặc icon DoorOpen nếu có
+        icon: LayoutDashboard,
         allowedRoles: [ROLES.USER],
       },
       {
-        to: "/(security)/incident-history", // Đã sửa đường dẫn
+        to: "/(tabs)/home/incident-history",
         title: "Lịch sử sự cố",
         description: "Xem danh sách sự cố",
         icon: ShieldCheck,
         allowedRoles: [ROLES.USER],
       },
       {
-        to: "/(security)/create-incident", // Đã sửa đường dẫn
+        to: "/(tabs)/home/create-incident",
         title: "Báo cáo sự cố",
         description: "Tạo báo cáo mới",
-        icon: ShieldCheck, // Hoặc icon AlertTriangle
+        icon: ShieldCheck,
         allowedRoles: [ROLES.USER],
       },
     ],
