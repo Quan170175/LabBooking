@@ -1,21 +1,27 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
   Modal,
   ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
   TouchableWithoutFeedback,
-  Dimensions,
+  View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import AvailabilityFilters from "../../../components/home/AvailabilityFilters";
+import apiClient from "../../../utils/api";
 
-// --- Types ---
+export interface Slot {
+  id: string;
+  startTime: string;
+  endTime: string;
+  slotIndex: number;
+  label: string;
+}
+
 interface Equipment {
   id: string;
   equipmentName: string;
@@ -34,94 +40,100 @@ interface LabRoom {
   createdById: string;
   createdDate: string;
   isActive: boolean;
+  status?: string;
   equipments: Equipment[];
 }
 
 interface ApiResponse {
   items: LabRoom[];
+  totalPages: number;
+  totalItemsCount: number;
 }
-
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 export default function AvailabilityScreen() {
   const [labs, setLabs] = useState<LabRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedSlot, setSelectedSlot] = useState<string>("slot-1");
 
-  // State Modal
+  // --- STATE SLOT & FILTER ---
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedSlot, setSelectedSlot] = useState<string>("");
+
+  // --- MODAL STATE ---
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedLab, setSelectedLab] = useState<LabRoom | null>(null);
 
-  // --- Mock Data ---
+  // 1. GỌI API LẤY DANH SÁCH SLOT
   useEffect(() => {
-    async function loadLabs() {
-      setIsLoading(true);
+    const fetchSlots = async () => {
       try {
-        const responseMock: ApiResponse = {
-          items: [
-            {
-              id: "a4b1c2d3-e5f6-4789-a0b1-c2d3e4f5a6b7",
-              labName: "Lab 1 - AI Research",
-              location: "Tầng 1 - Khu A",
-              maximumLimit: 30,
-              mainManagerId: "f1e2d3c4-b5a6-c7d8-e9f0-a1b2c3d4e5f6",
-              createdById: "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
-              createdDate: "2023-10-01T08:00:00",
-              isActive: true,
-              equipments: [
-                {
-                  id: "9f8e7d6c-1",
-                  equipmentName: "Máy chiếu Sony 4K",
-                  description: "Dùng cho thuyết trình",
-                  isAvailable: true,
-                  labRoomId: "a4b1c2d3",
-                  status: "Good",
-                },
-                {
-                  id: "9f8e7d6c-2",
-                  equipmentName: "PC High Performance",
-                  description: "RTX 4090",
-                  isAvailable: false,
-                  labRoomId: "a4b1c2d3",
-                  status: "Maintain",
-                },
-                {
-                  id: "9f8e7d6c-3",
-                  equipmentName: "Oscilloscope",
-                  description: "Đo dao động",
-                  isAvailable: true,
-                  labRoomId: "a4b1c2d3",
-                  status: "Good",
-                },
-              ],
-            },
-            {
-              id: "b2b1c2d3-xxx",
-              labName: "Lab 2 - Network",
-              location: "Tầng 2",
-              maximumLimit: null,
-              mainManagerId: "manager-2",
-              createdById: "creator-2",
-              createdDate: "0001-01-01T00:00:00",
-              isActive: false,
-              equipments: [],
-            },
-          ],
-        };
-        setTimeout(() => {
-          setLabs(responseMock.items);
-          setIsLoading(false);
-        }, 500);
-      } catch (e) {
-        console.error("Failed to load labs", e);
-        setIsLoading(false);
+        const response = await apiClient.get("/api/Slot");
+        const data = response.data;
+        let slotList: Slot[] = [];
+
+        // Xử lý dữ liệu trả về (mảng hoặc object chứa items)
+        if (Array.isArray(data)) {
+          slotList = data;
+        } else if (data && Array.isArray(data.items)) {
+          slotList = data.items;
+        }
+
+        // 🟢 SẮP XẾP THEO SLOT INDEX (1 -> 4)
+        slotList.sort((a, b) => a.slotIndex - b.slotIndex);
+
+        setSlots(slotList);
+
+        // 🟢 AUTO CHỌN SLOT ĐẦU TIÊN (Slot 1)
+        if (slotList.length > 0) {
+          setSelectedSlot(slotList[0].id);
+        }
+      } catch (error) {
+        console.error("❌ Lỗi lấy danh sách Slot:", error);
       }
-    }
-    loadLabs();
+    };
+    fetchSlots();
   }, []);
 
-  // --- Logic Modal ---
+  // 2. GỌI API TÌM PHÒNG
+  const fetchLabs = useCallback(async () => {
+    // Chỉ gọi khi đã có Slot ID (để tránh gọi API thừa lúc chưa load xong slot)
+    if (!selectedSlot) return;
+
+    setIsLoading(true);
+    try {
+      const formattedDate = selectedDate.toISOString().split("T")[0];
+
+      const params: any = {
+        PageNumber: 1,
+        PageSize: 10,
+        FilterDate: formattedDate,
+        FilterSlotId: selectedSlot, // Luôn gửi Slot ID
+      };
+
+      console.log("🚀 Tìm phòng với params:", params);
+
+      const response = await apiClient.get<ApiResponse>("/api/LabRooms", {
+        params: params,
+      });
+
+      if (response.data && response.data.items) {
+        setLabs(response.data.items);
+      } else {
+        setLabs([]);
+      }
+    } catch (error: any) {
+      console.error("❌ Lỗi API LabRooms:", error);
+      setLabs([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedDate, selectedSlot]);
+
+  useEffect(() => {
+    fetchLabs();
+  }, [fetchLabs]);
+
+  // --- LOGIC MODAL ---
   const openDetail = (lab: LabRoom) => {
     setSelectedLab(lab);
     setModalVisible(true);
@@ -132,11 +144,12 @@ export default function AvailabilityScreen() {
     setSelectedLab(null);
   };
 
-  // --- Render Functions ---
+  // --- RENDER ITEMS ---
   const renderLabCard = ({ item }: { item: LabRoom }) => {
-    const statusColor = item.isActive ? "#16A34A" : "#DC2626";
-    const statusBg = item.isActive ? "#DCFCE7" : "#FEE2E2";
-    const statusText = item.isActive ? "Hoạt động" : "Bảo trì";
+    const isAvailable = item.status === "Available";
+    const statusColor = isAvailable ? "#16A34A" : "#DC2626";
+    const statusBg = isAvailable ? "#DCFCE7" : "#FEE2E2";
+    const statusText = isAvailable ? "Còn trống" : "Đã được đặt";
 
     return (
       <View style={styles.card}>
@@ -154,7 +167,7 @@ export default function AvailabilityScreen() {
         <View style={styles.cardDivider} />
         <View style={styles.cardFooter}>
           <Text style={styles.cardInfo}>
-            Thiết bị: {item.equipments.length}
+            Thiết bị: {item.equipments ? item.equipments.length : 0}
           </Text>
           <TouchableOpacity
             style={styles.btnDetail}
@@ -167,13 +180,15 @@ export default function AvailabilityScreen() {
     );
   };
 
-  // --- POPUP CONTENT ---
+  // ... (Phần renderPopupContent giữ nguyên như cũ)
   const renderPopupContent = () => {
     if (!selectedLab) return null;
+    const dateCreated = selectedLab.createdDate
+      ? new Date(selectedLab.createdDate).toLocaleDateString("vi-VN")
+      : "N/A";
 
     return (
       <View style={styles.popupContainer}>
-        {/* Header Popup */}
         <View style={styles.popupHeader}>
           <Text style={styles.popupTitle}>Thông tin phòng</Text>
           <TouchableOpacity onPress={closeDetail} style={styles.closeBtn}>
@@ -185,7 +200,6 @@ export default function AvailabilityScreen() {
           style={styles.popupScroll}
           showsVerticalScrollIndicator={false}
         >
-          {/* Box Thông tin chính */}
           <View style={styles.infoBox}>
             <Text style={styles.bigName}>{selectedLab.labName}</Text>
             <Text style={styles.detailRow}>
@@ -194,31 +208,19 @@ export default function AvailabilityScreen() {
             <Text style={styles.detailRow}>
               👥 Sức chứa:{" "}
               <Text style={styles.bold}>
-                {selectedLab.maximumLimit || "Không giới hạn"}
+                {selectedLab.maximumLimit || "Vô hạn"}
               </Text>
             </Text>
             <Text style={styles.detailRow}>
-              📅 Ngày tạo:{" "}
-              <Text style={styles.bold}>
-                {selectedLab.createdDate === "0001-01-01T00:00:00"
-                  ? "N/A"
-                  : new Date(selectedLab.createdDate).toLocaleDateString()}
-              </Text>
-            </Text>
-            <Text style={styles.detailRow} numberOfLines={1}>
-              🔑 Quản lý ID:{" "}
-              <Text style={styles.idText}>
-                {selectedLab.mainManagerId.substring(0, 20)}...
-              </Text>
+              📅 Ngày tạo: <Text style={styles.bold}>{dateCreated}</Text>
             </Text>
           </View>
 
-          {/* Danh sách thiết bị */}
           <Text style={styles.sectionHeader}>
-            Danh sách thiết bị ({selectedLab.equipments.length})
+            Danh sách thiết bị ({selectedLab.equipments?.length || 0})
           </Text>
 
-          {selectedLab.equipments.length === 0 ? (
+          {!selectedLab.equipments || selectedLab.equipments.length === 0 ? (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyText}>Chưa có thiết bị nào.</Text>
             </View>
@@ -234,28 +236,20 @@ export default function AvailabilityScreen() {
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.eqName}>{eq.equipmentName}</Text>
-                    <Text style={styles.eqId}>ID: {eq.id}</Text>
                     {eq.description && (
-                      <Text style={styles.eqDesc}>Mô tả: {eq.description}</Text>
+                      <Text style={styles.eqDesc}>{eq.description}</Text>
                     )}
                   </View>
-
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text
-                      style={[
-                        styles.eqStatus,
-                        {
-                          color:
-                            eq.status === "Maintain" ? "#EA580C" : "#16A34A",
-                        },
-                      ]}
-                    >
-                      {eq.status}
-                    </Text>
-                    {!eq.isAvailable && (
-                      <Text style={styles.notReady}>Không sẵn sàng</Text>
-                    )}
-                  </View>
+                  <Text
+                    style={[
+                      styles.eqStatus,
+                      {
+                        color: eq.status === "Maintain" ? "#EA580C" : "#16A34A",
+                      },
+                    ]}
+                  >
+                    {eq.status}
+                  </Text>
                 </View>
               </View>
             ))
@@ -265,13 +259,6 @@ export default function AvailabilityScreen() {
       </View>
     );
   };
-
-  if (isLoading)
-    return (
-      <View style={[styles.root, styles.centered]}>
-        <ActivityIndicator size="large" color="#EA580C" />
-      </View>
-    );
 
   return (
     <View style={styles.root}>
@@ -285,29 +272,42 @@ export default function AvailabilityScreen() {
         selectedSlot={selectedSlot}
         setSelectedDate={setSelectedDate}
         setSelectedSlot={setSelectedSlot}
+        slots={slots}
       />
 
-      <FlatList
-        data={labs}
-        renderItem={renderLabCard}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-      />
+      {isLoading && labs.length === 0 ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#EA580C" />
+        </View>
+      ) : (
+        <FlatList
+          data={labs}
+          renderItem={renderLabCard}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          onRefresh={fetchLabs}
+          refreshing={isLoading}
+          ListEmptyComponent={
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyText}>
+                Không tìm thấy phòng nào phù hợp.
+              </Text>
+            </View>
+          }
+        />
+      )}
 
-      {/* --- MODAL POPUP --- */}
       <Modal
-        animationType="fade" // Hiệu ứng mờ dần
-        transparent={true} // QUAN TRỌNG: Cho phép nhìn xuyên thấu nền
+        animationType="fade"
+        transparent={true}
         visible={modalVisible}
         onRequestClose={closeDetail}
       >
-        {/* Lớp phủ mờ (Bấm ra ngoài thì đóng) */}
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
           onPress={closeDetail}
         >
-          {/* Chặn sự kiện bấm vào nội dung popup để không bị đóng */}
           <TouchableWithoutFeedback>
             {renderPopupContent()}
           </TouchableWithoutFeedback>
@@ -317,7 +317,6 @@ export default function AvailabilityScreen() {
   );
 }
 
-// --- STYLES ---
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#FFF7ED", paddingTop: 10 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -325,8 +324,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
   subtitle: { fontSize: 14, color: "#64748B" },
   listContainer: { paddingHorizontal: 16, paddingBottom: 100 },
-
-  // Card List Style
   card: {
     backgroundColor: "white",
     borderRadius: 12,
@@ -359,21 +356,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   btnDetailText: { color: "white", fontWeight: "600", fontSize: 13 },
-
-  // --- POPUP STYLES ---
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)", // Màu đen mờ 50%
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
   },
   popupContainer: {
-    width: "90%", // Chiếm 90% chiều ngang màn hình
-    maxHeight: "80%", // Chiếm tối đa 80% chiều dọc (để tránh bị dài quá)
+    width: "90%",
+    maxHeight: "80%",
     backgroundColor: "white",
     borderRadius: 20,
     paddingVertical: 16,
-    paddingHorizontal: 0, // Để scroll full chiều ngang
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -391,12 +385,9 @@ const styles = StyleSheet.create({
   },
   popupTitle: { fontSize: 18, fontWeight: "800", color: "#0F172A" },
   closeBtn: { padding: 4 },
-
-  popupScroll: { paddingHorizontal: 20 }, // Nội dung bên trong mới padding
-
-  // Styles Content bên trong Popup
+  popupScroll: { paddingHorizontal: 20 },
   infoBox: {
-    backgroundColor: "#FFFAF5", // Nền cam nhạt cho box thông tin
+    backgroundColor: "#FFFAF5",
     padding: 16,
     borderRadius: 12,
     marginTop: 16,
@@ -410,16 +401,12 @@ const styles = StyleSheet.create({
   },
   detailRow: { fontSize: 14, color: "#475569", marginBottom: 8 },
   bold: { fontWeight: "700", color: "#1E293B" },
-  idText: { fontSize: 12, color: "#94A3B8" },
-
   sectionHeader: {
     fontSize: 16,
     fontWeight: "700",
     color: "#1E293B",
     marginBottom: 12,
   },
-
-  // Equipment Card Mini
   eqCard: {
     backgroundColor: "white",
     borderRadius: 12,
@@ -427,18 +414,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    // Border bên trái màu cam
     borderLeftWidth: 4,
     borderLeftColor: "#EA580C",
   },
   eqRow: { flexDirection: "row", alignItems: "flex-start" },
   eqIcon: { marginRight: 12, marginTop: 2 },
   eqName: { fontSize: 14, fontWeight: "700", color: "#334155" },
-  eqId: { fontSize: 11, color: "#94A3B8", marginBottom: 4 },
   eqDesc: { fontSize: 12, color: "#64748B", fontStyle: "italic" },
   eqStatus: { fontSize: 12, fontWeight: "700" },
-  notReady: { fontSize: 10, color: "#EF4444" },
-
   emptyBox: { padding: 20, alignItems: "center" },
   emptyText: { color: "#94A3B8", fontStyle: "italic" },
 });

@@ -10,6 +10,7 @@ import {
   Plus,
   Send,
   X,
+  XCircle, // 👈 Thêm icon cho trạng thái Ignored
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -22,22 +23,42 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  RefreshControl,
 } from "react-native";
 
-// --- Types ---
+// 🟢 1. Import API Client
+import apiClient from "../../../utils/api";
+
+// --- Types (Cập nhật theo Entity Backend) ---
+
+// 👈 THÊM ENUM STATUS TYPE
+type SupportStatus = "Pending" | "Responded" | "Ignored";
+
 type FAQItem = {
   id: string | number;
   question: string;
   answer: string;
 };
 
+// Cấu trúc dữ liệu trả về từ API
 type SupportTicket = {
-  id: number;
-  subject: string;
-  message: string;
-  createdAt: string;
-  status: "pending" | "resolved";
+  id: string; // Backend trả về UUID
+  title: string;
+  content: string;
+  answer: string | null; // Câu trả lời từ admin
+  status: SupportStatus; // 👈 ĐÃ THÊM: Trạng thái từ Backend
+  createdDate?: string;
+  createdAt?: string;
+  respondedAt?: string | null;
+  createdById?: string;
 };
+
+// Cấu trúc phân trang chung
+interface PaginatedResponse<T> {
+  items: T[];
+  totalPages: number;
+  totalItemsCount: number;
+}
 
 export default function SupportScreen() {
   const router = useRouter();
@@ -46,6 +67,7 @@ export default function SupportScreen() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [faqs, setFaqs] = useState<FAQItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Form States
   const [isFormVisible, setIsFormVisible] = useState(false);
@@ -70,18 +92,59 @@ export default function SupportScreen() {
     setIsLoading(false);
   }
 
+  // 🟢 Hàm định dạng ngày giờ (Ngày/Tháng/Năm Giờ:Phút)
+  const formatDateTime = (dateString?: string | null): string => {
+    if (!dateString) return "Chưa xác định";
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return "Chưa xác định";
+
+      const datePart = date.toLocaleDateString("vi-VN");
+      const timePart = date.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `${datePart} ${timePart}`;
+    } catch {
+      return "Chưa xác định";
+    }
+  };
+
+  // 🟢 2. Hàm lấy danh sách yêu cầu (GET) - Tối ưu hóa
   async function loadTickets() {
     try {
-      const s = await AsyncStorage.getItem("supportTickets");
-      const data = JSON.parse(s || "[]");
-      setTickets(Array.isArray(data) ? data.reverse() : []);
+      console.log("➡️ Đang gọi GET /api/Supports/my để lấy lịch sử...");
+      // Đã đổi endpoint thành /api/Supports/my như trong code bạn cung cấp
+      const response = await apiClient.get<PaginatedResponse<SupportTicket>>(
+        "/api/Supports/my",
+        {
+          params: {
+            PageNumber: 1,
+            PageSize: 10, // Lấy 10 mục gần nhất
+            // Các param khác (SortBy, SortDirection) đã bị xóa để tối giản
+          },
+        }
+      );
+
+      // Xử lý response theo cấu trúc phân trang { items: [...] }
+      if (response.data && Array.isArray(response.data.items)) {
+        setTickets(response.data.items);
+      } else {
+        // Trường hợp API trả về mảng trực tiếp
+        setTickets(Array.isArray(response.data) ? response.data : []);
+      }
     } catch (e) {
-      console.error(e);
+      console.error("❌ Lỗi lấy lịch sử hỗ trợ:", e);
+      // Giữ lại Alert để báo lỗi 403 cho người dùng
+      Alert.alert(
+        "Lỗi",
+        "Không thể lấy lịch sử yêu cầu. Vui lòng thử lại sau."
+      );
     }
   }
 
   async function fetchFAQs() {
-    await new Promise((r) => setTimeout(r, 500));
+    // FAQ hiện tại vẫn giả lập
     setFaqs([
       {
         id: 1,
@@ -102,6 +165,7 @@ export default function SupportScreen() {
     ]);
   }
 
+  // 🟢 3. Hàm gửi yêu cầu (POST)
   async function submitTicket() {
     if (!subject.trim() || !message.trim()) {
       Alert.alert(
@@ -112,28 +176,26 @@ export default function SupportScreen() {
     }
 
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 800));
-
-    const newTicket: SupportTicket = {
-      id: Date.now(),
-      subject,
-      message,
-      createdAt: new Date().toISOString(),
-      status: "pending",
-    };
 
     try {
-      const current = [...tickets];
-      const updatedList = [newTicket, ...current];
-      await AsyncStorage.setItem("supportTickets", JSON.stringify(updatedList));
+      // Gọi API POST - apiClient tự động gửi token và UserID
+      await apiClient.post("/api/Supports", {
+        title: subject,
+        content: message,
+      });
 
-      setTickets(updatedList);
+      Alert.alert("Thành công", "Yêu cầu của bạn đã được gửi!");
+
+      // Reset form
       setSubject("");
       setMessage("");
       setIsFormVisible(false);
-      Alert.alert("Thành công", "Yêu cầu của bạn đã được gửi!");
-    } catch (e) {
-      Alert.alert("Lỗi", "Không thể lưu yêu cầu.");
+
+      // Load lại danh sách để hiện yêu cầu vừa tạo
+      loadTickets();
+    } catch (e: any) {
+      console.error("❌ Lỗi gửi support:", e);
+      Alert.alert("Lỗi", "Không thể gửi yêu cầu. Vui lòng thử lại sau.");
     } finally {
       setIsSubmitting(false);
     }
@@ -141,6 +203,12 @@ export default function SupportScreen() {
 
   const toggleFaq = (id: string | number) => {
     setExpandedFaqId(expandedFaqId === id ? null : id);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadTickets();
+    setRefreshing(false);
   };
 
   // --- RENDER ---
@@ -167,6 +235,13 @@ export default function SupportScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#EA580C"]}
+          />
+        }
       >
         {/* PHẦN 1: FAQ */}
         <View style={styles.section}>
@@ -212,7 +287,7 @@ export default function SupportScreen() {
             <History size={16} color="#64748B" />
           </View>
 
-          {tickets.length === 0 ? (
+          {tickets.length === 0 && !refreshing ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconBg}>
                 <MessageSquarePlus size={32} color="#CBD5E1" />
@@ -224,31 +299,132 @@ export default function SupportScreen() {
             </View>
           ) : (
             <View style={styles.ticketList}>
-              {tickets.map((t) => (
-                <View key={t.id} style={styles.ticketItem}>
-                  <View style={styles.ticketHeader}>
-                    <Text style={styles.ticketSubject} numberOfLines={1}>
-                      {t.subject}
+              {tickets.map((t) => {
+                // 🟢 CẬP NHẬT LOGIC STATUS
+                const status = t.status || "Pending";
+                const isResolved = status === "Responded";
+                const isIgnored = status === "Ignored";
+                const createdTime = t.createdAt || t.createdDate;
+
+                // 🟢 CẬP NHẬT GIAO DIỆN STATUS
+                const statusDisplay = () => {
+                  switch (status) {
+                    case "Responded":
+                      return {
+                        text: "Đã trả lời",
+                        badgeStyle: styles.statusResolved,
+                        textStyle: styles.textResolved,
+                      };
+                    case "Ignored":
+                      return {
+                        text: "Đã bỏ qua",
+                        badgeStyle: styles.statusIgnored,
+                        textStyle: styles.textIgnored,
+                      };
+                    case "Pending":
+                    default:
+                      return {
+                        text: "Đang xử lý",
+                        badgeStyle: styles.statusPending,
+                        textStyle: styles.textPending,
+                      };
+                  }
+                };
+
+                const currentStatus = statusDisplay();
+
+                return (
+                  <View key={t.id} style={styles.ticketItem}>
+                    <View style={styles.ticketHeader}>
+                      <Text style={styles.ticketSubject} numberOfLines={1}>
+                        {t.title}
+                      </Text>
+                      <View
+                        style={[styles.statusBadge, currentStatus.badgeStyle]}
+                      >
+                        <Text
+                          style={[styles.statusText, currentStatus.textStyle]}
+                        >
+                          {currentStatus.text}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Nội dung câu hỏi */}
+                    <Text style={styles.ticketMessage} numberOfLines={2}>
+                      {t.content}
                     </Text>
-                    <View style={styles.statusBadge}>
-                      <Text style={styles.statusText}>Đang xử lý</Text>
+
+                    {/* Hiển thị chi tiết trả lời / bỏ qua */}
+                    {isResolved && t.answer && (
+                      <View style={styles.answerPreview}>
+                        <CheckCircle2
+                          size={12}
+                          color="#16A34A"
+                          style={{ marginTop: 2 }}
+                        />
+                        <Text style={styles.answerText} numberOfLines={2}>
+                          {t.answer}
+                        </Text>
+                      </View>
+                    )}
+
+                    {isIgnored && (
+                      <View
+                        style={[styles.answerPreview, styles.ignorePreview]}
+                      >
+                        <XCircle
+                          size={12}
+                          color="#DC2626"
+                          style={{ marginTop: 2 }}
+                        />
+                        <Text
+                          style={[styles.answerText, styles.ignoreText]}
+                          numberOfLines={2}
+                        >
+                          Yêu cầu này đã bị từ chối vì không hợp lệ.
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* 🟢 FOOTER: Hiển thị 2 loại thời gian */}
+                    <View style={styles.ticketFooterContainer}>
+                      {/* Ngày tạo */}
+                      <View style={styles.ticketFooter}>
+                        <Clock size={12} color="#94A3B8" />
+                        <Text style={styles.ticketDateLabel}>Tạo:</Text>
+                        <Text style={styles.ticketDate}>
+                          {formatDateTime(createdTime)}
+                        </Text>
+                      </View>
+
+                      {/* Ngày trả lời/xử lý (Chỉ hiện khi Responded hoặc Ignored) */}
+                      {(isResolved || isIgnored) && (
+                        <View style={styles.ticketFooter}>
+                          {isResolved ? (
+                            <CheckCircle2 size={12} color="#16A34A" />
+                          ) : (
+                            <XCircle size={12} color="#DC2626" />
+                          )}
+                          <Text style={styles.ticketDateLabel}>
+                            {isResolved ? "TL:" : "Xử lý:"}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.ticketDate,
+                              isResolved
+                                ? styles.ticketDateResolved
+                                : styles.ticketDateIgnored,
+                            ]}
+                          >
+                            {formatDateTime(t.respondedAt)}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   </View>
-                  <Text style={styles.ticketMessage} numberOfLines={2}>
-                    {t.message}
-                  </Text>
-                  <View style={styles.ticketFooter}>
-                    <Clock size={12} color="#94A3B8" />
-                    <Text style={styles.ticketDate}>
-                      {new Date(t.createdAt).toLocaleDateString("vi-VN")} •{" "}
-                      {new Date(t.createdAt).toLocaleTimeString("vi-VN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </Text>
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>
@@ -256,7 +432,7 @@ export default function SupportScreen() {
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* PHẦN 3: FLOATING ACTION BUTTON - ĐÃ CHỈNH SỬA VỊ TRÍ */}
+      {/* PHẦN 3: FLOATING ACTION BUTTON */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => setIsFormVisible(true)}
@@ -429,21 +605,82 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   ticketSubject: { fontSize: 15, fontWeight: "700", color: "#0F172A", flex: 1 },
+
+  // 🟢 Status Styles CẬP NHẬT
   statusBadge: {
-    backgroundColor: "#FEF3C7",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  statusText: { fontSize: 11, fontWeight: "600", color: "#D97706" },
-  ticketMessage: { fontSize: 14, color: "#475569", marginBottom: 8 },
-  ticketFooter: { flexDirection: "row", alignItems: "center", gap: 4 },
-  ticketDate: { fontSize: 12, color: "#94A3B8" },
+  statusPending: { backgroundColor: "#FEF3C7" }, // Màu vàng
+  statusResolved: { backgroundColor: "#DCFCE7" }, // Màu xanh lá
+  statusIgnored: { backgroundColor: "#FEE2E2" }, // Màu đỏ nhạt
 
-  // --- STYLE ĐÃ ĐƯỢC CHỈNH SỬA ---
+  statusText: { fontSize: 11, fontWeight: "600" },
+  textPending: { color: "#D97706" },
+  textResolved: { color: "#16A34A" },
+  textIgnored: { color: "#DC2626" }, // Màu đỏ đậm
+
+  ticketMessage: { fontSize: 14, color: "#475569", marginBottom: 8 },
+
+  // STYLES CHO HIỂN THỊ THỜI GIAN
+  ticketFooterContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  ticketFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  ticketDateLabel: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+    marginRight: 2,
+  },
+  ticketDate: {
+    fontSize: 12,
+    color: "#334155",
+    fontWeight: "500",
+  },
+  ticketDateResolved: {
+    color: "#16A34A",
+    fontWeight: "600",
+  },
+  // 👈 THÊM STYLE CHO THỜI GIAN BỊ BỎ QUA
+  ticketDateIgnored: {
+    color: "#DC2626",
+    fontWeight: "600",
+  },
+
+  // New Answer Preview Style
+  answerPreview: {
+    flexDirection: "row",
+    gap: 6,
+    backgroundColor: "#F0FDF4",
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  // 👈 THÊM STYLE CHO IGNORED PREVIEW
+  ignorePreview: {
+    backgroundColor: "#FEF2F2",
+  },
+  answerText: { fontSize: 13, color: "#15803D", flex: 1 },
+  // 👈 THÊM STYLE CHO IGNORED TEXT
+  ignoreText: {
+    color: "#DC2626",
+  },
+
   fab: {
     position: "absolute",
-    bottom: 100, // <--- Tăng từ 24 lên 100 để tránh Bottom Navigation
+    bottom: 100,
     right: 16,
     left: 16,
     backgroundColor: "#EA580C",
@@ -460,7 +697,6 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   fabText: { color: "white", fontSize: 16, fontWeight: "700" },
-  // ------------------------------
 
   modalOverlay: {
     flex: 1,
