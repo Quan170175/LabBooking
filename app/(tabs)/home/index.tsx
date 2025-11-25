@@ -114,6 +114,34 @@ const APP_SECTIONS = [
       },
     ],
   },
+  {
+    id: "security",
+    title: "Khu vực An ninh", // Đổi tên cho chuyên nghiệp hơn
+    description: "Chức năng dành riêng cho Bảo vệ",
+    items: [
+      {
+        to: "/(security)/door-requests", // Đã sửa đường dẫn
+        title: "Yêu cầu mở cửa", // Đổi title cho đúng chức năng
+        description: "Xử lý yêu cầu ra vào",
+        icon: LayoutDashboard, // Hoặc icon DoorOpen nếu có
+        allowedRoles: [ROLES.USER],
+      },
+      {
+        to: "/(security)/incident-history", // Đã sửa đường dẫn
+        title: "Lịch sử sự cố",
+        description: "Xem danh sách sự cố",
+        icon: ShieldCheck,
+        allowedRoles: [ROLES.USER],
+      },
+      {
+        to: "/(security)/create-incident", // Đã sửa đường dẫn
+        title: "Báo cáo sự cố",
+        description: "Tạo báo cáo mới",
+        icon: ShieldCheck, // Hoặc icon AlertTriangle
+        allowedRoles: [ROLES.USER],
+      },
+    ],
+  },
 ];
 
 export default function Home() {
