@@ -129,6 +129,13 @@ const APP_SECTIONS = [
         icon: Monitor, // Nhớ import Monitor từ lucide-react-native
         allowedRoles: [ROLES.MANAGER],
       },
+      {
+        to: "/(tabs)/home/(manager)/maintenancehistory",
+        title: "Lịch sử bảo trì",
+        description: "Xem lịch sử bảo trì",
+        icon: Monitor,
+        allowedRoles: [ROLES.MANAGER],
+      },
     ],
   },
   {
