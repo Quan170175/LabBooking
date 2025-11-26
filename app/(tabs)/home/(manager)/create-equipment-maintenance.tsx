@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,38 +16,42 @@ import {
   ChevronLeft,
   Monitor,
   Calendar,
-  Clock,
   FileText,
   Wrench,
-  MapPin, // Icon cho Phòng
+  MapPin,
+  Building2,
+  User,
   AlertCircle,
 } from "lucide-react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
-// --- 1. MOCK DATA ---
-const MOCK_ROOMS = [
-  { id: "lab1", name: "Lab A101" },
-  { id: "lab2", name: "Lab B202" },
-  { id: "lab3", name: "Lab C303" },
-];
-
-const MOCK_EQUIPMENTS = [
-  { id: "eq1", name: "Máy chiếu Sony", roomId: "lab1" },
-  { id: "eq2", name: "PC Giảng viên", roomId: "lab1" },
-  { id: "eq3", name: "Loa treo tường", roomId: "lab1" },
-  { id: "eq4", name: "Điều hòa 01", roomId: "lab2" },
-  { id: "eq5", name: "Điều hòa 02", roomId: "lab2" },
-  { id: "eq6", name: "Máy in 3D", roomId: "lab3" },
-  { id: "eq7", name: "Robot Arm", roomId: "lab3" },
+// --- MOCK DATA (Giả lập trả về từ API) ---
+const MOCK_MY_DEVICES = [
+  { id: "eq1", name: "Máy chiếu Sony 4K" },
+  { id: "eq2", name: "PC Giảng viên (Dell)" },
+  { id: "eq3", name: "Hệ thống âm thanh" },
+  { id: "eq4", name: "Máy in 3D Creality" },
+  { id: "eq5", name: "Oscilloscope (Dao động ký)" },
 ];
 
 export default function CreateEquipmentMaintenanceScreen() {
   const router = useRouter();
 
   // --- STATE ---
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  // 1. Thông tin phòng (Tự động lấy)
+  const [roomInfo, setRoomInfo] = useState<{
+    id: string;
+    labName: string;
+    managerName: string;
+  } | null>(null);
+
+  // 2. Danh sách thiết bị của phòng đó
+  const [equipments, setEquipments] = useState<any[]>([]);
+
+  // 3. Thiết bị được chọn để bảo trì
   const [selectedEqId, setSelectedEqId] = useState<string | null>(null);
 
+  const [isLoading, setIsLoading] = useState(true);
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -58,16 +62,28 @@ export default function CreateEquipmentMaintenanceScreen() {
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [mode, setMode] = useState<"date" | "time">("date");
 
-  // --- LOGIC LỌC THIẾT BỊ THEO PHÒNG ---
-  const availableEquipments = useMemo(() => {
-    if (!selectedRoomId) return [];
-    return MOCK_EQUIPMENTS.filter((eq) => eq.roomId === selectedRoomId);
-  }, [selectedRoomId]);
+  // --- EFFECT: LẤY DATA KHI MỞ MÀN HÌNH ---
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      // Giả lập gọi API lấy thông tin phòng và thiết bị của Manager
+      setTimeout(() => {
+        // 1. Set thông tin phòng
+        setRoomInfo({
+          id: "lab-a301-unique-id",
+          labName: "Phòng Lab AI & IoT (A301)",
+          managerName: "Nguyễn Văn Quản Lý",
+        });
 
-  const handleSelectRoom = (roomId: string) => {
-    setSelectedRoomId(roomId);
-    setSelectedEqId(null); // Reset thiết bị khi đổi phòng
-  };
+        // 2. Set danh sách thiết bị thuộc phòng này
+        setEquipments(MOCK_MY_DEVICES);
+
+        setIsLoading(false);
+      }, 1000);
+    };
+
+    fetchData();
+  }, []);
 
   // --- HANDLERS DATE/TIME ---
   const onChangeStart = (event: any, selectedDate?: Date) => {
@@ -101,28 +117,17 @@ export default function CreateEquipmentMaintenanceScreen() {
 
   // --- SUBMIT ---
   const handleSubmit = () => {
-    if (!selectedRoomId) {
-      Alert.alert("Thiếu thông tin", "Vui lòng chọn phòng trước.");
-      return;
-    }
-    if (!selectedEqId) {
-      Alert.alert("Thiếu thông tin", "Vui lòng chọn thiết bị cần bảo trì.");
-      return;
-    }
-    if (!description.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập nội dung bảo trì.");
-      return;
-    }
+    if (!roomInfo?.id || !selectedEqId || !description.trim()) return;
 
     setIsSubmitting(true);
 
     // API Payload giả lập
     const payload = {
-      EquipmentId: selectedEqId,
-      LabRoomId: selectedRoomId, // Gửi thêm ID phòng nếu BE cần
+      LabRoomId: roomInfo.id, // ID phòng tự động
+      EquipmentId: selectedEqId, // ID thiết bị chọn
       StartTime: startDate.toISOString(),
       EndTime: endDate.toISOString(),
-      Status: 1,
+      Status: 1, // 1 = Maintain
       Description: description,
     };
 
@@ -142,58 +147,68 @@ export default function CreateEquipmentMaintenanceScreen() {
         <Text style={styles.headerTitle}>Bảo trì thiết bị</Text>
         <View style={{ width: 24 }} />
       </View>
+
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={styles.content} // Đã có paddingBottom: 100
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. BƯỚC 1: CHỌN PHÒNG */}
+        {/* 1. THÔNG TIN PHÒNG (Cố định) */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <MapPin size={18} color="#EA580C" />
-            <Text style={styles.sectionTitle}>Bước 1: Chọn Phòng</Text>
+            <Building2 size={18} color="#EA580C" />
+            <Text style={styles.sectionTitle}>Thông tin phòng</Text>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.horizontalScroll}
-          >
-            {MOCK_ROOMS.map((room) => (
-              <TouchableOpacity
-                key={room.id}
-                style={[
-                  styles.chip,
-                  selectedRoomId === room.id && styles.chipActive,
-                ]}
-                onPress={() => handleSelectRoom(room.id)}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    selectedRoomId === room.id && styles.chipTextActive,
-                  ]}
-                >
-                  {room.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+
+          {isLoading ? (
+            <ActivityIndicator
+              size="small"
+              color="#EA580C"
+              style={{ padding: 20 }}
+            />
+          ) : (
+            <View style={styles.roomInfoContainer}>
+              {/* Tên Phòng */}
+              <View style={styles.infoRow}>
+                <View style={styles.iconBox}>
+                  <MapPin size={20} color="#EA580C" />
+                </View>
+                <View>
+                  <Text style={styles.infoLabel}>Phòng Lab</Text>
+                  <Text style={styles.infoValue}>{roomInfo?.labName}</Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              {/* Tên Quản lý */}
+              <View style={styles.infoRow}>
+                <View style={[styles.iconBox, { backgroundColor: "#DBEAFE" }]}>
+                  <User size={20} color="#2563EB" />
+                </View>
+                <View>
+                  <Text style={styles.infoLabel}>Quản lý phụ trách</Text>
+                  <Text style={styles.infoValue}>{roomInfo?.managerName}</Text>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
 
-        {/* 2. BƯỚC 2: CHỌN THIẾT BỊ (Chỉ hiện khi đã chọn phòng) */}
+        {/* 2. CHỌN THIẾT BỊ (Của phòng đó) */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Monitor size={18} color="#EA580C" />
-            <Text style={styles.sectionTitle}>Bước 2: Chọn Thiết bị</Text>
+            <Text style={styles.sectionTitle}>Chọn Thiết bị cần sửa</Text>
           </View>
 
-          {!selectedRoomId ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-                Vui lòng chọn phòng ở trên để xem danh sách thiết bị.
-              </Text>
-            </View>
-          ) : availableEquipments.length === 0 ? (
+          {isLoading ? (
+            <ActivityIndicator
+              size="small"
+              color="#EA580C"
+              style={{ padding: 10 }}
+            />
+          ) : equipments.length === 0 ? (
             <View style={styles.emptyState}>
               <AlertCircle size={20} color="#64748B" />
               <Text style={styles.emptyText}>
@@ -206,7 +221,7 @@ export default function CreateEquipmentMaintenanceScreen() {
               showsHorizontalScrollIndicator={false}
               style={styles.horizontalScroll}
             >
-              {availableEquipments.map((eq) => (
+              {equipments.map((eq) => (
                 <TouchableOpacity
                   key={eq.id}
                   style={[
@@ -282,7 +297,7 @@ export default function CreateEquipmentMaintenanceScreen() {
             </View>
           </View>
 
-          {/* DateTime Pickers */}
+          {/* Pickers */}
           {showStartPicker && (
             <DateTimePicker
               value={startDate}
@@ -313,7 +328,7 @@ export default function CreateEquipmentMaintenanceScreen() {
           </View>
           <TextInput
             style={styles.textArea}
-            placeholder="Nhập tình trạng hư hỏng..."
+            placeholder="Mô tả lỗi của thiết bị..."
             multiline
             numberOfLines={4}
             textAlignVertical="top"
@@ -322,14 +337,15 @@ export default function CreateEquipmentMaintenanceScreen() {
           />
         </View>
 
-        {/* NÚT SUBMIT (Nằm trong ScrollView) */}
+        {/* NÚT SUBMIT (Disable nếu chưa chọn thiết bị) */}
         <TouchableOpacity
           style={[
             styles.submitButton,
-            (!selectedEqId || !description) && styles.submitButtonDisabled,
+            (!selectedEqId || !description || isLoading) &&
+              styles.submitButtonDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={isSubmitting || !selectedEqId}
+          disabled={isSubmitting || !selectedEqId || isLoading}
         >
           {isSubmitting ? (
             <ActivityIndicator color="white" />
@@ -358,7 +374,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
   backButton: { padding: 4 },
-  content: { padding: 16, paddingBottom: 50 },
+
+  // 🟢 ĐÃ TĂNG PADDING BOTTOM
+  content: { padding: 16, paddingBottom: 100 },
 
   section: {
     marginBottom: 20,
@@ -376,7 +394,38 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 15, fontWeight: "700", color: "#334155" },
 
-  // Chips (Dùng chung cho Room & Equipment)
+  // --- STYLES THÔNG TIN PHÒNG ---
+  roomInfoContainer: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 12,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#FFF7ED",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  infoLabel: { fontSize: 12, color: "#64748B", marginBottom: 2 },
+  infoValue: { fontSize: 15, fontWeight: "600", color: "#0F172A" },
+  divider: {
+    height: 1,
+    backgroundColor: "#E2E8F0",
+    marginVertical: 12,
+    marginLeft: 52,
+  },
+  // ------------------------------
+
+  // Chips (Thiết bị)
   horizontalScroll: { flexDirection: "row" },
   chip: {
     paddingVertical: 10,
@@ -391,7 +440,6 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 14, color: "#334155", fontWeight: "600" },
   chipTextActive: { color: "#EA580C" },
 
-  // Empty State cho thiết bị
   emptyState: {
     padding: 20,
     alignItems: "center",

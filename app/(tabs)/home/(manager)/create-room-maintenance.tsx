@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,40 +16,99 @@ import {
   ChevronLeft,
   MapPin,
   Calendar,
-  Clock,
   FileText,
   Wrench,
+  User,
+  Building2,
 } from "lucide-react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
-// Mock Data
-const MOCK_ROOMS = [
-  { id: "lab1", name: "Lab A101" },
-  { id: "lab2", name: "Lab B202" },
-  { id: "lab3", name: "Lab C303" },
-  { id: "hall", name: "Hội trường A" },
-];
+// 🟢 1. IMPORT API CLIENT
+import apiClient from "../../../../utils/api";
+
+// --- TYPES ---
+// Cấu trúc response của API /api/Managers/profile
+interface ManagedLab {
+  id: string;
+  labName: string;
+  location: string;
+}
+
+interface ManagerProfileResponse {
+  id: string;
+  userName: string;
+  email: string;
+  managedLabs: ManagedLab[];
+}
 
 export default function CreateMaintenanceScreen() {
   const router = useRouter();
 
   // --- STATE ---
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  // Lưu thông tin lấy từ API Profile
+  const [labInfo, setLabInfo] = useState<{
+    id: string;
+    labName: string;
+    location: string;
+    managerName: string;
+  } | null>(null);
+
+  const [isLoadingRoom, setIsLoadingRoom] = useState(true);
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Date Time State
   const [startDate, setStartDate] = useState(new Date());
-  const [endDate, setEndDate] = useState(new Date(Date.now() + 3600 * 1000));
+  const [endDate, setEndDate] = useState(new Date(Date.now() + 3600 * 1000)); // Mặc định +1 tiếng
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [mode, setMode] = useState<"date" | "time">("date");
+
+  // --- 🟢 2. CALL API LẤY THÔNG TIN PHÒNG & MANAGER ---
+  useEffect(() => {
+    const fetchProfile = async () => {
+      setIsLoadingRoom(true);
+      try {
+        console.log("Fetching Manager Profile...");
+        const response = await apiClient.get<ManagerProfileResponse>(
+          "/api/Managers/profile"
+        );
+        const data = response.data;
+
+        // Kiểm tra xem Manager có quản lý phòng nào không
+        if (data.managedLabs && data.managedLabs.length > 0) {
+          // Lấy phòng đầu tiên (theo logic 1 manager - 1 phòng)
+          const myLab = data.managedLabs[0];
+
+          setLabInfo({
+            id: myLab.id,
+            labName: myLab.labName,
+            location: myLab.location,
+            managerName: data.userName,
+          });
+        } else {
+          Alert.alert(
+            "Thông báo",
+            "Tài khoản của bạn chưa được gán quản lý phòng Lab nào."
+          );
+        }
+      } catch (error) {
+        console.error("Lỗi lấy thông tin phòng:", error);
+        Alert.alert("Lỗi", "Không thể tải thông tin phòng lab.");
+      } finally {
+        setIsLoadingRoom(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
 
   // --- HANDLERS ---
   const onChangeStart = (event: any, selectedDate?: Date) => {
     if (Platform.OS === "android") setShowStartPicker(false);
     if (selectedDate) {
       setStartDate(selectedDate);
+      // Nếu ngày bắt đầu lớn hơn ngày kết thúc, tự đẩy ngày kết thúc lên
       if (selectedDate > endDate) {
         setEndDate(new Date(selectedDate.getTime() + 3600 * 1000));
       }
@@ -78,31 +137,42 @@ export default function CreateMaintenanceScreen() {
     )}:${String(date.getMinutes()).padStart(2, "0")}`;
   };
 
-  const handleSubmit = () => {
-    if (!selectedRoomId || !description.trim()) return;
+  // --- 🟢 3. CALL API TẠO BẢO TRÌ (POST) ---
+  const handleSubmit = async () => {
+    if (!labInfo?.id || !description.trim()) return;
 
     setIsSubmitting(true);
 
-    // Fake API Call
-    const payload = {
-      LabRoomId: selectedRoomId,
-      StartTime: startDate.toISOString(),
-      EndTime: endDate.toISOString(),
-      RoomMaintainStatus: 1,
-      Description: description,
-    };
-    console.log("Submitting:", payload);
+    try {
+      // Payload theo đúng cấu trúc JSON bạn cung cấp
+      const payload = {
+        labRoomId: labInfo.id,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+        description: description,
+      };
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-      Alert.alert("Thành công", "Đã lên lịch bảo trì phòng.", [
+      console.log("Submitting Payload:", payload);
+
+      // Gọi API POST
+      await apiClient.post("/api/RoomMaintainSchedules", payload);
+
+      Alert.alert("Thành công", "Đã lên lịch bảo trì phòng thành công!", [
         { text: "OK", onPress: () => router.back() },
       ]);
-    }, 1000);
+    } catch (error: any) {
+      console.error("Create Maintain Error:", error);
+      const msg =
+        error.response?.data?.message ||
+        "Không thể tạo lịch bảo trì. Vui lòng thử lại.";
+      Alert.alert("Thất bại", msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Kiểm tra điều kiện để enable nút submit
-  const isValid = selectedRoomId && description.trim().length > 0;
+  const isValid = labInfo?.id && description.trim().length > 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -116,40 +186,66 @@ export default function CreateMaintenanceScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. CHỌN PHÒNG */}
+        {/* 1. THÔNG TIN PHÒNG & QUẢN LÝ */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <MapPin size={18} color="#EA580C" />
-            <Text style={styles.sectionTitle}>Chọn phòng</Text>
+            <Building2 size={18} color="#EA580C" />
+            <Text style={styles.sectionTitle}>Thông tin phòng</Text>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.horizontalScroll}
-          >
-            {MOCK_ROOMS.map((room) => (
-              <TouchableOpacity
-                key={room.id}
-                style={[
-                  styles.chip,
-                  selectedRoomId === room.id && styles.chipActive,
-                ]}
-                onPress={() => setSelectedRoomId(room.id)}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    selectedRoomId === room.id && styles.chipTextActive,
-                  ]}
-                >
-                  {room.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+
+          {isLoadingRoom ? (
+            <ActivityIndicator
+              size="small"
+              color="#EA580C"
+              style={{ padding: 20 }}
+            />
+          ) : (
+            <View style={styles.roomInfoContainer}>
+              {/* Tên Phòng */}
+              <View style={styles.infoRow}>
+                <View style={styles.iconBox}>
+                  <Building2 size={20} color="#EA580C" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.infoLabel}>Phòng Lab</Text>
+                  <Text style={styles.infoValue}>
+                    {labInfo?.labName || "Chưa có tên"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Location (Thêm mới theo yêu cầu) */}
+              <View style={[styles.infoRow, { marginTop: 12 }]}>
+                <View style={styles.iconBox}>
+                  <MapPin size={20} color="#EA580C" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.infoLabel}>Địa điểm</Text>
+                  <Text style={styles.infoValue}>
+                    {labInfo?.location || "Chưa cập nhật vị trí"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              {/* Tên Quản lý */}
+              <View style={styles.infoRow}>
+                <View style={[styles.iconBox, { backgroundColor: "#DBEAFE" }]}>
+                  <User size={20} color="#2563EB" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.infoLabel}>Quản lý phụ trách</Text>
+                  <Text style={styles.infoValue}>
+                    {labInfo?.managerName || "N/A"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
 
-        {/* 2. THỜI GIAN (GIAO DIỆN MỚI) */}
+        {/* 2. THỜI GIAN */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Calendar size={18} color="#EA580C" />
@@ -242,14 +338,11 @@ export default function CreateMaintenanceScreen() {
           />
         </View>
 
-        {/* NÚT BẤM (Disable logic) */}
+        {/* NÚT BẤM */}
         <TouchableOpacity
-          style={[
-            styles.submitButton,
-            !isValid && styles.submitButtonDisabled, // Style xám khi chưa nhập đủ
-          ]}
+          style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}
           onPress={handleSubmit}
-          disabled={!isValid || isSubmitting} // Disable chức năng bấm
+          disabled={!isValid || isSubmitting}
         >
           {isSubmitting ? (
             <ActivityIndicator color="white" />
@@ -278,7 +371,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
   backButton: { padding: 4 },
-  content: { padding: 16, paddingBottom: 50 },
+  content: { padding: 16, paddingBottom: 100 },
 
   section: {
     marginBottom: 20,
@@ -296,22 +389,38 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 15, fontWeight: "700", color: "#334155" },
 
-  // Room Chips
-  horizontalScroll: { flexDirection: "row" },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: "#F1F5F9",
-    marginRight: 8,
+  // --- STYLES CHO THÔNG TIN PHÒNG ---
+  roomInfoContainer: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    padding: 12,
   },
-  chipActive: { backgroundColor: "#FFF7ED", borderColor: "#EA580C" },
-  chipText: { fontSize: 14, color: "#64748B" },
-  chipTextActive: { color: "#EA580C", fontWeight: "600" },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#FFF7ED",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  infoLabel: { fontSize: 12, color: "#64748B", marginBottom: 2 },
+  infoValue: { fontSize: 15, fontWeight: "600", color: "#0F172A" },
+  divider: {
+    height: 1,
+    backgroundColor: "#E2E8F0",
+    marginVertical: 12,
+    marginLeft: 52,
+  },
+  // --------------------------------------
 
-  // Date Time Styles (Updated)
+  // Date Time Styles
   dateTimeLabelRow: { marginBottom: 4 },
   subLabel: { fontSize: 13, color: "#64748B", fontWeight: "500" },
   dateTimeRow: {
@@ -365,6 +474,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#CBD5E1",
     shadowOpacity: 0,
     elevation: 0,
-  }, // Màu xám
+  },
   submitButtonText: { color: "white", fontSize: 16, fontWeight: "700" },
 });
