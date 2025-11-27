@@ -98,32 +98,31 @@ export default function Profile() {
     setLogoutModalOpen(false);
     console.log("Bắt đầu quá trình đăng xuất...");
 
+    // 1. Xử lý Google SignOut
+    // Chúng ta bọc trong try-catch để nếu user không phải là Google User (ví dụ: Security)
+    // thì lỗi sẽ bị bỏ qua và code vẫn chạy tiếp xuống dưới.
     try {
-      // 1. Thu hồi quyền (để bắt buộc chọn lại tài khoản lần sau)
-      await GoogleSignin.revokeAccess();
-      console.log("Đã thu hồi quyền Google");
-
-      // 2. Đăng xuất khỏi SDK Google Sign-In
       await GoogleSignin.signOut();
+      // Nếu muốn thu hồi quyền hoàn toàn thì uncomment dòng dưới (thường không cần thiết nếu chỉ logout)
+      // await GoogleSignin.revokeAccess();
       console.log("Đã đăng xuất khỏi Google SDK");
+    } catch (error) {
+      // Lỗi này xảy ra khi user chưa đăng nhập Google (ví dụ: Security)
+      // Chúng ta chỉ log ra và BỎ QUA nó, không để nó chặn quy trình logout.
+      console.log("Lỗi Google SignOut (có thể bỏ qua nếu là Security):", error);
+    }
 
-      // 3. Xóa token khỏi SecureStore
+    // 2. Xóa Token hệ thống (Luôn thực hiện dù là Security hay Student)
+    try {
       await SecureStore.deleteItemAsync("accessToken");
       await SecureStore.deleteItemAsync("refreshToken");
       console.log("Đã xóa token cục bộ");
     } catch (error) {
-      console.error("Lỗi trong quá trình đăng xuất:", error);
-      // Ngay cả khi có lỗi, vẫn nên cố gắng xóa token cục bộ
-      try {
-        await SecureStore.deleteItemAsync("accessToken");
-        await SecureStore.deleteItemAsync("refreshToken");
-      } catch (e) {
-        console.error("Lỗi khi cố gắng xóa token lần 2:", e);
-      }
-    } finally {
-      // 4. Điều hướng về trang Login
-      router.replace("/login" as any);
+      console.error("Lỗi khi xóa token:", error);
     }
+
+    // 3. Điều hướng về trang Login
+    router.replace("/login" as any);
   };
 
   return (
@@ -138,11 +137,10 @@ export default function Profile() {
       >
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarFallback}>TP</Text>
+            <Text style={styles.avatarFallback}>F</Text>
           </View>
           <View>
             <Text style={styles.profileName}>Trần Minh Phúc</Text>
-            <Text style={styles.profilePhone}>096•••350</Text>
           </View>
         </View>
       </LinearGradient>
@@ -259,11 +257,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "white",
     letterSpacing: -0.5,
-  },
-  profilePhone: {
-    marginTop: 2,
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.8)",
   },
   alertCard: {
     flexDirection: "row",

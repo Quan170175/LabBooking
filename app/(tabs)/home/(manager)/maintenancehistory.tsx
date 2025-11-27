@@ -27,8 +27,8 @@ type MaintenanceType = "room" | "equipment";
 
 interface MaintenanceRecord {
   id: string;
-  targetName: string; // Tên thiết bị hoặc Tên phòng
-  location: string; // 🟢 Địa điểm (VD: "Lab A301" hoặc "Tòa nhà F")
+  targetName: string;
+  location: string;
   startTime: string;
   endTime: string;
   description: string;
@@ -56,7 +56,7 @@ export default function MaintenanceHistoryScreen() {
           {
             id: "1",
             targetName: "Phòng Lab AI & IoT (A301)",
-            location: "Tòa nhà Alpha - Tầng 3", // 🟢 Location của phòng
+            location: "Tòa nhà Alpha - Tầng 3",
             startTime: "2025-10-25T08:00:00",
             endTime: "2025-10-25T12:00:00",
             description: "Bảo trì hệ thống điện định kỳ.",
@@ -65,7 +65,7 @@ export default function MaintenanceHistoryScreen() {
           {
             id: "2",
             targetName: "Hội trường B",
-            location: "Khu Giảng đường Beta", // 🟢 Location của phòng
+            location: "Khu Giảng đường Beta",
             startTime: "2025-10-28T13:00:00",
             endTime: "2025-10-28T17:00:00",
             description: "Sửa chữa trần thạch cao bị thấm nước.",

@@ -258,13 +258,13 @@ export default function Home() {
           </View>
 
           <Text style={styles.heroDesc}>
-            {userRole === ROLES.MANAGER
+            {userRole === ROLES.MANAGER || userRole === ROLES.SECURITYGUARD
               ? "Hệ thống đang hoạt động ổn định. Kiểm tra các yêu cầu cần duyệt bên dưới."
               : "Đặt phòng thực hành, theo dõi lịch và cập nhật thông báo ngay trên điện thoại."}
           </Text>
 
-          {/* Nút CTA chỉ hiện cho Student/Lecturer */}
-          {userRole !== ROLES.MANAGER && (
+          {/* Nút CTA chỉ hiện khi KHÔNG PHẢI là Manager VÀ KHÔNG PHẢI là Security */}
+          {userRole !== ROLES.MANAGER && userRole !== ROLES.SECURITYGUARD && (
             <TouchableOpacity
               style={styles.cta}
               onPress={() => router.push("/book/choose-type" as any)}

@@ -26,12 +26,6 @@ export default function ProfileDetails() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <ArrowLeft size={18} color="#C2410C" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Thông tin cá nhân</Text>
       </View>
 
