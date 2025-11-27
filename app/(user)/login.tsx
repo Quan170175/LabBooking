@@ -8,6 +8,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import React, { useEffect } from "react";
+import { Shield } from "lucide-react-native";
 import {
   Alert,
   SafeAreaView,
@@ -213,7 +214,8 @@ export default function LoginScreen() {
                 style={[styles.button, { marginTop: 12 }]}
                 onPress={() => router.push("/security-login" as any)}
               >
-                {/* Có thể thêm icon khóa ở đây nếu muốn */}
+                {/* Thêm icon Shield */}
+                <Shield size={20} color="#334155" strokeWidth={2} />
                 <Text style={styles.buttonText}>Đăng nhập cho bảo vệ</Text>
               </TouchableOpacity>
               {/* ------------------------------ */}

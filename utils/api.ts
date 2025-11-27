@@ -1,12 +1,11 @@
 // utils/api.ts
 import axios, { AxiosError } from "axios";
-// *** 1. XÓA DÒNG "import { router } from "expo-router";" Ở ĐÂY ***
 import * as SecureStore from "expo-secure-store";
 
 // URL Backend của bạn
 const BACKEND_URL = "https://developerops.xyz";
 
-// Tạo một 'instance' của axios (Giữ nguyên)
+// Tạo một 'instance' của axios
 const apiClient = axios.create({
   baseURL: BACKEND_URL,
   headers: {
@@ -49,9 +48,15 @@ const processQueue = (
   failedQueue = [];
 };
 
-// Response Interceptor (Đây là nơi sửa)
+// Response Interceptor (ĐÃ SỬA)
 apiClient.interceptors.response.use(
   (response) => {
+    // --- LOGIC MỚI: BÓC VỎ DATA ---
+    // Nếu response có dạng { statusCode, message, data }
+    if (response.data && response.data.statusCode && "data" in response.data) {
+      // Gán phần ruột 'data' đè lên response.data để FE cũ hiểu
+      response.data = response.data.data;
+    }
     return response;
   },
   async (error: AxiosError) => {
@@ -59,7 +64,6 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
-        // (Phần này giữ nguyên)
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
@@ -92,6 +96,8 @@ apiClient.interceptors.response.use(
 
         console.log("Đang gọi API /api/auth/refresh-token...");
 
+        // Lưu ý: axios.post này là instance gốc, không chạy qua interceptor bên trên
+        // nên nó sẽ trả về FULL wrapper { statusCode, data: { ... } }
         const refreshResponse = await axios.post(
           `${BACKEND_URL}/api/auth/refresh-token`,
           {
@@ -99,8 +105,12 @@ apiClient.interceptors.response.use(
           }
         );
 
+        // --- SỬA ĐOẠN NÀY ĐỂ HỢP VỚI FORMAT MỚI ---
+        // Kiểm tra xem data có nằm trong vỏ bọc không
+        const responseData = refreshResponse.data.data || refreshResponse.data;
+
         const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
-          refreshResponse.data;
+          responseData;
 
         console.log("Đã nhận được token mới. Đang lưu...");
         await SecureStore.setItemAsync("accessToken", newAccessToken);

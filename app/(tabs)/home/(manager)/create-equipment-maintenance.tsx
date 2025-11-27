@@ -10,6 +10,7 @@ import {
   TextInput,
   Platform,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -22,6 +23,9 @@ import {
   Building2,
   User,
   AlertCircle,
+  CheckCircle2, // Icon cho modal
+  History,
+  X,
 } from "lucide-react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
@@ -38,22 +42,21 @@ export default function CreateEquipmentMaintenanceScreen() {
   const router = useRouter();
 
   // --- STATE ---
-  // 1. Thông tin phòng (Tự động lấy)
   const [roomInfo, setRoomInfo] = useState<{
     id: string;
     labName: string;
     managerName: string;
   } | null>(null);
 
-  // 2. Danh sách thiết bị của phòng đó
   const [equipments, setEquipments] = useState<any[]>([]);
-
-  // 3. Thiết bị được chọn để bảo trì
   const [selectedEqId, setSelectedEqId] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 🟢 STATE MODAL THÀNH CÔNG
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
 
   // Date Time State
   const [startDate, setStartDate] = useState(new Date());
@@ -62,26 +65,20 @@ export default function CreateEquipmentMaintenanceScreen() {
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [mode, setMode] = useState<"date" | "time">("date");
 
-  // --- EFFECT: LẤY DATA KHI MỞ MÀN HÌNH ---
+  // --- EFFECT: LẤY DATA ---
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      // Giả lập gọi API lấy thông tin phòng và thiết bị của Manager
       setTimeout(() => {
-        // 1. Set thông tin phòng
         setRoomInfo({
           id: "lab-a301-unique-id",
           labName: "Phòng Lab AI & IoT (A301)",
           managerName: "Nguyễn Văn Quản Lý",
         });
-
-        // 2. Set danh sách thiết bị thuộc phòng này
         setEquipments(MOCK_MY_DEVICES);
-
         setIsLoading(false);
       }, 1000);
     };
-
     fetchData();
   }, []);
 
@@ -121,13 +118,12 @@ export default function CreateEquipmentMaintenanceScreen() {
 
     setIsSubmitting(true);
 
-    // API Payload giả lập
     const payload = {
-      LabRoomId: roomInfo.id, // ID phòng tự động
-      EquipmentId: selectedEqId, // ID thiết bị chọn
+      LabRoomId: roomInfo.id,
+      EquipmentId: selectedEqId,
       StartTime: startDate.toISOString(),
       EndTime: endDate.toISOString(),
-      Status: 1, // 1 = Maintain
+      Status: 1,
       Description: description,
     };
 
@@ -135,25 +131,42 @@ export default function CreateEquipmentMaintenanceScreen() {
 
     setTimeout(() => {
       setIsSubmitting(false);
-      Alert.alert("Thành công", "Đã lên lịch bảo trì thiết bị.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+
+      // 🟢 THÀNH CÔNG -> HIỆN MODAL
+      setSuccessModalVisible(true);
+
+      // Reset form (tuỳ chọn)
+      setDescription("");
+      setSelectedEqId(null);
     }, 1000);
+  };
+
+  // Điều hướng sang trang lịch sử
+  const goToHistory = () => {
+    setSuccessModalVisible(false);
+    // ⚠️ Đảm bảo đường dẫn route chính xác
+    router.push("/(manager)/maintenancehistory" as any);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
+          <ChevronLeft size={24} color="#0F172A" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Bảo trì thiết bị</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.content} // Đã có paddingBottom: 100
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. THÔNG TIN PHÒNG (Cố định) */}
+        {/* 1. THÔNG TIN PHÒNG */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Building2 size={18} color="#EA580C" />
@@ -168,7 +181,6 @@ export default function CreateEquipmentMaintenanceScreen() {
             />
           ) : (
             <View style={styles.roomInfoContainer}>
-              {/* Tên Phòng */}
               <View style={styles.infoRow}>
                 <View style={styles.iconBox}>
                   <MapPin size={20} color="#EA580C" />
@@ -181,7 +193,6 @@ export default function CreateEquipmentMaintenanceScreen() {
 
               <View style={styles.divider} />
 
-              {/* Tên Quản lý */}
               <View style={styles.infoRow}>
                 <View style={[styles.iconBox, { backgroundColor: "#DBEAFE" }]}>
                   <User size={20} color="#2563EB" />
@@ -195,7 +206,7 @@ export default function CreateEquipmentMaintenanceScreen() {
           )}
         </View>
 
-        {/* 2. CHỌN THIẾT BỊ (Của phòng đó) */}
+        {/* 2. CHỌN THIẾT BỊ */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Monitor size={18} color="#EA580C" />
@@ -251,7 +262,6 @@ export default function CreateEquipmentMaintenanceScreen() {
             <Text style={styles.sectionTitle}>Thời gian bảo trì</Text>
           </View>
 
-          {/* Bắt đầu */}
           <View style={styles.dateTimeLabelRow}>
             <Text style={styles.subLabel}>Bắt đầu:</Text>
           </View>
@@ -275,7 +285,6 @@ export default function CreateEquipmentMaintenanceScreen() {
             </View>
           </View>
 
-          {/* Kết thúc */}
           <View style={[styles.dateTimeLabelRow, { marginTop: 12 }]}>
             <Text style={styles.subLabel}>Kết thúc:</Text>
           </View>
@@ -297,7 +306,6 @@ export default function CreateEquipmentMaintenanceScreen() {
             </View>
           </View>
 
-          {/* Pickers */}
           {showStartPicker && (
             <DateTimePicker
               value={startDate}
@@ -337,7 +345,7 @@ export default function CreateEquipmentMaintenanceScreen() {
           />
         </View>
 
-        {/* NÚT SUBMIT (Disable nếu chưa chọn thiết bị) */}
+        {/* NÚT SUBMIT */}
         <TouchableOpacity
           style={[
             styles.submitButton,
@@ -357,6 +365,46 @@ export default function CreateEquipmentMaintenanceScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* 🟢 MODAL THÀNH CÔNG */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={successModalVisible}
+        onRequestClose={() => setSuccessModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <CheckCircle2 size={48} color="#16A34A" />
+            </View>
+
+            <Text style={styles.modalTitle}>Thành công!</Text>
+            <Text style={styles.modalMessage}>
+              Lịch bảo trì thiết bị đã được tạo thành công.
+            </Text>
+
+            <View style={styles.modalActions}>
+              {/* Nút Hủy / Đóng */}
+              <TouchableOpacity
+                style={styles.modalBtnCancel}
+                onPress={() => setSuccessModalVisible(false)}
+              >
+                <Text style={styles.modalBtnCancelText}>Đóng</Text>
+              </TouchableOpacity>
+
+              {/* Nút Xem Lịch Sử */}
+              <TouchableOpacity
+                style={styles.modalBtnPrimary}
+                onPress={goToHistory}
+              >
+                <History size={18} color="white" />
+                <Text style={styles.modalBtnPrimaryText}>Xem Lịch sử</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -374,8 +422,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
   backButton: { padding: 4 },
-
-  // 🟢 ĐÃ TĂNG PADDING BOTTOM
   content: { padding: 16, paddingBottom: 100 },
 
   section: {
@@ -394,7 +440,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 15, fontWeight: "700", color: "#334155" },
 
-  // --- STYLES THÔNG TIN PHÒNG ---
+  // --- STYLES INFO ---
   roomInfoContainer: {
     backgroundColor: "#F8FAFC",
     borderRadius: 12,
@@ -423,9 +469,8 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     marginLeft: 52,
   },
-  // ------------------------------
 
-  // Chips (Thiết bị)
+  // Chips
   horizontalScroll: { flexDirection: "row" },
   chip: {
     paddingVertical: 10,
@@ -479,7 +524,6 @@ const styles = StyleSheet.create({
   },
   pickerBtnText: { color: "#EA580C", fontWeight: "600", fontSize: 12 },
 
-  // Input
   textArea: {
     borderWidth: 1,
     borderColor: "#E2E8F0",
@@ -507,4 +551,80 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: { backgroundColor: "#CBD5E1", shadowOpacity: 0 },
   submitButtonText: { color: "white", fontSize: 16, fontWeight: "700" },
+
+  // --- 🟢 MODAL STYLES ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    width: "90%",
+    backgroundColor: "white",
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#DCFCE7", // Xanh lá nhạt
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#16A34A",
+    marginBottom: 8,
+  },
+  modalMessage: {
+    fontSize: 15,
+    color: "#64748B",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  modalBtnCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBtnCancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  modalBtnPrimary: {
+    flex: 1.5,
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#EA580C",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBtnPrimaryText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "white",
+  },
 });

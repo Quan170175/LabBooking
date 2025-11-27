@@ -10,7 +10,6 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        // Ẩn header mặc định của Tabs
         headerShown: false,
         tabBarShowLabel: true,
         tabBarActiveTintColor: "#ea580c",

@@ -25,7 +25,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-// Import apiClient (đảm bảo đường dẫn đúng với project của bạn)
+// Import apiClient
 import apiClient from "../../utils/api";
 
 export default function SecurityLoginScreen() {
@@ -35,6 +35,9 @@ export default function SecurityLoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // --- MỚI: State cho checkbox ---
+  const [rememberMe, setRememberMe] = useState(false);
 
   // Animation Values
   const headerOpacity = useSharedValue(0);
@@ -60,6 +63,22 @@ export default function SecurityLoginScreen() {
 
     mainOpacity.value = withDelay(100, withTiming(1, opacityConfig));
     mainTranslateY.value = withDelay(100, withSpring(0, springConfig));
+
+    // Logic tải lại thông tin đã lưu (nếu có)
+    const loadSavedCredentials = async () => {
+      try {
+        const savedEmail = await SecureStore.getItemAsync("savedEmail");
+        const savedPassword = await SecureStore.getItemAsync("savedPassword");
+        if (savedEmail && savedPassword) {
+          setEmail(savedEmail);
+          setPassword(savedPassword);
+          setRememberMe(true);
+        }
+      } catch (e) {
+        console.log("Không tải được thông tin lưu trữ");
+      }
+    };
+    loadSavedCredentials();
   }, []);
 
   const handleSecurityLogin = async () => {
@@ -72,12 +91,10 @@ export default function SecurityLoginScreen() {
     try {
       console.log("Đang đăng nhập Security...");
 
-      // GỌI API LOGIN THƯỜNG
-      // Giả sử endpoint là /api/auth/login
+      // GỌI API LOGIN THƯỜNG (Giữ nguyên code của bạn)
       const response = await apiClient.post("/api/auth/login", {
         email: email,
         password: password,
-        // role: "security", // Tùy chọn: nếu backend cần phân biệt
       });
 
       const data = response.data;
@@ -92,7 +109,17 @@ export default function SecurityLoginScreen() {
           await SecureStore.setItemAsync("refreshToken", refreshToken);
         }
 
-        // Điều hướng vào trang Home hoặc trang dành riêng cho Security
+        // --- MỚI: Xử lý lưu tài khoản nếu checkbox được tích ---
+        if (rememberMe) {
+          await SecureStore.setItemAsync("savedEmail", email);
+          await SecureStore.setItemAsync("savedPassword", password);
+        } else {
+          // Nếu bỏ tích thì xóa thông tin cũ đi
+          await SecureStore.deleteItemAsync("savedEmail");
+          await SecureStore.deleteItemAsync("savedPassword");
+        }
+        // -----------------------------------------------------
+
         router.replace("/(tabs)/home");
       } else {
         Alert.alert("Lỗi", "Không nhận được token xác thực.");
@@ -115,12 +142,10 @@ export default function SecurityLoginScreen() {
         colors={["#FFEDD5", "#FFFFFF", "#FEF3C7"]}
         style={styles.container}
       >
-        {/* Background Glow Effect */}
         <View style={[styles.glow, styles.glowTop]} />
         <View style={[styles.glow, styles.glowBottom]} />
 
         <KeyboardAvoidingView
-          // Đã loại bỏ behavior cho Android, chỉ giữ lại cho iOS (nếu cần điều chỉnh vị trí)
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.content}
         >
@@ -137,7 +162,7 @@ export default function SecurityLoginScreen() {
             </View>
           </Animated.View>
 
-          {/* MAIN FORM - KHÔNG DÙNG SCROLLVIEW */}
+          {/* MAIN FORM */}
           <Animated.View style={[styles.main, animatedMainStyle]}>
             <Text style={styles.welcomeText}>RESTRICTED ACCESS</Text>
             <Text style={styles.mainTitle}>Đăng nhập Bảo Vệ</Text>
@@ -166,6 +191,24 @@ export default function SecurityLoginScreen() {
                   secureTextEntry
                 />
               </View>
+
+              {/* --- MỚI: Checkbox UI --- */}
+              <TouchableOpacity
+                style={styles.checkboxContainer}
+                activeOpacity={0.8}
+                onPress={() => setRememberMe(!rememberMe)}
+              >
+                <View
+                  style={[
+                    styles.checkboxBase,
+                    rememberMe && styles.checkboxChecked,
+                  ]}
+                >
+                  {rememberMe && <View style={styles.checkboxInner} />}
+                </View>
+                <Text style={styles.checkboxLabel}>Lưu mật khẩu</Text>
+              </TouchableOpacity>
+              {/* ------------------------- */}
             </View>
 
             <TouchableOpacity
@@ -230,7 +273,8 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 400,
     alignItems: "center",
-    justifyContent: "space-between", // <--- Quan trọng: Giúp cố định Header, Form, Footer
+    // --- THAY ĐỔI: Dùng flex-start để dồn nội dung lên trên ---
+    justifyContent: "flex-start",
     paddingVertical: 20,
     paddingHorizontal: 24,
   },
@@ -238,6 +282,7 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     marginTop: 20,
+    marginBottom: 40, // Tạo khoảng cách để form không dính sát header
   },
   header: {
     flexDirection: "row",
@@ -259,7 +304,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: "#334155", // Màu tối hơn cho Security
+    backgroundColor: "#334155",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -286,7 +331,7 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   welcomeText: {
-    color: "#EF4444", // Màu đỏ cảnh báo/security
+    color: "#EF4444",
     fontSize: 14,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -327,9 +372,44 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  // --- CSS MỚI CHO CHECKBOX ---
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+    alignSelf: "flex-start", // Căn trái
+    marginLeft: 4,
+  },
+  checkboxBase: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#94A3B8",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+    backgroundColor: "white",
+  },
+  checkboxChecked: {
+    backgroundColor: "#F97316",
+    borderColor: "#F97316",
+  },
+  checkboxInner: {
+    width: 10,
+    height: 10,
+    backgroundColor: "white",
+    borderRadius: 2,
+  },
+  checkboxLabel: {
+    color: "#475569",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  // -----------------------------
   loginButton: {
     width: "100%",
-    backgroundColor: "#F97316", // Màu cam chủ đạo
+    backgroundColor: "#F97316",
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -357,6 +437,7 @@ const styles = StyleSheet.create({
   footerContainer: {
     width: "100%",
     alignItems: "center",
+    marginTop: "auto", // --- Đẩy footer xuống đáy ---
     marginBottom: 10,
   },
   footerText: {
