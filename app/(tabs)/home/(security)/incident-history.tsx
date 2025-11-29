@@ -28,11 +28,10 @@ import {
   Save,
   X,
   Clock,
-  Plus, // Icon dấu cộng cho nút tạo mới
   HelpCircle,
 } from "lucide-react-native";
 
-// --- 1. ĐỊNH NGHĨA TYPES (Khớp với C# Entity) ---
+// --- 1. ĐỊNH NGHĨA TYPES ---
 export type IncidentType =
   | "Fire"
   | "PowerOutage"
@@ -54,7 +53,7 @@ export interface Incident {
   type: IncidentType;
   description: string;
   isResolved: boolean;
-  createdAt: string; // ISO Date string
+  createdAt: string;
   importanceLevel: LevelOfImportance;
 }
 
@@ -77,7 +76,7 @@ const MOCK_INCIDENTS: Incident[] = [
     type: "PowerOutage",
     description: "Mất điện toàn bộ dãy bàn số 3.",
     isResolved: false,
-    createdAt: new Date().toISOString(), // Hôm nay
+    createdAt: new Date().toISOString(),
     importanceLevel: "High",
   },
   {
@@ -103,7 +102,7 @@ const MOCK_INCIDENTS: Incident[] = [
     type: "SecurityIssue",
     description: "Phát hiện cửa sổ chưa khóa sau giờ học.",
     isResolved: false,
-    createdAt: new Date(Date.now() - 86400000).toISOString(), // Hôm qua
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
     importanceLevel: "Medium",
   },
 ];
@@ -219,7 +218,7 @@ export default function IncidentHistoryScreen() {
 
   // Logic Edit
   const openDetail = (incident: Incident) => {
-    setEditingIncident({ ...incident }); // Clone object để edit
+    setEditingIncident({ ...incident });
     setModalVisible(true);
   };
 
@@ -359,14 +358,6 @@ export default function IncidentHistoryScreen() {
         }
       />
 
-      {/* FAB - NÚT TẠO MỚI */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push("/(security)/create-incident" as any)}
-      >
-        <Plus size={28} color="white" />
-      </TouchableOpacity>
-
       {/* MODAL EDIT/DETAIL */}
       <Modal
         visible={modalVisible}
@@ -498,18 +489,22 @@ export default function IncidentHistoryScreen() {
 
 // --- STYLES ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  // 🔥 MÀU NỀN CHÍNH
+  container: { flex: 1, backgroundColor: "#FFF7ED" },
+
+  // 🔥 HEADER MỚI
   header: {
     padding: 16,
-    backgroundColor: "white",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    backgroundColor: "#FFF7ED", // Cùng màu nền
+    // Bỏ border
   },
   headerTitle: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
   headerSub: { fontSize: 13, color: "#64748B", marginTop: 4 },
 
-  // Filters
-  filterSection: { backgroundColor: "white", paddingBottom: 12 },
+  // Filters (Nổi bật trên nền kem)
+  filterSection: { backgroundColor: "#FFF7ED", paddingBottom: 12 },
+
+  // Date Nav (Nút trắng nổi lên)
   dateNav: {
     flexDirection: "row",
     alignItems: "center",
@@ -517,19 +512,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
   },
-  iconButton: { padding: 8, backgroundColor: "#F1F5F9", borderRadius: 8 },
+  iconButton: {
+    padding: 8,
+    backgroundColor: "white", // Nền trắng
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
   dateDisplay: { flexDirection: "row", alignItems: "center", gap: 8 },
   dateText: { fontSize: 16, fontWeight: "700", color: "#0F172A" },
+
+  // Room Chips
   roomFilterList: { paddingHorizontal: 16, gap: 8 },
   roomChip: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 20,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "white", // Nền trắng khi chưa chọn
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
-  roomChipActive: { backgroundColor: "#FFF7ED", borderColor: "#EA580C" },
+  roomChipActive: {
+    backgroundColor: "#FFF7ED", // Hoặc #FFEDD5 để đậm hơn
+    borderColor: "#EA580C",
+  },
   roomChipText: { fontSize: 13, color: "#64748B" },
   roomChipTextActive: { color: "#EA580C", fontWeight: "600" },
 
@@ -538,7 +544,7 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: "center", marginTop: 40, gap: 12 },
   emptyText: { color: "#94A3B8", fontSize: 14 },
 
-  // Card Item
+  // Card Item (Giữ nền trắng)
   card: {
     backgroundColor: "white",
     borderRadius: 12,
@@ -604,25 +610,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   statusTextPending: { fontSize: 11, color: "#B45309", fontWeight: "600" },
-
-  // FAB
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#EA580C",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#EA580C",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    zIndex: 100,
-  },
 
   // Modal
   modalOverlay: {

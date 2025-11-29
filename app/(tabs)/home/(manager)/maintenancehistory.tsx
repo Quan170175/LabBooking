@@ -13,8 +13,8 @@ import { useRouter } from "expo-router";
 import {
   ChevronLeft,
   Calendar,
-  MapPin, // Icon cho Phòng / Địa điểm
-  Monitor, // Icon cho Thiết bị
+  MapPin,
+  Monitor,
   FileText,
   History,
 } from "lucide-react-native";
@@ -48,7 +48,7 @@ export default function MaintenanceHistoryScreen() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 👇 DỮ LIỆU MOCK (Đã cập nhật Location)
+      // 👇 DỮ LIỆU MOCK
       await new Promise((r) => setTimeout(r, 800));
 
       if (activeTab === "room") {
@@ -77,7 +77,7 @@ export default function MaintenanceHistoryScreen() {
           {
             id: "101",
             targetName: "Máy chiếu Sony 4K",
-            location: "Tại: Lab A301", // 🟢 Location của thiết bị
+            location: "Tại: Lab A301",
             startTime: "2025-11-01T09:00:00",
             endTime: "2025-11-01T11:00:00",
             description: "Thay bóng đèn máy chiếu do bị mờ.",
@@ -86,7 +86,7 @@ export default function MaintenanceHistoryScreen() {
           {
             id: "102",
             targetName: "PC Giảng viên (Dell)",
-            location: "Tại: Lab B202", // 🟢 Location của thiết bị
+            location: "Tại: Lab B202",
             startTime: "2025-11-02T08:00:00",
             endTime: "2025-11-02T10:00:00",
             description: "Cài đặt lại Windows và driver mạng.",
@@ -151,7 +151,6 @@ export default function MaintenanceHistoryScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.targetName}>{item.targetName}</Text>
 
-            {/* 🟢 HIỂN THỊ LOCATION CHO CẢ 2 LOẠI */}
             {item.location && (
               <View style={styles.locationRow}>
                 <MapPin size={12} color="#64748B" />
@@ -184,7 +183,7 @@ export default function MaintenanceHistoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER SCREEN */}
+      {/* HEADER ĐÃ SỬA: Cùng màu nền, bỏ border */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -267,22 +266,22 @@ export default function MaintenanceHistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  // 🔥 MÀU NỀN CHÍNH
+  container: { flex: 1, backgroundColor: "#FFF7ED" },
 
-  // Header
+  // 🔥 HEADER MỚI
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
-    backgroundColor: "white",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    backgroundColor: "#FFF7ED", // Cùng màu nền
+    // Bỏ border
   },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
   backButton: { padding: 4 },
 
-  // Tabs
+  // Tabs (Vẫn giữ nền trắng để nổi bật trên nền kem)
   tabsContainer: {
     flexDirection: "row",
     margin: 16,
@@ -309,7 +308,7 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 16, paddingBottom: 40 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  // Card Style
+  // Card Style (Giữ nền trắng)
   card: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -345,7 +344,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 
-  // 🟢 LOCATION STYLES MỚI
   locationRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -354,7 +352,7 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 13,
     color: "#64748B",
-    flex: 1, // Để text tự xuống dòng nếu dài
+    flex: 1,
   },
 
   divider: {

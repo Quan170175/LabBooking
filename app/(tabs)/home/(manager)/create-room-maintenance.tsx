@@ -7,47 +7,30 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
-  TextInput,
-  Platform,
-  ActivityIndicator,
   Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
-import {
-  ChevronLeft,
-  MapPin,
-  Calendar,
-  FileText,
-  Wrench,
-  User,
-  Building2,
-  CheckCircle2, // Icon cho modal thành công
-  History,
-  X,
-} from "lucide-react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { ChevronLeft, CheckCircle2, History } from "lucide-react-native";
 
-// 🟢 1. IMPORT API CLIENT
 import apiClient from "../../../../utils/api";
+import SecurityMessagesModal from "../../../../components/security/SecurityMessagesModal";
 
-// --- TYPES ---
-interface ManagedLab {
-  id: string;
-  labName: string;
-  location: string;
-}
+// 🔥 Component Chung
+import RoomInfoSection from "../../../../components/manager/maintenance/RoomInfoSection";
+import MaintenanceTimeSection from "../../../../components/manager/maintenance/MaintenanceTimeSection";
+import MaintenanceDescriptionSection from "../../../../components/manager/maintenance/MaintenanceDescriptionSection";
+import MaintenanceSubmitButton from "../../../../components/manager/maintenance/MaintenanceSubmitButton";
 
 interface ManagerProfileResponse {
   id: string;
   userName: string;
-  email: string;
-  managedLabs: ManagedLab[];
+  managedLabs: { id: string; labName: string; location: string }[];
 }
 
 export default function CreateMaintenanceScreen() {
   const router = useRouter();
 
-  // --- STATE ---
+  // State
   const [labInfo, setLabInfo] = useState<{
     id: string;
     labName: string;
@@ -58,27 +41,21 @@ export default function CreateMaintenanceScreen() {
   const [isLoadingRoom, setIsLoadingRoom] = useState(true);
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // 🟢 STATE MODAL THÀNH CÔNG
-  const [successModalVisible, setSuccessModalVisible] = useState(false);
-
-  // Date Time State
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date(Date.now() + 3600 * 1000));
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
-  const [mode, setMode] = useState<"date" | "time">("date");
 
-  // --- 2. CALL API LẤY THÔNG TIN ---
+  // Modal State
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [msgModalVisible, setMsgModalVisible] = useState(false);
+
   useEffect(() => {
     const fetchProfile = async () => {
       setIsLoadingRoom(true);
       try {
         const response = await apiClient.get<ManagerProfileResponse>(
-          "/api/Managers/profile"
+          "/api/Managers/lab-details"
         );
         const data = response.data;
-
         if (data.managedLabs && data.managedLabs.length > 0) {
           const myLab = data.managedLabs[0];
           setLabInfo({
@@ -87,15 +64,9 @@ export default function CreateMaintenanceScreen() {
             location: myLab.location,
             managerName: data.userName,
           });
-        } else {
-          Alert.alert(
-            "Thông báo",
-            "Tài khoản chưa được gán quản lý phòng Lab."
-          );
         }
       } catch (error) {
-        console.error("Lỗi lấy thông tin phòng:", error);
-        Alert.alert("Lỗi", "Không thể tải thông tin phòng lab.");
+        console.error("Lỗi:", error);
       } finally {
         setIsLoadingRoom(false);
       }
@@ -103,45 +74,14 @@ export default function CreateMaintenanceScreen() {
     fetchProfile();
   }, []);
 
-  // --- HANDLERS ---
-  const onChangeStart = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === "android") setShowStartPicker(false);
-    if (selectedDate) {
-      setStartDate(selectedDate);
-      if (selectedDate > endDate) {
-        setEndDate(new Date(selectedDate.getTime() + 3600 * 1000));
-      }
-    }
+  const handleSelectMessage = (content: string) => {
+    setDescription(content);
+    setMsgModalVisible(false);
   };
 
-  const onChangeEnd = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === "android") setShowEndPicker(false);
-    if (selectedDate) {
-      setEndDate(selectedDate);
-    }
-  };
-
-  const showMode = (currentMode: "date" | "time", type: "start" | "end") => {
-    setMode(currentMode);
-    if (type === "start") setShowStartPicker(true);
-    else setShowEndPicker(true);
-  };
-
-  const formatDateTime = (date: Date) => {
-    return `${date.getDate()}/${
-      date.getMonth() + 1
-    }/${date.getFullYear()} - ${String(date.getHours()).padStart(
-      2,
-      "0"
-    )}:${String(date.getMinutes()).padStart(2, "0")}`;
-  };
-
-  // --- 3. CALL API TẠO BẢO TRÌ ---
   const handleSubmit = async () => {
     if (!labInfo?.id || !description.trim()) return;
-
     setIsSubmitting(true);
-
     try {
       const payload = {
         labRoomId: labInfo.id,
@@ -149,29 +89,18 @@ export default function CreateMaintenanceScreen() {
         endTime: endDate.toISOString(),
         description: description,
       };
-
       await apiClient.post("/api/RoomMaintainSchedules", payload);
-
-      // 🟢 THÀNH CÔNG -> HIỆN MODAL
       setSuccessModalVisible(true);
-
-      // Reset form sau khi thành công (tuỳ chọn)
       setDescription("");
     } catch (error: any) {
-      console.error("Create Maintain Error:", error);
-      const msg =
-        error.response?.data?.message ||
-        "Không thể tạo lịch bảo trì. Vui lòng thử lại.";
-      Alert.alert("Thất bại", msg);
+      Alert.alert("Thất bại", error.response?.data?.message || "Lỗi hệ thống.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Điều hướng sang trang lịch sử
   const goToHistory = () => {
     setSuccessModalVisible(false);
-    // ⚠️ Đảm bảo đường dẫn này đúng với file maintenancehistory.tsx của bạn
     router.push("/(manager)/maintenancehistory" as any);
   };
 
@@ -195,170 +124,43 @@ export default function CreateMaintenanceScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. THÔNG TIN PHÒNG */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Building2 size={18} color="#EA580C" />
-            <Text style={styles.sectionTitle}>Thông tin phòng</Text>
-          </View>
+        <RoomInfoSection
+          isLoading={isLoadingRoom}
+          labName={labInfo?.labName}
+          location={labInfo?.location}
+          managerName={labInfo?.managerName}
+        />
 
-          {isLoadingRoom ? (
-            <ActivityIndicator
-              size="small"
-              color="#EA580C"
-              style={{ padding: 20 }}
-            />
-          ) : (
-            <View style={styles.roomInfoContainer}>
-              <View style={styles.infoRow}>
-                <View style={styles.iconBox}>
-                  <Building2 size={20} color="#EA580C" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.infoLabel}>Phòng Lab</Text>
-                  <Text style={styles.infoValue}>
-                    {labInfo?.labName || "Chưa có tên"}
-                  </Text>
-                </View>
-              </View>
+        <MaintenanceTimeSection
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={setStartDate}
+          onEndDateChange={setEndDate}
+        />
 
-              <View style={[styles.infoRow, { marginTop: 12 }]}>
-                <View style={styles.iconBox}>
-                  <MapPin size={20} color="#EA580C" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.infoLabel}>Địa điểm</Text>
-                  <Text style={styles.infoValue}>
-                    {labInfo?.location || "Chưa cập nhật"}
-                  </Text>
-                </View>
-              </View>
+        <MaintenanceDescriptionSection
+          description={description}
+          onChangeText={setDescription}
+          onOpenTemplate={() => setMsgModalVisible(true)}
+        />
 
-              <View style={styles.divider} />
-
-              <View style={styles.infoRow}>
-                <View style={[styles.iconBox, { backgroundColor: "#DBEAFE" }]}>
-                  <User size={20} color="#2563EB" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.infoLabel}>Quản lý phụ trách</Text>
-                  <Text style={styles.infoValue}>
-                    {labInfo?.managerName || "N/A"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* 2. THỜI GIAN */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Calendar size={18} color="#EA580C" />
-            <Text style={styles.sectionTitle}>Thời gian bảo trì</Text>
-          </View>
-
-          <View style={styles.dateTimeLabelRow}>
-            <Text style={styles.subLabel}>Bắt đầu:</Text>
-          </View>
-          <View style={styles.dateTimeRow}>
-            <Text style={styles.dateTimeValue}>
-              {formatDateTime(startDate)}
-            </Text>
-            <View style={styles.pickerButtons}>
-              <TouchableOpacity
-                style={styles.pickerBtn}
-                onPress={() => showMode("date", "start")}
-              >
-                <Text style={styles.pickerBtnText}>Ngày</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.pickerBtn}
-                onPress={() => showMode("time", "start")}
-              >
-                <Text style={styles.pickerBtnText}>Giờ</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={[styles.dateTimeLabelRow, { marginTop: 12 }]}>
-            <Text style={styles.subLabel}>Kết thúc:</Text>
-          </View>
-          <View style={styles.dateTimeRow}>
-            <Text style={styles.dateTimeValue}>{formatDateTime(endDate)}</Text>
-            <View style={styles.pickerButtons}>
-              <TouchableOpacity
-                style={styles.pickerBtn}
-                onPress={() => showMode("date", "end")}
-              >
-                <Text style={styles.pickerBtnText}>Ngày</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.pickerBtn}
-                onPress={() => showMode("time", "end")}
-              >
-                <Text style={styles.pickerBtnText}>Giờ</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {showStartPicker && (
-            <DateTimePicker
-              value={startDate}
-              mode={mode}
-              is24Hour={true}
-              display="default"
-              onChange={onChangeStart}
-              minimumDate={new Date()}
-            />
-          )}
-          {showEndPicker && (
-            <DateTimePicker
-              value={endDate}
-              mode={mode}
-              is24Hour={true}
-              display="default"
-              onChange={onChangeEnd}
-              minimumDate={startDate}
-            />
-          )}
-        </View>
-
-        {/* 3. MÔ TẢ */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <FileText size={18} color="#EA580C" />
-            <Text style={styles.sectionTitle}>Nội dung</Text>
-          </View>
-          <TextInput
-            style={styles.textArea}
-            placeholder="Nhập lý do bảo trì..."
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            value={description}
-            onChangeText={setDescription}
-          />
-        </View>
-
-        {/* NÚT SUBMIT */}
-        <TouchableOpacity
-          style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}
+        <MaintenanceSubmitButton
           onPress={handleSubmit}
           disabled={!isValid || isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <>
-              <Wrench size={20} color="white" />
-              <Text style={styles.submitButtonText}>Xác nhận Bảo trì</Text>
-            </>
-          )}
-        </TouchableOpacity>
+          isSubmitting={isSubmitting}
+        />
       </ScrollView>
 
-      {/* 🟢 MODAL THÀNH CÔNG */}
+      {/* --- MODALS --- */}
+
+      {/* 1. Modal Tin nhắn Security (ĐÃ THÊM LẠI) */}
+      <SecurityMessagesModal
+        visible={msgModalVisible}
+        onClose={() => setMsgModalVisible(false)}
+        onSelectMessage={handleSelectMessage}
+      />
+
+      {/* 2. Modal Thành công */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -370,22 +172,17 @@ export default function CreateMaintenanceScreen() {
             <View style={styles.modalIconContainer}>
               <CheckCircle2 size={48} color="#16A34A" />
             </View>
-
             <Text style={styles.modalTitle}>Thành công!</Text>
             <Text style={styles.modalMessage}>
-              Lịch bảo trì phòng đã được tạo thành công trên hệ thống.
+              Lịch bảo trì phòng đã được tạo thành công.
             </Text>
-
             <View style={styles.modalActions}>
-              {/* Nút Hủy / Đóng */}
               <TouchableOpacity
                 style={styles.modalBtnCancel}
                 onPress={() => setSuccessModalVisible(false)}
               >
                 <Text style={styles.modalBtnCancelText}>Đóng</Text>
               </TouchableOpacity>
-
-              {/* Nút Xem Lịch Sử */}
               <TouchableOpacity
                 style={styles.modalBtnPrimary}
                 onPress={goToHistory}
@@ -402,124 +199,19 @@ export default function CreateMaintenanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  container: { flex: 1, backgroundColor: "#FFF7ED" },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
-    backgroundColor: "white",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    backgroundColor: "#FFF7ED",
   },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
   backButton: { padding: 4 },
   content: { padding: 16, paddingBottom: 100 },
 
-  section: {
-    marginBottom: 20,
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
-  sectionTitle: { fontSize: 15, fontWeight: "700", color: "#334155" },
-
-  // --- STYLES INFO PHÒNG ---
-  roomInfoContainer: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 12,
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "#FFF7ED",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  infoLabel: { fontSize: 12, color: "#64748B", marginBottom: 2 },
-  infoValue: { fontSize: 15, fontWeight: "600", color: "#0F172A" },
-  divider: {
-    height: 1,
-    backgroundColor: "#E2E8F0",
-    marginVertical: 12,
-    marginLeft: 52,
-  },
-
-  // --- DATE TIME ---
-  dateTimeLabelRow: { marginBottom: 4 },
-  subLabel: { fontSize: 13, color: "#64748B", fontWeight: "500" },
-  dateTimeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#F8FAFC",
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  dateTimeValue: { fontSize: 15, fontWeight: "600", color: "#0F172A" },
-  pickerButtons: { flexDirection: "row", gap: 8 },
-  pickerBtn: {
-    backgroundColor: "white",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#EA580C",
-  },
-  pickerBtnText: { color: "#EA580C", fontWeight: "600", fontSize: 12 },
-
-  textArea: {
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 15,
-    height: 100,
-    backgroundColor: "#F8FAFC",
-  },
-
-  // --- SUBMIT BUTTON ---
-  submitButton: {
-    backgroundColor: "#EA580C",
-    paddingVertical: 16,
-    borderRadius: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 10,
-    shadowColor: "#EA580C",
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  submitButtonDisabled: {
-    backgroundColor: "#CBD5E1",
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  submitButtonText: { color: "white", fontSize: 16, fontWeight: "700" },
-
-  // --- 🟢 MODAL STYLES ---
+  // Modal Styles (Cần thêm vào nếu chưa có)
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -543,7 +235,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#DCFCE7", // Xanh lá nhạt
+    backgroundColor: "#DCFCE7",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,
@@ -559,13 +251,8 @@ const styles = StyleSheet.create({
     color: "#64748B",
     textAlign: "center",
     marginBottom: 24,
-    lineHeight: 22,
   },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
-    width: "100%",
-  },
+  modalActions: { flexDirection: "row", gap: 12, width: "100%" },
   modalBtnCancel: {
     flex: 1,
     paddingVertical: 12,
@@ -574,11 +261,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  modalBtnCancelText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#475569",
-  },
+  modalBtnCancelText: { fontSize: 15, fontWeight: "600", color: "#475569" },
   modalBtnPrimary: {
     flex: 1.5,
     flexDirection: "row",
@@ -589,9 +272,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  modalBtnPrimaryText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "white",
-  },
+  modalBtnPrimaryText: { fontSize: 15, fontWeight: "600", color: "white" },
 });
