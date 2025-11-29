@@ -22,7 +22,7 @@ import {
   ListTodo,
 } from "lucide-react-native";
 
-// --- 1. ĐỊNH NGHĨA TYPES (Khớp với C#) ---
+// --- 1. ĐỊNH NGHĨA TYPES ---
 export type DoorRequestStatus =
   | "Pending"
   | "Accepted"
@@ -33,10 +33,10 @@ export type DoorRequestType = "Open" | "Close";
 export interface DoorOpeningRequest {
   id: string;
   requestedById: string;
-  requestedByName: string; // Frontend cần tên
+  requestedByName: string;
   labRoomId: string;
-  labRoomName: string; // Frontend cần tên
-  requestTime: string; // DateTime ISO
+  labRoomName: string;
+  requestTime: string;
   status: DoorRequestStatus;
   type: DoorRequestType;
   handledById?: string;
@@ -51,7 +51,7 @@ const MOCK_REQUESTS: DoorOpeningRequest[] = [
     requestedByName: "Nguyễn Văn A",
     labRoomId: "lab1",
     labRoomName: "Lab A101 (IoT)",
-    requestTime: new Date().toISOString(), // Vừa xong
+    requestTime: new Date().toISOString(),
     status: "Pending",
     type: "Open",
   },
@@ -61,8 +61,8 @@ const MOCK_REQUESTS: DoorOpeningRequest[] = [
     requestedByName: "GV. Trần Thị B",
     labRoomId: "lab2",
     labRoomName: "Lab B202 (Network)",
-    requestTime: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15p trước
-    status: "Accepted", // Đã tiếp nhận, đang đi mở
+    requestTime: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    status: "Accepted",
     type: "Close",
     handledById: "sec_me",
   },
@@ -72,7 +72,7 @@ const MOCK_REQUESTS: DoorOpeningRequest[] = [
     requestedByName: "Lê Văn C",
     labRoomId: "lab3",
     labRoomName: "Lab C303 (AI)",
-    requestTime: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1h trước
+    requestTime: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
     status: "Completed",
     type: "Open",
     handledById: "sec_other",
@@ -109,14 +109,14 @@ const getTypeConfig = (type: DoorRequestType) => {
       icon: <DoorOpen size={24} color="#16A34A" />,
       label: "Yêu cầu MỞ cửa",
       textColor: "#166534",
-      bgColor: "#DCFCE7", // Xanh lá nhạt
+      bgColor: "#DCFCE7",
     };
   } else {
     return {
       icon: <DoorClosed size={24} color="#C2410C" />,
       label: "Yêu cầu ĐÓNG cửa",
       textColor: "#9A3412",
-      bgColor: "#FFEDD5", // Cam nhạt
+      bgColor: "#FFEDD5",
     };
   }
 };
@@ -150,7 +150,6 @@ export default function DoorRequestScreen() {
           text: "Đồng ý",
           onPress: () => {
             setLoadingId(id);
-            // Simulate API Call
             setTimeout(() => {
               setRequests((prev) =>
                 prev.map((req) =>
@@ -174,7 +173,7 @@ export default function DoorRequestScreen() {
 
     return (
       <View style={styles.card}>
-        {/* Header Card: Loại yêu cầu (Mở/Đóng) */}
+        {/* Header Card */}
         <View
           style={[styles.cardHeader, { backgroundColor: typeConf.bgColor }]}
         >
@@ -212,7 +211,6 @@ export default function DoorRequestScreen() {
           {/* Action Buttons */}
           {activeTab === "active" && !isLoading && (
             <View style={styles.actionRow}>
-              {/* Logic nút bấm dựa trên trạng thái */}
               {item.status === "Pending" && (
                 <>
                   <TouchableOpacity
@@ -255,20 +253,21 @@ export default function DoorRequestScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* HEADER ĐÃ SỬA */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Hỗ trợ Mở/Đóng cửa</Text>
         <Text style={styles.headerSub}>Quản lý yêu cầu ra vào phòng Lab</Text>
       </View>
 
-      {/* TABS */}
-      <View style={styles.tabs}>
+      {/* TABS (STYLE MỚI) */}
+      <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tabItem, activeTab === "active" && styles.tabActive]}
           onPress={() => setActiveTab("active")}
         >
           <ListTodo
-            size={18}
-            color={activeTab === "active" ? "#EA580C" : "#64748B"}
+            size={16}
+            color={activeTab === "active" ? "white" : "#64748B"}
           />
           <Text
             style={[
@@ -291,8 +290,8 @@ export default function DoorRequestScreen() {
           onPress={() => setActiveTab("history")}
         >
           <History
-            size={18}
-            color={activeTab === "history" ? "#EA580C" : "#64748B"}
+            size={16}
+            color={activeTab === "history" ? "white" : "#64748B"}
           />
           <Text
             style={[
@@ -327,22 +326,28 @@ export default function DoorRequestScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  // 🔥 MÀU NỀN CHÍNH
+  container: { flex: 1, backgroundColor: "#FFF7ED" },
+
+  // 🔥 HEADER MỚI
   header: {
     padding: 16,
-    backgroundColor: "white",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    backgroundColor: "#FFF7ED", // Cùng màu nền
+    // Bỏ border
   },
   headerTitle: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
   headerSub: { fontSize: 13, color: "#64748B", marginTop: 4 },
 
-  // Tabs
-  tabs: {
+  // 🔥 TABS STYLE VIÊN THUỐC (Pill)
+  tabsContainer: {
     flexDirection: "row",
+    marginHorizontal: 16,
+    marginBottom: 8,
     backgroundColor: "white",
-    paddingHorizontal: 16,
-    paddingBottom: 0,
+    padding: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   tabItem: {
     flex: 1,
@@ -350,20 +355,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  tabActive: { borderBottomColor: "#EA580C" },
-  tabText: { fontSize: 14, fontWeight: "600", color: "#64748B" },
-  tabTextActive: { color: "#EA580C" },
+  tabActive: { backgroundColor: "#EA580C" }, // Cam nền khi active
+  tabText: { fontSize: 13, fontWeight: "600", color: "#64748B" },
+  tabTextActive: { color: "white" }, // Chữ trắng khi active
 
   // List
   listContent: { padding: 16, paddingBottom: 100 },
   emptyState: { alignItems: "center", marginTop: 40, gap: 12 },
   emptyText: { color: "#94A3B8", fontSize: 14 },
 
-  // Card
+  // Card (Giữ nền trắng)
   card: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -432,8 +436,8 @@ const styles = StyleSheet.create({
   },
   btnTextReject: { color: "#DC2626", fontWeight: "600", fontSize: 14 },
 
-  btnAccept: { backgroundColor: "#EA580C" }, // Cam FPT
+  btnAccept: { backgroundColor: "#EA580C" },
   btnTextAccept: { color: "white", fontWeight: "600", fontSize: 14 },
 
-  btnComplete: { backgroundColor: "#16A34A" }, // Xanh lá
+  btnComplete: { backgroundColor: "#16A34A" },
 });

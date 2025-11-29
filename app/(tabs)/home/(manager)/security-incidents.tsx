@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle,
-  ChevronRight,
   Clipboard,
   DoorClosed,
   DoorOpen,
@@ -14,23 +13,25 @@ import {
   ShieldAlert,
   User,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
+  TouchableOpacity,
 } from "react-native";
-// (Giả sử bạn sẽ tạo 1 file utils/incidentTypes.ts từ code C#)
-// import { Incident, IncidentSeverity, IncidentType } from "../../utils/incidentTypes";
 
-// 1. ĐỊNH NGHĨA TYPESCRIPT (Dựa trên C#)
-// ===================================
-export type IncidentSeverity = "Low" | "Medium" | "High";
+// Import Component Lọc Mới Tách
+import IncidentFilters, {
+  FilterSeverityType,
+  FilterStatusType,
+  IncidentSeverity,
+} from "../../../../components/security/IncidentFilters";
 
+// 1. TYPE DEFINITIONS
 export type IncidentType =
   | "Fire"
   | "PowerOutage"
@@ -41,21 +42,20 @@ export type IncidentType =
   | "Other";
 
 export type Incident = {
-  id: string; // (Guid)
+  id: string;
   labRoomId: string;
-  labRoom?: { name: string }; // (Dữ liệu join)
+  labRoom?: { name: string };
   reportedById: string;
-  reportedBy?: { name: string }; // (Dữ liệu join)
-  bookingId?: string; // (Nullable Guid)
+  reportedBy?: { name: string };
+  bookingId?: string;
   type: IncidentType;
   description: string;
   isResolved: boolean;
-  createdAt: string; // (DateTime)
+  createdAt: string;
   levelOfImportance: IncidentSeverity;
 };
 
-// 2. DỮ LIỆU GIẢ LẬP (MOCK DATA)
-// ===================================
+// 2. MOCK DATA
 const MOCK_INCIDENTS: Incident[] = [
   {
     id: "INC_101",
@@ -64,11 +64,9 @@ const MOCK_INCIDENTS: Incident[] = [
     levelOfImportance: "High",
     reportedById: "sec_user_1",
     reportedBy: { name: "Security Team A" },
-    bookingId: "booking-guid-123",
     type: "PowerOutage",
-    description:
-      "Hệ thống điện chập chờn, đã ngắt cầu dao tổng của phòng A101 để đảm bảo an toàn. Yêu cầu đóng cửa phòng ngay lập tức.",
-    createdAt: "2025-11-06T14:30:00Z",
+    description: "Hệ thống điện chập chờn, đã ngắt cầu dao tổng.",
+    createdAt: new Date().toISOString(),
     isResolved: false,
   },
   {
@@ -79,9 +77,8 @@ const MOCK_INCIDENTS: Incident[] = [
     reportedById: "sec_user_2",
     reportedBy: { name: "Security Team B" },
     type: "Closed",
-    description:
-      "Phát hiện rò rỉ nước từ điều hòa. Yêu cầu đóng cửa phòng để xử lý, dự kiến 1-2 ngày.",
-    createdAt: "2025-11-06T11:15:00Z",
+    description: "Phát hiện rò rỉ nước từ điều hòa.",
+    createdAt: new Date().toISOString(),
     isResolved: false,
   },
   {
@@ -91,44 +88,38 @@ const MOCK_INCIDENTS: Incident[] = [
     levelOfImportance: "Low",
     reportedById: "sec_user_1",
     reportedBy: { name: "Security Team A" },
-    bookingId: "booking-guid-456",
     type: "EquipmentFailure",
-    description:
-      "Máy in 3D số 2 có khói nhẹ. Đã tắt nguồn. Vẫn có thể dùng các thiết bị khác trong phòng.",
-    createdAt: "2025-11-05T16:00:00Z",
-    isResolved: true, // Đã xử lý
+    description: "Máy in 3D số 2 có khói nhẹ. Đã tắt nguồn.",
+    createdAt: "2023-11-05T16:00:00Z",
+    isResolved: true,
   },
 ];
 
-// 3. CÁC HÀM HỖ TRỢ (HELPERS)
-// ===================================
-
-// Lấy màu và icon dựa trên Mức độ (LevelOfImportance)
+// 3. HELPERS & CARD COMPONENT (Giữ nguyên)
 const getSeverityConfig = (severity: IncidentSeverity) => {
   switch (severity) {
     case "High":
       return {
-        color: "#DC2626", // Đỏ
+        color: "#DC2626",
         icon: <ShieldAlert size={20} color="white" />,
         label: "Rất nghiêm trọng",
       };
     case "Medium":
       return {
-        color: "#D97706", // Vàng
+        color: "#D97706",
         icon: <AlertTriangle size={20} color="white" />,
         label: "Nghiêm trọng",
       };
     case "Low":
     default:
       return {
-        color: "#64748B", // Xám
+        color: "#64748B",
         icon: <Info size={20} color="white" />,
         label: "Cảnh báo",
       };
   }
 };
 
-// Lấy tên và icon dựa trên Loại (IncidentType)
 const getIncidentTypeConfig = (type: IncidentType) => {
   switch (type) {
     case "Fire":
@@ -157,7 +148,6 @@ const getIncidentTypeConfig = (type: IncidentType) => {
   }
 };
 
-// Format thời gian (CreatedAt)
 const formatTimestamp = (isoString: string) => {
   try {
     return new Date(isoString).toLocaleString("vi-VN", {
@@ -172,59 +162,35 @@ const formatTimestamp = (isoString: string) => {
   }
 };
 
-// 4. COMPONENT CARD (Nội bộ)
-// ===================================
 const IncidentCard = ({ incident }: { incident: Incident }) => {
-  const router = useRouter();
   const severityConfig = getSeverityConfig(incident.levelOfImportance);
   const typeConfig = getIncidentTypeConfig(incident.type);
 
-  // (Bạn có thể thêm logic để fetch booking từ ID nếu cần)
-  const onBookingPress = () => {
-    Alert.alert("Booking liên quan", `ID: ${incident.bookingId}`);
-  };
-
   return (
     <View style={styles.card}>
-      {/* Header (Mức độ) */}
       <View
         style={[styles.cardHeader, { backgroundColor: severityConfig.color }]}
       >
         {severityConfig.icon}
         <Text style={styles.cardHeaderText}>{severityConfig.label}</Text>
       </View>
-
-      {/* Thân card */}
       <View style={styles.cardBody}>
         <Text style={styles.roomName}>
           {incident.labRoom?.name || incident.labRoomId}
         </Text>
         <Text style={styles.description}>{incident.description}</Text>
-
-        {/* Chi tiết */}
         <View style={styles.detailsGrid}>
-          {/* Thời gian */}
           <View style={styles.detailItem}>
             <Calendar size={14} color="#64748B" />
             <Text style={styles.detailText}>
               {formatTimestamp(incident.createdAt)}
             </Text>
           </View>
-          {/* Loại */}
           <View style={styles.detailItem}>
             {typeConfig.icon}
             <Text style={styles.detailText}>{typeConfig.label}</Text>
           </View>
-          {/* Người báo cáo */}
-          <View style={styles.detailItem}>
-            <User size={14} color="#64748B" />
-            <Text style={styles.detailText}>
-              {incident.reportedBy?.name || incident.reportedById}
-            </Text>
-          </View>
         </View>
-
-        {/* Trạng thái xử lý (IsResolved) */}
         {incident.isResolved ? (
           <View style={[styles.statusBadge, styles.statusResolved]}>
             <CheckCircle size={14} color="#15803D" />
@@ -240,50 +206,71 @@ const IncidentCard = ({ incident }: { incident: Incident }) => {
             </Text>
           </View>
         )}
-
-        {/* Booking liên quan (nếu có) */}
-        {incident.bookingId && (
-          <TouchableOpacity
-            style={styles.relatedBookingButton}
-            onPress={onBookingPress}
-          >
-            <Text style={styles.relatedBookingText}>
-              Xem Booking liên quan (ID: ...{incident.bookingId.slice(-6)})
-            </Text>
-            <ChevronRight size={16} color="#C2410C" />
-          </TouchableOpacity>
-        )}
       </View>
     </View>
   );
 };
 
-// 5. COMPONENT SCREEN CHÍNH
-// ===================================
+// 4. MAIN SCREEN
 export default function SecurityIncidentsScreen() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Tải dữ liệu (giả lập)
+  // --- FILTER STATES (Vẫn giữ ở đây để lọc data) ---
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [filterSeverity, setFilterSeverity] =
+    useState<FilterSeverityType>("All");
+  const [filterStatus, setFilterStatus] = useState<FilterStatusType>("All");
+
   useEffect(() => {
-    const loadIncidents = async () => {
-      setIsLoading(true);
-      try {
-        // (Trong tương lai, bạn sẽ dùng fetch hoặc AsyncStorage.getItem("securityIncidents"))
-        setIncidents(MOCK_INCIDENTS);
-      } catch (e) {
-        console.error("Failed to load incidents", e);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadIncidents();
+    setTimeout(() => {
+      setIncidents(MOCK_INCIDENTS);
+      setIsLoading(false);
+    }, 500);
   }, []);
+
+  // --- FILTER LOGIC ---
+  const filteredIncidents = useMemo(() => {
+    return incidents.filter((item) => {
+      const itemDate = new Date(item.createdAt);
+      const isSameDate =
+        itemDate.getDate() === selectedDate.getDate() &&
+        itemDate.getMonth() === selectedDate.getMonth() &&
+        itemDate.getFullYear() === selectedDate.getFullYear();
+      if (!isSameDate) return false;
+      if (filterSeverity !== "All" && item.levelOfImportance !== filterSeverity)
+        return false;
+      if (filterStatus === "Resolved" && !item.isResolved) return false;
+      if (filterStatus === "Pending" && item.isResolved) return false;
+      return true;
+    });
+  }, [incidents, selectedDate, filterSeverity, filterStatus]);
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: "Báo cáo Security" }} />
 
+      {/* --- PHẦN CỐ ĐỊNH --- */}
+      <View style={styles.fixedHeaderContainer}>
+        <View style={styles.headerTitleArea}>
+          <Text style={styles.title}>Báo cáo Security</Text>
+          <Text style={styles.subtitle}>
+            Theo dõi các sự cố mới nhất được lọc theo tiêu chí.
+          </Text>
+        </View>
+
+        {/* --- GỌI COMPONENT LỌC (Code gọn hơn rất nhiều) --- */}
+        <IncidentFilters
+          selectedDate={selectedDate}
+          onDateChange={setSelectedDate}
+          filterSeverity={filterSeverity}
+          onSeverityChange={setFilterSeverity}
+          filterStatus={filterStatus}
+          onStatusChange={setFilterStatus}
+        />
+      </View>
+
+      {/* --- DANH SÁCH --- */}
       {isLoading ? (
         <ActivityIndicator
           style={styles.centered}
@@ -292,20 +279,12 @@ export default function SecurityIncidentsScreen() {
         />
       ) : (
         <FlatList
-          data={incidents.sort((a, b) => (a.isResolved ? 1 : -1))} // Ưu tiên chưa xử lý lên đầu
+          data={filteredIncidents.sort((a, b) => (a.isResolved ? 1 : -1))}
           renderItem={({ item }) => <IncidentCard incident={item} />}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          ListHeaderComponent={
-            <View style={styles.header}>
-              <Text style={styles.title}>Báo cáo Security</Text>
-              <Text style={styles.subtitle}>
-                Theo dõi các sự cố mới nhất được báo cáo từ đội an ninh.
-              </Text>
-            </View>
-          }
           ListEmptyComponent={
-            <Text style={styles.emptyText}>Không có báo cáo sự cố nào.</Text>
+            <Text style={styles.emptyText}>Không tìm thấy sự cố nào.</Text>
           }
         />
       )}
@@ -313,23 +292,21 @@ export default function SecurityIncidentsScreen() {
   );
 }
 
-// 6. STYLESHEET
-// ===================================
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
-  listContent: { padding: 16, paddingBottom: 100 },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { marginBottom: 16 },
+  fixedHeaderContainer: { backgroundColor: "#FFF7ED", zIndex: 10 },
+  headerTitleArea: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
   subtitle: { fontSize: 14, color: "#64748B", marginTop: 4 },
+  listContent: { padding: 16, paddingTop: 8, paddingBottom: 100 },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: {
     textAlign: "center",
     color: "#64748B",
     fontSize: 15,
     marginTop: 40,
   },
-
-  // Card Styles
+  // Card styles... (Giữ nguyên như cũ)
   card: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -339,7 +316,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
-    marginBottom: 16,
+    marginBottom: 12,
     overflow: "hidden",
   },
   cardHeader: {
@@ -347,44 +324,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
-  cardHeaderText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  cardBody: {
-    padding: 16,
-  },
+  cardHeaderText: { color: "white", fontSize: 15, fontWeight: "bold" },
+  cardBody: { padding: 16 },
   roomName: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "700",
     color: "#0F172A",
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  description: {
-    fontSize: 14,
-    color: "#475569",
-    lineHeight: 20,
-  },
+  description: { fontSize: 14, color: "#475569", lineHeight: 20 },
   detailsGrid: {
-    marginTop: 16,
+    marginTop: 12,
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
-    paddingTop: 16,
-    gap: 10,
-  },
-  detailItem: {
-    flexDirection: "row",
-    alignItems: "center",
+    paddingTop: 12,
     gap: 8,
   },
-  detailText: {
-    fontSize: 13,
-    color: "#334155",
-  },
-  // Status Badge (IsResolved)
+  detailItem: { flexDirection: "row", alignItems: "center", gap: 8 },
+  detailText: { fontSize: 13, color: "#334155" },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -393,37 +352,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 99,
     alignSelf: "flex-start",
-    marginTop: 16,
+    marginTop: 12,
   },
-  statusBadgeText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  statusResolved: {
-    backgroundColor: "#F0FDF4",
-  },
-  statusResolvedText: {
-    color: "#15803D",
-  },
-  statusPending: {
-    backgroundColor: "#FFFBEB",
-  },
-  statusPendingText: {
-    color: "#B45309",
-  },
-  // Booking Button
-  relatedBookingButton: {
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  relatedBookingText: {
-    fontSize: 14,
-    color: "#C2410C",
-    fontWeight: "600",
-  },
+  statusBadgeText: { fontSize: 12, fontWeight: "600" },
+  statusResolved: { backgroundColor: "#F0FDF4" },
+  statusResolvedText: { color: "#15803D" },
+  statusPending: { backgroundColor: "#FFFBEB" },
+  statusPendingText: { color: "#B45309" },
 });
