@@ -40,7 +40,7 @@ interface EquipmentCategory {
 interface SpecificEquipment {
   id: string;
   equipmentName: string;
-  status: string; // "Maintain" | "Available" | "Broken" | "Other"
+  status: string;
   labRoomName: string;
 }
 
@@ -51,6 +51,12 @@ interface ManagerLabDetailsResponse {
     labName: string;
     location: string;
   }[];
+}
+
+// 🔥 TYPE MỚI CHO ITEM ĐƯỢC CHỌN
+interface SelectedItem {
+  id: string;
+  categoryId: string;
 }
 
 export default function CreateEquipmentMaintenanceScreen() {
@@ -71,10 +77,9 @@ export default function CreateEquipmentMaintenanceScreen() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null
   );
-  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>(
-    []
-  );
 
+  // 🔥 THAY ĐỔI: Lưu cả categoryId để đếm số lượng
+  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [isLoadingRoom, setIsLoadingRoom] = useState(true);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isLoadingSpecific, setIsLoadingSpecific] = useState(false);
@@ -129,7 +134,8 @@ export default function CreateEquipmentMaintenanceScreen() {
     if (selectedCategoryId === categoryId) return;
 
     setSelectedCategoryId(categoryId);
-    setSelectedEquipmentIds([]);
+    // 🔥 QUAN TRỌNG: KHÔNG RESET MẢNG selectedItems Ở ĐÂY NỮA
+
     setSpecificEquipments([]);
     setIsLoadingSpecific(true);
 
@@ -154,66 +160,79 @@ export default function CreateEquipmentMaintenanceScreen() {
     }
   };
 
+  // 🔥 LOGIC CHỌN ĐA DANH MỤC
   const toggleEquipmentSelection = (id: string) => {
-    setSelectedEquipmentIds((prev) => {
-      if (prev.includes(id)) {
-        return prev.filter((item) => item !== id);
+    if (!selectedCategoryId) return;
+
+    setSelectedItems((prev) => {
+      const exists = prev.find((item) => item.id === id);
+      if (exists) {
+        // Nếu đã có -> Xóa
+        return prev.filter((item) => item.id !== id);
       } else {
-        return [...prev, id];
+        // Nếu chưa có -> Thêm vào kèm categoryId hiện tại
+        return [...prev, { id, categoryId: selectedCategoryId }];
       }
     });
   };
 
   // --- SUBMIT ---
+  // --- SUBMIT ---
   const handleSubmit = async () => {
-    if (
-      !roomInfo?.id ||
-      selectedEquipmentIds.length === 0 ||
-      !description.trim()
-    )
+    if (!roomInfo?.id || selectedItems.length === 0 || !description.trim())
       return;
 
     setIsSubmitting(true);
     try {
-      const requests = selectedEquipmentIds.map((eqId) => {
-        const payload = {
-          equipmentId: eqId,
-          labRoomId: roomInfo.id,
-          startTime: startDate.toISOString(),
-          endTime: endDate.toISOString(),
-          description: description.trim(),
-        };
-        return apiClient.post("/api/EquipmentMaintainSchedules", payload);
-      });
+      // 1. Lấy danh sách ID để gửi API
+      const equipmentIdsToSubmit = selectedItems.map((item) => item.id);
 
-      await Promise.all(requests);
+      const payload = {
+        equipmentIds: equipmentIdsToSubmit,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+        description: description.trim(),
+      };
 
-      // Cập nhật UI ngay lập tức
+      // 2. Gọi API tạo lịch bảo trì
+      await apiClient.post("/api/EquipmentMaintainSchedule", payload);
+
+      // --- CẬP NHẬT GIAO DIỆN SAU KHI THÀNH CÔNG ---
+
+      // 3. Loại bỏ các thiết bị vừa chọn khỏi danh sách đang hiển thị bên dưới
       setSpecificEquipments((prevList) =>
-        prevList.filter((eq) => !selectedEquipmentIds.includes(eq.id))
+        prevList.filter((eq) => !equipmentIdsToSubmit.includes(eq.id))
       );
 
-      if (selectedCategoryId) {
-        setCategories((prevCats) =>
-          prevCats.map((cat) =>
-            cat.id === selectedCategoryId
-              ? {
-                  ...cat,
-                  equipmentCount: Math.max(
-                    0,
-                    cat.equipmentCount - selectedEquipmentIds.length
-                  ),
-                }
-              : cat
-          )
-        );
-      }
+      // 4. 🔥 QUAN TRỌNG: Trừ số lượng trên thanh Category (Loại thiết bị)
+      setCategories((prevCats) =>
+        prevCats.map((cat) => {
+          // Đếm xem trong đống đã chọn, có bao nhiêu cái thuộc Category này
+          const countSelectedInThisCat = selectedItems.filter(
+            (item) => item.categoryId === cat.id
+          ).length;
 
+          // Trừ đi số lượng đã chọn
+          const newCount = Math.max(
+            0,
+            cat.equipmentCount - countSelectedInThisCat
+          );
+
+          return {
+            ...cat,
+            equipmentCount: newCount, // Cập nhật số lượng mới
+          };
+        })
+      );
+
+      // 5. Reset lại các lựa chọn và hiện thông báo
+      setSelectedItems([]); // Xóa danh sách đã chọn
       setSuccessModalVisible(true);
       setDescription("");
-      setSelectedEquipmentIds([]);
     } catch (error: any) {
-      const msg = error.response?.data?.message || "Lỗi hệ thống.";
+      console.error(error);
+      const msg =
+        error.response?.data?.message || "Lỗi hệ thống hoặc sai dữ liệu.";
       Alert.alert("Thất bại", msg);
     } finally {
       setIsSubmitting(false);
@@ -251,7 +270,7 @@ export default function CreateEquipmentMaintenanceScreen() {
           managerName={roomInfo?.managerName}
         />
 
-        {/* 2. CATEGORY SELECT (Riêng biệt) */}
+        {/* 2. CATEGORY SELECT */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Layers size={18} color="#EA580C" />
@@ -265,36 +284,54 @@ export default function CreateEquipmentMaintenanceScreen() {
               showsHorizontalScrollIndicator={false}
               style={styles.horizontalScroll}
             >
-              {categories.map((cat) => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.chip,
-                    selectedCategoryId === cat.id && styles.chipActive,
-                  ]}
-                  onPress={() => handleSelectCategory(cat.id)}
-                >
-                  <Text
+              {categories.map((cat) => {
+                // 🔥 TÍNH TOÁN SỐ LƯỢNG ĐÃ CHỌN CỦA CAT NÀY
+                const selectedCountInCat = selectedItems.filter(
+                  (i) => i.categoryId === cat.id
+                ).length;
+                const isSelected = selectedCategoryId === cat.id;
+
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
                     style={[
-                      styles.chipText,
-                      selectedCategoryId === cat.id && styles.chipTextActive,
+                      styles.chip,
+                      isSelected && styles.chipActive,
+                      selectedCountInCat > 0 && styles.chipHasSelection, // Style thêm nếu có item được chọn
                     ]}
+                    onPress={() => handleSelectCategory(cat.id)}
                   >
-                    {cat.name} ({cat.equipmentCount})
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.chipText,
+                        isSelected && styles.chipTextActive,
+                        selectedCountInCat > 0 && {
+                          fontWeight: "700",
+                          color: "#EA580C",
+                        },
+                      ]}
+                    >
+                      {cat.name}
+                      {/* 🔥 HIỂN THỊ: (Đã chọn / Tổng) hoặc (Tổng) */}
+                      {selectedCountInCat > 0
+                        ? ` (${selectedCountInCat}/${cat.equipmentCount})`
+                        : ` (${cat.equipmentCount})`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           )}
         </View>
 
-        {/* 3. SPECIFIC EQUIPMENT SELECT (Riêng biệt) */}
+        {/* 3. SPECIFIC EQUIPMENT SELECT */}
         {selectedCategoryId && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Monitor size={18} color="#EA580C" />
               <Text style={styles.sectionTitle}>
-                Chọn thiết bị ({selectedEquipmentIds.length} đã chọn)
+                {/* 🔥 Đếm tổng tất cả thiết bị đã chọn */}
+                Chọn thiết bị (Tổng: {selectedItems.length})
               </Text>
             </View>
 
@@ -310,7 +347,8 @@ export default function CreateEquipmentMaintenanceScreen() {
             ) : (
               <View style={styles.gridContainer}>
                 {specificEquipments.map((eq) => {
-                  const isSelected = selectedEquipmentIds.includes(eq.id);
+                  // Check xem ID này có trong mảng selectedItems không
+                  const isSelected = selectedItems.some((i) => i.id === eq.id);
 
                   let statusColor = "#64748B";
                   let statusText = eq.status || "Khác";
@@ -333,12 +371,13 @@ export default function CreateEquipmentMaintenanceScreen() {
                       onPress={() => toggleEquipmentSelection(eq.id)}
                     >
                       <View style={styles.gridItemContent}>
-                        <View>
+                        <View style={{ flex: 1, paddingRight: 4 }}>
                           <Text
                             style={[
                               styles.gridItemText,
                               isSelected && styles.gridItemTextActive,
                             ]}
+                            numberOfLines={2}
                           >
                             {eq.equipmentName}
                           </Text>
@@ -382,13 +421,13 @@ export default function CreateEquipmentMaintenanceScreen() {
         {/* 6. SUBMIT BUTTON */}
         <MaintenanceSubmitButton
           onPress={handleSubmit}
-          disabled={isSubmitting || selectedEquipmentIds.length === 0}
+          disabled={isSubmitting || selectedItems.length === 0}
           isSubmitting={isSubmitting}
-          label={`Xác nhận (${selectedEquipmentIds.length})`}
+          label={`Xác nhận (${selectedItems.length})`}
         />
       </ScrollView>
 
-      {/* MODALS (Giữ nguyên) */}
+      {/* MODALS giữ nguyên ... */}
       <SecurityMessagesModal
         visible={msgModalVisible}
         onClose={() => setMsgModalVisible(false)}
@@ -411,7 +450,7 @@ export default function CreateEquipmentMaintenanceScreen() {
             </View>
             <Text style={styles.modalTitle}>Thành công!</Text>
             <Text style={styles.modalMessage}>
-              Đã tạo lịch bảo trì cho {selectedEquipmentIds.length} thiết bị.
+              Đã tạo lịch bảo trì cho {selectedItems.length} thiết bị.
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -475,6 +514,7 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   chipActive: { backgroundColor: "#FFF7ED", borderColor: "#EA580C" },
+  chipHasSelection: { borderColor: "#FB923C", borderWidth: 1.5 }, // Style mới cho category có item đã chọn
   chipText: { fontSize: 14, color: "#334155", fontWeight: "600" },
   chipTextActive: { color: "#EA580C" },
   gridContainer: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
@@ -492,7 +532,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  gridItemText: { fontSize: 14, color: "#334155", fontWeight: "500" },
+  gridItemText: { fontSize: 13, color: "#334155", fontWeight: "500" }, // Giảm size font chút cho vừa
   gridItemTextActive: { color: "#EA580C", fontWeight: "700" },
   emptyState: {
     padding: 20,
@@ -507,7 +547,7 @@ const styles = StyleSheet.create({
   },
   emptyText: { fontSize: 13, color: "#94A3B8", textAlign: "center" },
 
-  // Modal Styles
+  // Modal Styles - (Giữ nguyên như cũ)
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
