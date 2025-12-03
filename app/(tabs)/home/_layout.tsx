@@ -25,6 +25,10 @@ export default function HomeStackLayout() {
         name="resources"
         options={{ header: () => <AppHeader /> }}
       />
+      <Stack.Screen
+        name="doorrequest"
+        options={{ header: () => <AppHeader /> }}
+      />
 
       <Stack.Screen
         name="(manager)/approvals"

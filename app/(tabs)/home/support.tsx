@@ -155,9 +155,6 @@ export default function SupportScreen() {
     <SafeAreaView style={styles.root}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>Quay lại</Text>
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Trung tâm hỗ trợ</Text>
         <View style={{ width: 60 }} />
       </View>
