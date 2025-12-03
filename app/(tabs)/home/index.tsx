@@ -94,6 +94,14 @@ const APP_SECTIONS = [
         icon: LifeBuoy,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
       },
+
+      {
+        to: "/home/doorrequest",
+        title: "Yêu cầu mở cửa",
+        description: "Gửi yêu cầu mở cửa",
+        icon: LifeBuoy,
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
+      },
     ],
   },
   {
