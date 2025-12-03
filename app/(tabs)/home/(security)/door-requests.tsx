@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,222 +6,249 @@ import {
   FlatList,
   TouchableOpacity,
   SafeAreaView,
-  Alert,
   ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from "react-native";
+import { useRouter } from "expo-router";
 import {
   DoorOpen,
-  User,
   Clock,
   CheckCircle2,
-  XCircle,
-  Play,
-  Check,
+  User,
+  Mail,
+  Phone,
   History,
-  ListTodo,
+  XCircle,
+  ListFilter,
 } from "lucide-react-native";
 
-// --- 1. TYPES ---
-export type DoorRequestStatus =
-  | "Pending"
-  | "Accepted"
-  | "Rejected"
-  | "Completed";
+// 🟢 Import API Client
+import apiClient from "../../../../utils/api";
 
-export interface DoorOpeningRequest {
-  id: string;
-  requestedById: string;
-  requestedByName: string;
-  labRoomId: string;
+// --- 1. TYPES ---
+
+interface PendingRequest {
+  requestId: string;
   labRoomName: string;
   requestTime: string;
-  status: DoorRequestStatus;
-  handledById?: string;
-  bookingId?: string;
+  name: string;
+  email: string;
+  phoneNumber: string;
 }
 
-// --- 2. MOCK DATA ---
-const MOCK_REQUESTS: DoorOpeningRequest[] = [
-  {
-    id: "1",
-    requestedById: "stu1",
-    requestedByName: "Nguyễn Văn A",
-    labRoomId: "lab1",
-    labRoomName: "Lab A101 (IoT)",
-    requestTime: new Date().toISOString(),
-    status: "Pending",
-  },
-  {
-    id: "2",
-    requestedById: "lec1",
-    requestedByName: "GV. Trần Thị B",
-    labRoomId: "lab2",
-    labRoomName: "Lab B202 (Network)",
-    requestTime: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-    status: "Accepted",
-    handledById: "sec_me",
-  },
-  {
-    id: "3",
-    requestedById: "stu2",
-    requestedByName: "Lê Văn C",
-    labRoomId: "lab3",
-    labRoomName: "Lab C303 (AI)",
-    requestTime: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-    status: "Completed",
-    handledById: "sec_other",
-  },
-];
+interface HistoryRequest {
+  id: string;
+  labRoomName: string;
+  type: string;
+  status: string;
+  requestTime: string;
+  acceptedTime: string | null;
+  requestedByCode: string;
+  requestedByName: string | null;
+  handledByName: string;
+}
 
-// --- 3. HELPERS ---
 const formatTime = (isoString: string) => {
-  const d = new Date(isoString);
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(
-    2,
-    "0"
-  )} - ${d.getDate()}/${d.getMonth() + 1}`;
-};
-
-const getStatusConfig = (status: DoorRequestStatus) => {
-  switch (status) {
-    case "Pending":
-      return { color: "#F59E0B", label: "Chờ xử lý", bg: "#FEF3C7" };
-    case "Accepted":
-      return { color: "#3B82F6", label: "Đang thực hiện", bg: "#EFF6FF" };
-    case "Completed":
-      return { color: "#10B981", label: "Hoàn thành", bg: "#D1FAE5" };
-    case "Rejected":
-      return { color: "#EF4444", label: "Từ chối", bg: "#FEE2E2" };
-    default:
-      return { color: "#6B7280", label: status, bg: "#F3F4F6" };
+  try {
+    if (!isoString) return "N/A";
+    const date = new Date(isoString);
+    return `${date.getHours()}:${String(date.getMinutes()).padStart(
+      2,
+      "0"
+    )} - ${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+  } catch (e) {
+    return "N/A";
   }
 };
 
-// 🟢 CẤU HÌNH MÀU XANH LÁ CHO TIÊU ĐỀ
-const getTypeConfig = () => {
-  return {
-    icon: <DoorOpen size={24} color="#16A34A" />, // Icon xanh
-    label: "Yêu cầu MỞ cửa",
-    textColor: "#166534", // Chữ xanh đậm
-    bgColor: "#DCFCE7", // Nền xanh nhạt
-  };
+const getHistoryStatusConfig = (status: string) => {
+  switch (status) {
+    case "Pending":
+      return {
+        label: "Chờ xử lý",
+        color: "#F59E0B",
+        bg: "#FEF3C7",
+        icon: <Clock size={12} color="#F59E0B" />,
+      };
+    case "Open":
+    case "Accepted":
+      return {
+        label: "Đã mở cửa",
+        color: "#16A34A",
+        bg: "#DCFCE7",
+        icon: <CheckCircle2 size={12} color="#16A34A" />,
+      };
+    case "Rejected":
+      return {
+        label: "Từ chối",
+        color: "#DC2626",
+        bg: "#FEE2E2",
+        icon: <XCircle size={12} color="#DC2626" />,
+      };
+    default:
+      return {
+        label: status,
+        color: "#64748B",
+        bg: "#F1F5F9",
+        icon: <Clock size={12} color="#64748B" />,
+      };
+  }
 };
 
-export default function DoorRequestScreen() {
-  const [requests, setRequests] = useState<DoorOpeningRequest[]>(MOCK_REQUESTS);
-  const [activeTab, setActiveTab] = useState<"active" | "history">("active");
-  const [loadingId, setLoadingId] = useState<string | null>(null);
+// --- MAIN SCREEN ---
+export default function SecurityDoorRequestScreen() {
+  const router = useRouter();
 
-  const filteredData = useMemo(() => {
-    if (activeTab === "active") {
-      return requests.filter(
-        (r) => r.status === "Pending" || r.status === "Accepted"
-      );
-    } else {
-      return requests.filter(
-        (r) => r.status === "Completed" || r.status === "Rejected"
-      );
+  // --- STATE ---
+  const [activeTab, setActiveTab] = useState<"pending" | "history">("pending");
+  const [pendingList, setPendingList] = useState<PendingRequest[]>([]);
+  const [historyList, setHistoryList] = useState<HistoryRequest[]>([]);
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // --- 2. FETCH DATA ---
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      if (activeTab === "pending") {
+        const res = await apiClient.get("/api/DoorRequests/pending");
+        setPendingList(res.data?.data || res.data || []);
+      } else {
+        const res = await apiClient.get("/api/DoorRequests/history");
+        setHistoryList(res.data?.data || res.data || []);
+      }
+    } catch (error) {
+      console.error("❌ Lỗi tải dữ liệu:", error);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
-  }, [requests, activeTab]);
+  }, [activeTab]);
 
-  const handleUpdateStatus = (id: string, newStatus: DoorRequestStatus) => {
-    Alert.alert(
-      "Xác nhận",
-      `Bạn muốn chuyển trạng thái thành "${newStatus}"?`,
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Đồng ý",
-          onPress: () => {
-            setLoadingId(id);
-            setTimeout(() => {
-              setRequests((prev) =>
-                prev.map((req) =>
-                  req.id === id
-                    ? { ...req, status: newStatus, handledById: "sec_me" }
-                    : req
-                )
-              );
-              setLoadingId(null);
-            }, 500);
-          },
-        },
-      ]
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const onRefresh = () => {
+    setIsRefreshing(true);
+    fetchData();
+  };
+
+  // --- 3. ACTIONS ---
+  const handleAccept = async (id: string) => {
+    setProcessingId(id);
+    try {
+      await apiClient.post(`/api/DoorRequests/accept/${id}`);
+      Alert.alert("Thành công", "Đã mở cửa phòng thành công!");
+      setPendingList((prev) => prev.filter((item) => item.requestId !== id));
+    } catch (error: any) {
+      console.error("❌ Lỗi chấp nhận:", error);
+      Alert.alert("Lỗi", error.response?.data?.message || "Thao tác thất bại.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // --- RENDER ITEMS ---
+  const renderPendingItem = ({ item }: { item: PendingRequest }) => {
+    const isProcessing = processingId === item.requestId;
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.headerLeft}>
+            <DoorOpen size={20} color="#16A34A" />
+            <Text style={styles.roomName}>{item.labRoomName}</Text>
+          </View>
+          <View style={styles.timeBadge}>
+            <Clock size={12} color="#B45309" />
+            <Text style={styles.timeText}>{formatTime(item.requestTime)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.cardBody}>
+          <View style={styles.infoRow}>
+            <User size={14} color="#64748B" />
+            <Text style={styles.infoText}>{item.name}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Mail size={14} color="#64748B" />
+            <Text style={styles.infoText}>{item.email}</Text>
+          </View>
+          {item.phoneNumber ? (
+            <View style={styles.infoRow}>
+              <Phone size={14} color="#64748B" />
+              <Text style={styles.infoText}>{item.phoneNumber}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.cardFooter}>
+          <TouchableOpacity
+            style={styles.acceptButton}
+            onPress={() => handleAccept(item.requestId)}
+            disabled={isProcessing}
+          >
+            {isProcessing ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <>
+                <CheckCircle2 size={18} color="white" />
+                <Text style={styles.acceptButtonText}>Chấp nhận mở cửa</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   };
 
-  const renderItem = ({ item }: { item: DoorOpeningRequest }) => {
-    const statusConf = getStatusConfig(item.status);
-    const typeConf = getTypeConfig(); // 🟢 Lấy config xanh lá
-    const isLoading = loadingId === item.id;
-
+  const renderHistoryItem = ({ item }: { item: HistoryRequest }) => {
+    const statusConfig = getHistoryStatusConfig(item.status);
     return (
       <View style={styles.card}>
-        {/* 🟢 Header Card: Sử dụng màu từ typeConf (Xanh lá) */}
-        <View
-          style={[styles.cardHeader, { backgroundColor: typeConf.bgColor }]}
-        >
-          <View style={styles.typeRow}>
-            {typeConf.icon}
-            <Text style={[styles.typeText, { color: typeConf.textColor }]}>
-              {typeConf.label}
+        <View style={styles.cardHeader}>
+          <View style={styles.headerLeft}>
+            <History size={20} color="#64748B" />
+            <Text style={[styles.roomName, { color: "#334155" }]}>
+              {item.labRoomName}
             </Text>
           </View>
           <View
-            style={[styles.statusBadge, { backgroundColor: statusConf.bg }]}
+            style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}
           >
-            <Text style={[styles.statusText, { color: statusConf.color }]}>
-              {statusConf.label}
+            {statusConfig.icon}
+            <Text style={[styles.statusText, { color: statusConfig.color }]}>
+              {statusConfig.label}
             </Text>
           </View>
         </View>
 
         <View style={styles.cardBody}>
-          <Text style={styles.roomName}>{item.labRoomName}</Text>
           <View style={styles.infoRow}>
             <User size={14} color="#64748B" />
             <Text style={styles.infoText}>
-              Người yêu cầu: {item.requestedByName}
+              Người yêu cầu:{" "}
+              <Text style={{ fontWeight: "600", color: "#0F172A" }}>
+                {item.requestedByCode}
+              </Text>
             </Text>
           </View>
           <View style={styles.infoRow}>
             <Clock size={14} color="#64748B" />
-            <Text style={styles.infoText}>{formatTime(item.requestTime)}</Text>
+            <Text style={styles.infoText}>
+              Yêu cầu: {formatTime(item.requestTime)}
+            </Text>
           </View>
-
-          {activeTab === "active" && !isLoading && (
-            <View style={styles.actionRow}>
-              {item.status === "Pending" && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.button, styles.btnReject]}
-                    onPress={() => handleUpdateStatus(item.id, "Rejected")}
-                  >
-                    <XCircle size={18} color="#DC2626" />
-                    <Text style={styles.btnTextReject}>Từ chối</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.button, styles.btnAccept]}
-                    onPress={() => handleUpdateStatus(item.id, "Accepted")}
-                  >
-                    <Play size={18} color="white" fill="white" />
-                    <Text style={styles.btnTextAccept}>Tiếp nhận</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              {item.status === "Accepted" && (
-                <TouchableOpacity
-                  style={[styles.button, styles.btnComplete]}
-                  onPress={() => handleUpdateStatus(item.id, "Completed")}
-                >
-                  <CheckCircle2 size={18} color="white" />
-                  <Text style={styles.btnTextAccept}>Xác nhận Hoàn thành</Text>
-                </TouchableOpacity>
-              )}
+          {item.acceptedTime && (
+            <View style={styles.infoRow}>
+              <CheckCircle2 size={14} color="#16A34A" />
+              <Text style={styles.infoText}>
+                Đã mở lúc: {formatTime(item.acceptedTime)}
+              </Text>
             </View>
-          )}
-          {isLoading && (
-            <ActivityIndicator style={{ marginTop: 12 }} color="#EA580C" />
           )}
         </View>
       </View>
@@ -229,44 +256,42 @@ export default function DoorRequestScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    // 🟢 Sửa background màu kem
+    <View style={styles.container}>
+      {/* 🟢 Header mới: Tiêu đề + Mô tả, Không nút Back */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Hỗ trợ Mở cửa</Text>
+        <Text style={styles.headerTitle}>Yêu cầu Mở cửa</Text>
         <Text style={styles.headerSub}>Quản lý yêu cầu ra vào phòng Lab</Text>
       </View>
 
-      <View style={styles.tabsContainer}>
+      {/* TABS */}
+      <View style={styles.tabContainer}>
         <TouchableOpacity
-          style={[styles.tabItem, activeTab === "active" && styles.tabActive]}
-          onPress={() => setActiveTab("active")}
+          style={[
+            styles.tabButton,
+            activeTab === "pending" && styles.tabActive,
+          ]}
+          onPress={() => setActiveTab("pending")}
         >
-          <ListTodo
-            size={16}
-            color={activeTab === "active" ? "white" : "#64748B"}
-          />
           <Text
             style={[
               styles.tabText,
-              activeTab === "active" && styles.tabTextActive,
+              activeTab === "pending" && styles.tabTextActive,
             ]}
           >
-            Cần xử lý (
-            {
-              requests.filter(
-                (r) => r.status === "Pending" || r.status === "Accepted"
-              ).length
-            }
-            )
+            Chờ duyệt
           </Text>
+          {pendingList.length > 0 && activeTab !== "pending" && (
+            <View style={styles.badgeDot} />
+          )}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tabItem, activeTab === "history" && styles.tabActive]}
+          style={[
+            styles.tabButton,
+            activeTab === "history" && styles.tabActive,
+          ]}
           onPress={() => setActiveTab("history")}
         >
-          <History
-            size={16}
-            color={activeTab === "history" ? "white" : "#64748B"}
-          />
           <Text
             style={[
               styles.tabText,
@@ -278,122 +303,230 @@ export default function DoorRequestScreen() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={filteredData}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Check size={48} color="#CBD5E1" />
-            <Text style={styles.emptyText}>
-              {activeTab === "active"
-                ? "Không có yêu cầu nào cần xử lý."
-                : "Chưa có lịch sử yêu cầu."}
-            </Text>
-          </View>
-        }
-      />
-    </SafeAreaView>
+      {/* CONTENT LIST */}
+      {isLoading && !isRefreshing ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#EA580C" />
+        </View>
+      ) : (
+        <View style={{ flex: 1 }}>
+          {activeTab === "pending" ? (
+            <FlatList
+              data={pendingList}
+              keyExtractor={(item) => item.requestId}
+              renderItem={renderPendingItem}
+              contentContainerStyle={styles.listContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={onRefresh}
+                  colors={["#EA580C"]}
+                />
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <ListFilter size={48} color="#CBD5E1" />
+                  <Text style={styles.emptyText}>
+                    Không có yêu cầu chờ duyệt.
+                  </Text>
+                </View>
+              }
+            />
+          ) : (
+            <FlatList
+              data={historyList}
+              keyExtractor={(item) => item.id}
+              renderItem={renderHistoryItem}
+              contentContainerStyle={styles.listContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={onRefresh}
+                  colors={["#EA580C"]}
+                />
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <History size={48} color="#CBD5E1" />
+                  <Text style={styles.emptyText}>Chưa có lịch sử.</Text>
+                </View>
+              }
+            />
+          )}
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // 🟢 Update background container
   container: { flex: 1, backgroundColor: "#FFF7ED" },
-  header: { padding: 16, backgroundColor: "#FFF7ED" },
-  headerTitle: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
-  headerSub: { fontSize: 13, color: "#64748B", marginTop: 4 },
-  tabsContainer: {
-    flexDirection: "row",
-    marginHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: "white",
-    padding: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+
+  // 🟢 Update Header Styles giống IncidentHistory
+  header: {
+    padding: 16,
+    backgroundColor: "#FFF7ED",
+    // Bỏ borderBottom nếu muốn liền mạch, hoặc giữ lại tùy ý
   },
-  tabItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 8,
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#0F172A",
   },
-  tabActive: { backgroundColor: "#EA580C" },
-  tabText: { fontSize: 13, fontWeight: "600", color: "#64748B" },
-  tabTextActive: { color: "white" },
-  listContent: { padding: 16, paddingBottom: 100 },
-  emptyState: { alignItems: "center", marginTop: 40, gap: 12 },
-  emptyText: { color: "#94A3B8", fontSize: 14 },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 16,
-    marginBottom: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+  headerSub: {
+    fontSize: 14,
+    color: "#64748B",
+    marginTop: 4,
   },
 
-  // 🟢 Card Header (Sẽ nhận màu từ inline style)
+  // Tabs
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "#FFF7ED", // Cập nhật màu nền Tab cho đồng bộ
+    paddingHorizontal: 16,
+    paddingBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+    position: "relative",
+  },
+  tabActive: {
+    borderBottomColor: "#EA580C",
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  tabTextActive: {
+    color: "#EA580C",
+    fontWeight: "700",
+  },
+  badgeDot: {
+    position: "absolute",
+    top: 10,
+    right: 20,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#EF4444",
+  },
+
+  // List
+  listContent: { padding: 16, paddingBottom: 40 },
+  emptyState: { alignItems: "center", marginTop: 60, gap: 12 },
+  emptyText: { color: "#94A3B8", fontSize: 15 },
+
+  // Card
+  card: {
+    backgroundColor: "white",
+    borderRadius: 16, // Bo góc lớn hơn cho mềm mại
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#F1F5F9", // Viền nhạt hơn
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
+    overflow: "hidden",
+  },
+
+  // Card Header
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 12,
+    backgroundColor: "white", // Để nền trắng cho sạch sẽ
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
   },
-
-  typeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  typeText: { fontWeight: "700", fontSize: 14 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  statusText: { fontSize: 11, fontWeight: "700" },
-  cardBody: { padding: 16 },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
   roomName: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F172A",
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#166534",
+    flex: 1,
+  },
+  timeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FFFBEB",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#FEF3C7",
+  },
+  timeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#B45309",
+  },
+
+  // Status Badge (History)
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusText: { fontSize: 11, fontWeight: "700" },
+
+  // Card Body
+  cardBody: {
+    padding: 16,
+    gap: 8,
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 6,
+    gap: 10,
   },
-  infoText: { color: "#475569", fontSize: 13 },
-  actionRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 16,
-    paddingTop: 16,
+  infoText: {
+    color: "#334155",
+    fontSize: 14,
+    flex: 1,
+  },
+
+  // Card Footer (Pending Only)
+  cardFooter: {
+    padding: 12,
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
+    alignItems: "flex-end",
   },
-  button: {
-    flex: 1,
+  acceptButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    backgroundColor: "#16A34A",
     paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 8,
+    gap: 8,
+    minWidth: 140,
   },
-  btnReject: {
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1,
-    borderColor: "#FECACA",
+  acceptButtonText: {
+    color: "white",
+    fontWeight: "700",
+    fontSize: 14,
   },
-  btnTextReject: { color: "#DC2626", fontWeight: "600", fontSize: 14 },
-  btnAccept: { backgroundColor: "#EA580C" },
-  btnTextAccept: { color: "white", fontWeight: "600", fontSize: 14 },
-  btnComplete: { backgroundColor: "#16A34A" },
 });

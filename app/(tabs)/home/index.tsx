@@ -127,14 +127,14 @@ const APP_SECTIONS = [
         to: "/(tabs)/home/(manager)/create-room-maintenance",
         title: "Bảo trì phòng",
         description: "Đóng phòng để sửa chữa",
-        icon: Wrench, // Nhớ import Wrench từ lucide-react-native
+        icon: Wrench,
         allowedRoles: [ROLES.MANAGER],
       },
       {
         to: "/(tabs)/home/(manager)/create-equipment-maintenance",
         title: "Bảo trì thiết bị",
         description: "Sửa chữa thiết bị hỏng",
-        icon: Monitor, // Nhớ import Monitor từ lucide-react-native
+        icon: Monitor,
         allowedRoles: [ROLES.MANAGER],
       },
       {
