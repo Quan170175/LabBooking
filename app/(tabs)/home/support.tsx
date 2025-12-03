@@ -152,11 +152,12 @@ export default function SupportScreen() {
   }
 
   return (
+    // 🟢 SỬA BACKGROUND MÀU KEM
     <SafeAreaView style={styles.root}>
-      {/* Header */}
+      {/* 🟢 HEADER MỚI ĐỒNG BỘ */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Trung tâm hỗ trợ</Text>
-        <View style={{ width: 60 }} />
+        <Text style={styles.headerSub}>Giải đáp thắc mắc và gửi yêu cầu</Text>
       </View>
 
       <ScrollView
@@ -252,7 +253,7 @@ export default function SupportScreen() {
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* FAB - ĐÃ ĐẨY CAO LÊN TRÁNH BOTNAV */}
+      {/* FAB - ĐẨY CAO TRÁNH BOTNAV */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => setIsFormVisible(true)}
@@ -321,20 +322,17 @@ export default function SupportScreen() {
 }
 
 const styles = StyleSheet.create({
+  // 🟢 Update background
   root: { flex: 1, backgroundColor: "#FFF7ED" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
 
+  // 🟢 Update Header Styles
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 16,
     backgroundColor: "#FFF7ED",
   },
-  backBtn: { padding: 4 },
-  backText: { color: "#64748B", fontSize: 14 },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
+  headerTitle: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
+  headerSub: { fontSize: 14, color: "#64748B", marginTop: 4 },
 
   content: { padding: 16 },
   section: { marginBottom: 24 },
@@ -447,10 +445,10 @@ const styles = StyleSheet.create({
   ticketFooter: { flexDirection: "row", alignItems: "center", gap: 4 },
   ticketDate: { fontSize: 12, color: "#94A3B8" },
 
-  // 🔥 FAB ĐÃ ĐƯỢC KÉO LÊN
+  // FAB - ĐÃ ĐƯỢC KÉO LÊN
   fab: {
     position: "absolute",
-    bottom: 110, // Kéo lên cao để tránh BotNav (thường BotNav ~60-80px)
+    bottom: 110, // Kéo lên cao để tránh BotNav
     right: 16,
     left: 16,
     backgroundColor: "#EA580C",
