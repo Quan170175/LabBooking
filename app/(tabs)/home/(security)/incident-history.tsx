@@ -21,7 +21,6 @@ import {
 } from "lucide-react-native";
 
 // 🟢 Import Component Lọc Chung
-// Lưu ý: Đảm bảo bạn đã update IncidentFilterBar như code trên
 import IncidentFilterBar, {
   FilterOption,
 } from "../../../../components/common/IncidentFilterBar";
@@ -31,6 +30,7 @@ import apiClient from "../../../../utils/api";
 
 // --- 1. TYPES ---
 export type IncidentType = string;
+// Cập nhật Type để phù hợp với hiển thị tiếng Việt nếu API vẫn trả về tiếng Anh
 export type LevelOfImportance = "Low" | "Medium" | "High" | string;
 
 export interface Incident {
@@ -82,16 +82,21 @@ const getTypeConfig = (type: IncidentType) => {
   }
 };
 
-const getImportanceColor = (level: LevelOfImportance) => {
+// 🔥 ĐÃ CẬP NHẬT: Hàm lấy màu và nhãn tiếng Việt
+const getImportanceConfig = (level: LevelOfImportance) => {
+  let label = level;
   switch (level) {
     case "High":
-      return { bg: "#FEE2E2", text: "#DC2626" };
+      label = "Cao";
+      return { label, bg: "#FEE2E2", text: "#DC2626" };
     case "Medium":
-      return { bg: "#FEF9C3", text: "#CA8A04" };
+      label = "Vừa";
+      return { label, bg: "#FEF9C3", text: "#CA8A04" };
     case "Low":
-      return { bg: "#F1F5F9", text: "#475569" };
+      label = "Thấp";
+      return { label, bg: "#F1F5F9", text: "#475569" };
     default:
-      return { bg: "#F1F5F9", text: "#475569" };
+      return { label, bg: "#F1F5F9", text: "#475569" };
   }
 };
 
@@ -110,7 +115,7 @@ export default function IncidentHistoryScreen() {
   // Filter States
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [filterStatus, setFilterStatus] = useState("All");
-  const [filterImportance, setFilterImportance] = useState("All");
+  const [filterImportance, setFilterImportance] = useState("All"); // Vẫn dùng tiếng Anh cho giá trị API
 
   // 🟢 STATE CHO LAB ROOM
   const [labOptions, setLabOptions] = useState<FilterOption[]>([]);
@@ -119,34 +124,24 @@ export default function IncidentHistoryScreen() {
   // 🟢 1. FETCH LAB ROOMS (DEBUG VERSION)
   useEffect(() => {
     const fetchLabs = async () => {
-      // 1. Log Params chuẩn bị gửi
+      // (Giữ nguyên logic fetch Labs)
       const apiParams = {
         PageNumber: 1,
-        PageSize: 10, // Thử số nhỏ an toàn
+        PageSize: 10,
         SearchPhrase: "",
       };
 
       console.log("🚀 [START] Bắt đầu gọi API LabRooms...");
-      console.log("👉 [PARAMS] Đang gửi:", JSON.stringify(apiParams, null, 2));
 
       try {
         const response = await apiClient.get("/api/LabRooms", {
           params: apiParams,
         });
 
-        // 2. Log kết quả trả về nếu thành công (200)
-        console.log("✅ [SUCCESS] Status:", response.status);
-
-        // 3. Xử lý dữ liệu
-        // Dựa vào JSON bạn cung cấp: { statusCode: 200, data: { items: [...] } }
         const labsData = response.data?.items || [];
-
-        console.log(`📊 [INFO] Tìm thấy ${labsData.length} phòng.`);
-
         const options: FilterOption[] = [
           { label: "Tất cả phòng", value: "All" },
           ...labsData.map((lab: any) => ({
-            // Check kỹ xem dùng labName hay name
             label: lab.labName || lab.name || "Phòng " + lab.id,
             value: lab.id,
           })),
@@ -154,31 +149,7 @@ export default function IncidentHistoryScreen() {
 
         setLabOptions(options);
       } catch (error: any) {
-        // 4. LOG LỖI CHI TIẾT (Quan trọng nhất)
-        console.error("❌ [ERROR] Gọi API thất bại!");
-
-        if (error.response) {
-          // Lỗi từ Server trả về (400, 404, 500...)
-          console.error("⚠️ [HTTP STATUS]:", error.response.status);
-          console.error(
-            "⚠️ [ERROR DATA]:",
-            JSON.stringify(error.response.data, null, 2)
-          );
-          console.error(
-            "⚠️ [HEADERS]:",
-            JSON.stringify(error.response.headers, null, 2)
-          );
-        } else if (error.request) {
-          // Không nhận được phản hồi
-          console.error(
-            "⚠️ [NO RESPONSE]: Không nhận được phản hồi từ server."
-          );
-        } else {
-          // Lỗi khi setup request
-          console.error("⚠️ [SETUP ERROR]:", error.message);
-        }
-
-        // Set mặc định để app không crash
+        console.error("❌ [ERROR] Gọi API LabRooms thất bại:", error);
         setLabOptions([{ label: "Tất cả phòng", value: "All" }]);
       }
     };
@@ -209,7 +180,7 @@ export default function IncidentHistoryScreen() {
 
       // 🟢 Thêm Filter LabId
       if (selectedLabId !== "All") {
-        params.LabRoomId = selectedLabId; // Tên param tuỳ thuộc API Incidents (LabRoomId hoặc LabId)
+        params.LabRoomId = selectedLabId;
       }
 
       console.log("🚀 [History API Request]", params);
@@ -248,7 +219,8 @@ export default function IncidentHistoryScreen() {
   // --- RENDER ITEM ---
   const renderItem = ({ item }: { item: Incident }) => {
     const typeConf = getTypeConfig(item.type);
-    const impConf = getImportanceColor(item.importanceLevel);
+    // 🔥 SỬ DỤNG HÀM MỚI ĐÃ CHUYỂN SANG TIẾNG VIỆT
+    const impConf = getImportanceConfig(item.importanceLevel);
 
     return (
       <View style={styles.card}>
@@ -257,9 +229,10 @@ export default function IncidentHistoryScreen() {
             {typeConf.icon}
             <Text style={styles.typeText}>{typeConf.label}</Text>
           </View>
+          {/* 🔥 HIỂN THỊ LABEL TIẾNG VIỆT TỪ impConf.label */}
           <View style={[styles.impBadge, { backgroundColor: impConf.bg }]}>
             <Text style={[styles.impText, { color: impConf.text }]}>
-              {item.importanceLevel}
+              {impConf.label}
             </Text>
           </View>
         </View>

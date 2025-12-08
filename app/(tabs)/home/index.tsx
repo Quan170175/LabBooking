@@ -73,7 +73,7 @@ const APP_SECTIONS = [
         title: "Thời khóa biểu",
         description: "Lịch toàn trường",
         icon: CalendarDays,
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
       },
     ],
   },
@@ -101,7 +101,7 @@ const APP_SECTIONS = [
         title: "Yêu cầu mở cửa",
         description: "Gửi yêu cầu mở cửa",
         icon: DoorOpen, // 🟢 Đã đổi icon thành Cửa mở
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
       },
     ],
   },

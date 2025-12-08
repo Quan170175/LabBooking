@@ -15,6 +15,7 @@ import { Path, Svg } from "react-native-svg";
 import BookingButton from "../../components/booking/BookingButton";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
 import BookingProgress from "../../components/booking/BookingProgress";
+import SlotTimeInfo from "../../components/home/SlotTimeInfo";
 
 import apiClient from "@/utils/api";
 
@@ -624,7 +625,6 @@ export default function BookSlots() {
         title={roomDetails.labName}
         subtitle={`${roomDetails.location} - ${roomDetails.maximumLimit} chỗ`}
       />
-
       <View style={styles.calendarNav}>
         <TouchableOpacity onPress={handlePrevWeek} style={styles.navButton}>
           <ChevronLeft size={20} color="#EA580C" />
@@ -634,7 +634,6 @@ export default function BookSlots() {
           <ChevronRight size={20} color="#EA580C" />
         </TouchableOpacity>
       </View>
-
       <View style={styles.calendarContainer}>
         <View style={styles.weekdaysHeader}>
           {weekDates.map((date, idx) => (
@@ -728,7 +727,6 @@ export default function BookSlots() {
           ))}
         </View>
       </View>
-
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendBox, styles.availableSlot]} />
@@ -753,7 +751,6 @@ export default function BookSlots() {
           </View>
         )}
       </View>
-
       {isRecurring && (
         <View style={styles.weekSelectorContainer}>
           <Text style={styles.weekSelectorLabel}>Lặp lại:</Text>
@@ -785,7 +782,6 @@ export default function BookSlots() {
           </View>
         </View>
       )}
-
       <View style={styles.footer}>
         <Text style={styles.selectionText}>
           {isRecurring
@@ -797,6 +793,9 @@ export default function BookSlots() {
           onPress={goToDevices}
           disabled={selectedSlots.length === 0}
         />
+      </View>
+      <View style={styles.infoSection}>
+        <SlotTimeInfo />
       </View>
     </ScrollView>
   );
@@ -941,4 +940,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   selectionText: { fontSize: 14, color: "#64748B", flex: 1 },
+  infoSection: {
+    marginTop: 12,
+    // Không cần style nền/border ở đây nữa vì component con đã tự lo
+  },
 });

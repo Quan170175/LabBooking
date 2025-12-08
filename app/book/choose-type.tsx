@@ -1,24 +1,61 @@
 import { useRouter } from "expo-router";
-// --- THAY ĐỔI: Thêm icon History ---
 import {
   Book,
   Briefcase,
   CalendarDays,
-  History, // Icon mới
+  History,
   Star,
 } from "lucide-react-native";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
 import BookingCard from "../../components/booking/BookingCard";
+// 🟢 1. Import API Client
+import apiClient from "../../utils/api";
+
+// Định nghĩa interface cho User Profile
+interface UserProfile {
+  id: string;
+  email: string;
+  userName: string;
+  roles: string[];
+}
 
 export default function BookChooseType() {
   const router = useRouter();
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // 🟢 2. Lấy thông tin User khi component được mount
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const response = await apiClient.get<UserProfile>("/api/Auth/profile");
+        if (response.data && response.data.roles) {
+          if (response.data.roles.includes("Lecturer")) {
+            setUserRole("Lecturer");
+          } else if (response.data.roles.includes("Student")) {
+            setUserRole("Student");
+          } else {
+            setUserRole("Other");
+          }
+        }
+      } catch (error) {
+        console.error("Lỗi khi lấy thông tin người dùng:", error);
+        // Có thể set default role hoặc xử lý lỗi tùy ý
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
 
   const handleSelectType = (
     type: "teaching_flexible" | "teaching_recurring" | "project" | "priority"
@@ -29,45 +66,62 @@ export default function BookChooseType() {
     });
   };
 
-  // --- THAY ĐỔI: Hàm mới để điều hướng đến trang thay đổi ---
   const handleChangeBooking = () => {
     router.push("/book/select-booking-to-change" as any);
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.overlay, { justifyContent: "center" }]}>
+        <ActivityIndicator size="large" color="#ffffff" />
+      </View>
+    );
+  }
+
+  // 🟢 3. Biến kiểm tra xem có phải là Lecturer không
+  const isLecturer = userRole === "Lecturer";
 
   return (
     <Pressable onPress={() => router.back()} style={styles.overlay}>
       <Pressable style={styles.container}>
         <Text style={styles.headerTitle}>Chọn loại đặt phòng</Text>
 
-        {/* ... (3 card cũ: flexible, recurring, project giữ nguyên) ... */}
-        <BookingCard
-          layout="option"
-          onPress={() => handleSelectType("teaching_flexible")}
-        >
-          <View style={styles.iconWrapper}>
-            <Book size={24} color="#C2410C" />
-          </View>
-          <View>
-            <Text style={styles.optionTitle}>Đặt lịch dạy học</Text>
-            <Text style={styles.optionDesc}>Chọn linh hoạt tối đa 20 slot</Text>
-          </View>
-        </BookingCard>
+        {/* 🟢 4. Chỉ hiển thị nếu là Lecturer */}
+        {isLecturer && (
+          <>
+            <BookingCard
+              layout="option"
+              onPress={() => handleSelectType("teaching_flexible")}
+            >
+              <View style={styles.iconWrapper}>
+                <Book size={24} color="#C2410C" />
+              </View>
+              <View>
+                <Text style={styles.optionTitle}>Đặt lịch dạy học</Text>
+                <Text style={styles.optionDesc}>
+                  Chọn linh hoạt tối đa 20 slot
+                </Text>
+              </View>
+            </BookingCard>
 
-        <BookingCard
-          layout="option"
-          onPress={() => handleSelectType("teaching_recurring")}
-        >
-          <View style={styles.iconWrapper}>
-            <CalendarDays size={24} color="#C2410C" />
-          </View>
-          <View>
-            <Text style={styles.optionTitle}>Đặt lịch dạy học định kỳ</Text>
-            <Text style={styles.optionDesc}>
-              Chọn lặp lại theo tuần (tối đa 20 slot)
-            </Text>
-          </View>
-        </BookingCard>
+            <BookingCard
+              layout="option"
+              onPress={() => handleSelectType("teaching_recurring")}
+            >
+              <View style={styles.iconWrapper}>
+                <CalendarDays size={24} color="#C2410C" />
+              </View>
+              <View>
+                <Text style={styles.optionTitle}>Đặt lịch dạy học định kỳ</Text>
+                <Text style={styles.optionDesc}>
+                  Chọn lặp lại theo tuần (tối đa 20 slot)
+                </Text>
+              </View>
+            </BookingCard>
+          </>
+        )}
 
+        {/* Các mục hiển thị cho cả Student và Lecturer */}
         <BookingCard
           layout="option"
           onPress={() => handleSelectType("project")}
@@ -83,6 +137,7 @@ export default function BookChooseType() {
           </View>
         </BookingCard>
 
+        {/* Có thể bạn muốn ẩn mục này với Student hoặc hiện tùy logic nghiệp vụ */}
         <BookingCard
           layout="option"
           onPress={() => handleSelectType("priority")}
@@ -98,7 +153,6 @@ export default function BookChooseType() {
           </View>
         </BookingCard>
 
-        {/* --- THAY ĐỔI: Card MỚI "Thay đổi lịch đã đặt" --- */}
         <BookingCard layout="option" onPress={handleChangeBooking}>
           <View style={styles.iconWrapper}>
             <History size={24} color="#C2410C" />
@@ -123,7 +177,6 @@ export default function BookChooseType() {
 }
 
 const styles = StyleSheet.create({
-  // ... (styles giữ nguyên) ...
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",

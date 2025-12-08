@@ -1,3 +1,5 @@
+// CreateIncidentScreen.tsx
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -11,7 +13,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -30,6 +31,7 @@ import {
 } from "lucide-react-native";
 
 import apiClient from "../../../../utils/api";
+import SuccessIncidentModal from "../../../../components/common/SuccessModal";
 
 // --- TYPES ---
 interface Equipment {
@@ -52,6 +54,7 @@ interface PagedResponse<T> {
   itemsTo: number;
 }
 
+// --- CONFIG ---
 const INCIDENT_TYPES = [
   { id: "Fire", label: "Cháy nổ", icon: <Flame size={18} color="#DC2626" /> },
   {
@@ -86,8 +89,25 @@ const INCIDENT_TYPES = [
   },
 ];
 
-const IMPORTANCE_LEVELS = ["Low", "Medium", "High"];
+// Giá trị hiển thị tiếng Việt
+const IMPORTANCE_LEVELS = ["Thấp", "Vừa", "Cao"];
 
+// 🔥 HÀM MỚI: CHUYỂN ĐỔI TIẾNG VIỆT SANG GIÁ TRỊ API MONG MUỐN
+const mapImportanceToApi = (level: string): string => {
+  switch (level) {
+    case "Cao":
+      return "High";
+    case "Vừa":
+      return "Medium";
+    case "Thấp":
+      return "Low";
+    default:
+      // Giá trị mặc định an toàn nếu có lỗi
+      return "Low";
+  }
+};
+
+// --- MAIN COMPONENT ---
 export default function CreateIncidentScreen() {
   const router = useRouter();
 
@@ -97,15 +117,13 @@ export default function CreateIncidentScreen() {
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string>("Other");
-  const [importance, setImportance] = useState<string>("Low");
+  const [importance, setImportance] = useState<string>("Thấp"); // Giá trị hiển thị tiếng Việt
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
 
   // STATE CHO THIẾT BỊ
   const [equipments, setEquipments] = useState<Equipment[]>([]);
-
-  // 🟢 THAY ĐỔI 1: State lưu mảng ID thay vì 1 chuỗi ID
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>(
     []
   );
@@ -115,14 +133,10 @@ export default function CreateIncidentScreen() {
     const fetchRooms = async () => {
       setIsLoadingRooms(true);
       try {
-        console.log("🚀 [REQUEST] Đang gọi API lấy phòng...");
         const response = await apiClient.get<PagedResponse<Room>>(
           "/api/LabRooms",
           {
-            params: {
-              PageNumber: 1,
-              PageSize: 10,
-            },
+            params: { PageNumber: 1, PageSize: 10 },
           }
         );
 
@@ -153,7 +167,7 @@ export default function CreateIncidentScreen() {
       } else {
         setEquipments([]);
       }
-      // 🟢 Reset danh sách chọn khi đổi phòng
+      // Reset danh sách chọn khi đổi phòng
       setSelectedEquipmentIds([]);
     } else {
       setEquipments([]);
@@ -161,14 +175,12 @@ export default function CreateIncidentScreen() {
     }
   }, [selectedRoomId, rooms]);
 
-  // 🟢 HÀM TOGGLE: Thêm/Bớt thiết bị khỏi mảng
+  // HÀM TOGGLE: Thêm/Bớt thiết bị khỏi mảng
   const toggleEquipment = (id: string) => {
     setSelectedEquipmentIds((prev) => {
       if (prev.includes(id)) {
-        // Nếu đã có -> Bỏ ra
         return prev.filter((item) => item !== id);
       } else {
-        // Nếu chưa có -> Thêm vào
         return [...prev, id];
       }
     });
@@ -178,17 +190,18 @@ export default function CreateIncidentScreen() {
   const isValid =
     selectedRoomId !== null &&
     description.trim().length > 0 &&
-    // Nếu là lỗi thiết bị thì mảng phải có ít nhất 1 phần tử
     (selectedType !== "EquipmentFailure" || selectedEquipmentIds.length > 0);
 
-  // --- SUBMIT ---
   // --- SUBMIT ---
   const handleSubmit = async () => {
     if (!isValid) return;
     setIsSubmitting(true);
 
+    // 🔥 CHUYỂN ĐỔI GIÁ TRỊ TIẾNG VIỆT SANG TIẾNG ANH CHO API
+    const apiImportanceLevel = mapImportanceToApi(importance);
+
     try {
-      // 🟢 LOGIC GỬI MỚI: Xử lý việc API chỉ nhận 1 ID nhưng UI chọn nhiều
+      // LOGIC GỬI MỚI: Xử lý việc API chỉ nhận 1 ID nhưng UI chọn nhiều
       if (
         selectedType === "EquipmentFailure" &&
         selectedEquipmentIds.length > 0
@@ -198,20 +211,20 @@ export default function CreateIncidentScreen() {
           return apiClient.post("/api/Incidents", {
             labRoomId: selectedRoomId,
             type: selectedType,
-            importanceLevel: importance,
+            importanceLevel: apiImportanceLevel, // 🔥 DÙNG GIÁ TRỊ ĐÃ CHUYỂN ĐỔI
             description: description,
-            equipmentId: eqId, // Gửi đúng trường API yêu cầu
+            equipmentId: eqId,
           });
         });
 
-        console.log(`Đang gửi ${requests.length} báo cáo...`);
+        console.log(`Đang gửi ${requests.length} báo cáo lỗi thiết bị...`);
         await Promise.all(requests);
       } else {
         // Các loại lỗi khác (Cháy, Nổ...) -> Gửi 1 lần
         const payload = {
           labRoomId: selectedRoomId,
           type: selectedType,
-          importanceLevel: importance,
+          importanceLevel: apiImportanceLevel, // 🔥 DÙNG GIÁ TRỊ ĐÃ CHUYỂN ĐỔI
           description: description,
           equipmentId: null,
         };
@@ -225,21 +238,26 @@ export default function CreateIncidentScreen() {
     } catch (error: any) {
       console.error("❌ Lỗi gửi API:", error);
 
-      // --- 🟢 BẮT LỖI CHI TIẾT (THEO YÊU CẦU) ---
+      // 🔥 LOGIC BẮT LỖI TỐI ƯU (Bao gồm bắt data.message và errors)
       let errorMsg = "Có lỗi xảy ra khi gửi báo cáo.";
+      const responseData = error.response?.data;
+      const status = error.response?.status;
 
-      if (error.response && error.response.data) {
-        // Ưu tiên 1: Lấy message trực tiếp từ backend trả về
-        if (error.response.data.message) {
-          errorMsg = error.response.data.message;
+      console.log(`[HTTP Status]: ${status}`);
+      console.log("[Response Data]:", responseData);
+
+      if (responseData) {
+        // Ưu tiên 1: Lấy message trực tiếp từ backend (Thường có trong lỗi 400/500)
+        if (typeof responseData === "object" && responseData.message) {
+          errorMsg = responseData.message;
         }
-        // Ưu tiên 2: Nếu là lỗi Validation của .NET (nằm trong errors)
-        else if (error.response.data.errors) {
-          // Lấy lỗi đầu tiên trong object errors
-          const errorData = error.response.data.errors;
+        // Ưu tiên 2: Nếu là lỗi Validation của .NET (nằm trong trường 'errors')
+        // Đây là trường hợp mà Response Data bạn vừa gửi đã xảy ra (Lỗi validation 400)
+        else if (status === 400 && responseData.errors) {
+          const errorData = responseData.errors;
           const firstKey = Object.keys(errorData)[0];
           if (firstKey && errorData[firstKey]) {
-            // Ví dụ: "equipmentId: The field equipmentId is invalid."
+            // Lấy lỗi đầu tiên trong object errors
             errorMsg = `${firstKey}: ${
               Array.isArray(errorData[firstKey])
                 ? errorData[firstKey][0]
@@ -248,10 +266,12 @@ export default function CreateIncidentScreen() {
           }
         }
         // Ưu tiên 3: Nếu data trả về là string
-        else if (typeof error.response.data === "string") {
-          errorMsg = error.response.data;
+        else if (typeof responseData === "string") {
+          errorMsg = responseData;
         }
-      } else if (error.message) {
+      }
+      // Ưu tiên cuối cùng: Lấy message từ object error (ví dụ: Network Error)
+      else if (error.message) {
         errorMsg = error.message;
       }
 
@@ -261,8 +281,22 @@ export default function CreateIncidentScreen() {
     }
   };
 
+  // 🟢 HÀM MỚI: Xử lý khi bấm nút "Xem lịch sử"
+  const handleViewHistory = () => {
+    setIsSuccessModalVisible(false);
+    // Giả sử đường dẫn đến trang lịch sử là "/incident-history"
+    router.replace("/(tabs)/home/(security)/incident-history");
+  };
+
+  // 🟢 HÀM CŨ ĐÃ SỬA: Chỉ đóng modal, reset form và trở về trang trước
   const handleSuccessModalClose = () => {
     setIsSuccessModalVisible(false);
+    // Xóa form và trở về trang trước
+    setSelectedRoomId(null);
+    setSelectedType("Other");
+    setImportance("Thấp");
+    setDescription("");
+    setSelectedEquipmentIds([]);
     router.back();
   };
 
@@ -388,16 +422,11 @@ export default function CreateIncidentScreen() {
                   style={styles.horizontalScroll}
                 >
                   {equipments.map((eq) => {
-                    // 🟢 Kiểm tra xem ID có trong mảng đã chọn không
                     const isSelected = selectedEquipmentIds.includes(eq.id);
                     return (
                       <TouchableOpacity
                         key={eq.id}
-                        style={[
-                          styles.chip,
-                          isSelected && styles.chipActive, // Active nếu nằm trong mảng
-                        ]}
-                        // 🟢 Gọi hàm toggle thay vì set trực tiếp
+                        style={[styles.chip, isSelected && styles.chipActive]}
                         onPress={() => toggleEquipment(eq.id)}
                       >
                         <Text
@@ -408,7 +437,6 @@ export default function CreateIncidentScreen() {
                         >
                           {eq.equipmentName}
                         </Text>
-                        {/* Thêm icon check nhỏ nếu được chọn */}
                         {isSelected && (
                           <CheckCircle2
                             size={14}
@@ -433,8 +461,8 @@ export default function CreateIncidentScreen() {
             <View style={styles.levelContainer}>
               {IMPORTANCE_LEVELS.map((level) => {
                 let color = "#475569";
-                if (level === "High") color = "#DC2626";
-                if (level === "Medium") color = "#D97706";
+                if (level === "Cao") color = "#DC2626";
+                if (level === "Vừa") color = "#D97706";
                 const isActive = importance === level;
                 return (
                   <TouchableOpacity
@@ -518,30 +546,12 @@ export default function CreateIncidentScreen() {
           </TouchableOpacity>
         </ScrollView>
 
-        {/* MODAL THÀNH CÔNG */}
-        <Modal
-          animationType="fade"
-          transparent={true}
+        {/* 🟢 MODAL COMPONENT RIÊNG */}
+        <SuccessIncidentModal
           visible={isSuccessModalVisible}
-          onRequestClose={handleSuccessModalClose}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <View style={styles.modalIconWrapper}>
-                <Check size={32} color="#16A34A" strokeWidth={3} />
-              </View>
-              <Text style={styles.modalTitle}>Thành công!</Text>
-              <Text style={styles.modalMessage}>
-                Báo cáo sự cố đã được gửi.
-              </Text>
-              <View style={styles.modalButtonContainer}>
-                <TouchableOpacity onPress={handleSuccessModalClose}>
-                  <Text style={styles.modalButtonText}>OK</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+          onClose={handleSuccessModalClose}
+          onViewHistory={handleViewHistory}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -591,7 +601,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    flexDirection: "row", // Để icon check nằm ngang text
+    flexDirection: "row",
     alignItems: "center",
   },
   chipActive: { backgroundColor: "#FFF7ED", borderColor: "#EA580C" },
@@ -678,55 +688,4 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   submitButtonText: { color: "white", fontSize: 16, fontWeight: "700" },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContainer: {
-    backgroundColor: "white",
-    padding: 24,
-    borderRadius: 16,
-    width: "80%",
-    alignItems: "center",
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  modalIconWrapper: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#DCFCE7",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#16A34A",
-    marginBottom: 8,
-  },
-  modalMessage: {
-    fontSize: 14,
-    color: "#4B5563",
-    textAlign: "center",
-    marginBottom: 24,
-  },
-  modalButtonContainer: {
-    width: "100%",
-    alignItems: "flex-end",
-  },
-  modalButtonText: {
-    color: "#16A34A",
-    fontSize: 16,
-    fontWeight: "600",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
 });

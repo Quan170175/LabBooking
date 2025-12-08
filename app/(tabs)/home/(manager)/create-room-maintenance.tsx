@@ -1,3 +1,5 @@
+// CreateMaintenanceScreen.tsx (Đã được chỉnh sửa)
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -7,13 +9,16 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
-  Modal,
+  // 🔥 Đã xóa import Modal
 } from "react-native";
 import { useRouter } from "expo-router";
-import { ChevronLeft, CheckCircle2, History } from "lucide-react-native";
+import { ChevronLeft } from "lucide-react-native"; // CheckCircle2 và History không cần thiết nữa
 
 import apiClient from "../../../../utils/api";
 import SecurityMessagesModal from "../../../../components/security/SecurityMessagesModal";
+
+// 🔥 IMPORT MODAL CHUNG MỚI
+import SuccessMaintenanceModal from "../../../../components/manager/maintenance/SuccessMaintenanceModal"; // Thay đổi đường dẫn nếu cần
 
 // 🔥 Component Chung
 import RoomInfoSection from "../../../../components/manager/maintenance/RoomInfoSection";
@@ -101,7 +106,11 @@ export default function CreateMaintenanceScreen() {
 
   const goToHistory = () => {
     setSuccessModalVisible(false);
-    router.push("/(manager)/maintenancehistory" as any);
+    router.push("/(tabs)/home/(manager)/maintenancehistory");
+  };
+
+  const handleSuccessClose = () => {
+    setSuccessModalVisible(false);
   };
 
   const isValid = labInfo?.id && description.trim().length > 0;
@@ -153,52 +162,29 @@ export default function CreateMaintenanceScreen() {
 
       {/* --- MODALS --- */}
 
-      {/* 1. Modal Tin nhắn Security (ĐÃ THÊM LẠI) */}
+      {/* 1. Modal Tin nhắn Security (Giữ nguyên) */}
       <SecurityMessagesModal
         visible={msgModalVisible}
         onClose={() => setMsgModalVisible(false)}
         onSelectMessage={handleSelectMessage}
       />
 
-      {/* 2. Modal Thành công */}
-      <Modal
-        animationType="fade"
-        transparent={true}
+      {/* 2. 🔥 Modal Thành công MỚI */}
+      <SuccessMaintenanceModal
         visible={successModalVisible}
-        onRequestClose={() => setSuccessModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalIconContainer}>
-              <CheckCircle2 size={48} color="#16A34A" />
-            </View>
-            <Text style={styles.modalTitle}>Thành công!</Text>
-            <Text style={styles.modalMessage}>
-              Lịch bảo trì phòng đã được tạo thành công.
-            </Text>
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalBtnCancel}
-                onPress={() => setSuccessModalVisible(false)}
-              >
-                <Text style={styles.modalBtnCancelText}>Đóng</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalBtnPrimary}
-                onPress={goToHistory}
-              >
-                <History size={18} color="white" />
-                <Text style={styles.modalBtnPrimaryText}>Xem Lịch sử</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={handleSuccessClose}
+        onViewHistory={goToHistory}
+        // Thông báo cố định cho Bảo trì Phòng
+        message={`Lịch bảo trì phòng ${
+          labInfo?.labName || ""
+        } đã được tạo thành công.`}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  // 🔥 Giữ lại toàn bộ styles (trừ Modal styles đã bị xóa/chuyển qua file mới)
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   header: {
     flexDirection: "row",
@@ -211,7 +197,7 @@ const styles = StyleSheet.create({
   backButton: { padding: 4 },
   content: { padding: 16, paddingBottom: 100 },
 
-  // Modal Styles (Cần thêm vào nếu chưa có)
+  // 🔥 Xóa toàn bộ Modal Styles cũ vì đã chuyển qua SuccessMaintenanceModal.tsx
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
