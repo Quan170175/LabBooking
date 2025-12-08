@@ -8,22 +8,21 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
-  Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
   ChevronLeft,
   Monitor,
   AlertCircle,
-  CheckCircle2,
-  History,
   Layers,
+  CheckCircle2,
 } from "lucide-react-native";
 
 import apiClient from "../../../../utils/api";
 import SecurityMessagesModal from "../../../../components/security/SecurityMessagesModal";
+import SuccessMaintenanceModal from "../../../../components/manager/maintenance/SuccessMaintenanceModal";
 
-// 🔥 IMPORT COMPONENT CHUNG
+// Import các Component con (giả sử bạn đã tách ra như cấu trúc trước)
 import RoomInfoSection from "../../../../components/manager/maintenance/RoomInfoSection";
 import MaintenanceTimeSection from "../../../../components/manager/maintenance/MaintenanceTimeSection";
 import MaintenanceDescriptionSection from "../../../../components/manager/maintenance/MaintenanceDescriptionSection";
@@ -53,7 +52,6 @@ interface ManagerLabDetailsResponse {
   }[];
 }
 
-// 🔥 TYPE MỚI CHO ITEM ĐƯỢC CHỌN
 interface SelectedItem {
   id: string;
   categoryId: string;
@@ -78,8 +76,8 @@ export default function CreateEquipmentMaintenanceScreen() {
     null
   );
 
-  // 🔥 THAY ĐỔI: Lưu cả categoryId để đếm số lượng
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
+
   const [isLoadingRoom, setIsLoadingRoom] = useState(true);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isLoadingSpecific, setIsLoadingSpecific] = useState(false);
@@ -93,6 +91,7 @@ export default function CreateEquipmentMaintenanceScreen() {
   // Modals
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [msgModalVisible, setMsgModalVisible] = useState(false);
+  const [submittedCount, setSubmittedCount] = useState(0);
 
   // --- GET DATA ---
   useEffect(() => {
@@ -103,6 +102,7 @@ export default function CreateEquipmentMaintenanceScreen() {
     setIsLoadingRoom(true);
     setIsLoadingCategories(true);
     try {
+      // 1. Lấy thông tin phòng
       const roomRes = await apiClient.get<ManagerLabDetailsResponse>(
         "/api/Managers/lab-details"
       );
@@ -118,6 +118,7 @@ export default function CreateEquipmentMaintenanceScreen() {
         });
       }
 
+      // 2. Lấy danh sách loại thiết bị
       const catRes = await apiClient.get("/api/EquipmentCategories");
       const categoriesList = Array.isArray(catRes.data) ? catRes.data : [];
       setCategories(categoriesList);
@@ -134,8 +135,6 @@ export default function CreateEquipmentMaintenanceScreen() {
     if (selectedCategoryId === categoryId) return;
 
     setSelectedCategoryId(categoryId);
-    // 🔥 QUAN TRỌNG: KHÔNG RESET MẢNG selectedItems Ở ĐÂY NỮA
-
     setSpecificEquipments([]);
     setIsLoadingSpecific(true);
 
@@ -160,33 +159,32 @@ export default function CreateEquipmentMaintenanceScreen() {
     }
   };
 
-  // 🔥 LOGIC CHỌN ĐA DANH MỤC
   const toggleEquipmentSelection = (id: string) => {
     if (!selectedCategoryId) return;
 
     setSelectedItems((prev) => {
       const exists = prev.find((item) => item.id === id);
       if (exists) {
-        // Nếu đã có -> Xóa
         return prev.filter((item) => item.id !== id);
       } else {
-        // Nếu chưa có -> Thêm vào kèm categoryId hiện tại
         return [...prev, { id, categoryId: selectedCategoryId }];
       }
     });
   };
 
   // --- SUBMIT ---
-  // --- SUBMIT ---
   const handleSubmit = async () => {
-    if (!roomInfo?.id || selectedItems.length === 0 || !description.trim())
+    // Validate: Phải có phòng + có chọn thiết bị + có nhập mô tả
+    if (!roomInfo?.id || selectedItems.length === 0 || !description.trim()) {
       return;
+    }
 
     setIsSubmitting(true);
-    try {
-      // 1. Lấy danh sách ID để gửi API
-      const equipmentIdsToSubmit = selectedItems.map((item) => item.id);
+    const countBeforeSubmit = selectedItems.length;
 
+    try {
+      // 1. Chuẩn bị payload
+      const equipmentIdsToSubmit = selectedItems.map((item) => item.id);
       const payload = {
         equipmentIds: equipmentIdsToSubmit,
         startTime: startDate.toISOString(),
@@ -194,54 +192,80 @@ export default function CreateEquipmentMaintenanceScreen() {
         description: description.trim(),
       };
 
-      // 2. Gọi API tạo lịch bảo trì
+      // 2. Gọi API
       await apiClient.post("/api/EquipmentMaintainSchedule", payload);
 
-      // --- CẬP NHẬT GIAO DIỆN SAU KHI THÀNH CÔNG ---
+      // --- XỬ LÝ SAU KHI THÀNH CÔNG ---
 
-      // 3. Loại bỏ các thiết bị vừa chọn khỏi danh sách đang hiển thị bên dưới
+      // 3. Loại bỏ thiết bị vừa gửi khỏi danh sách đang hiện
       setSpecificEquipments((prevList) =>
         prevList.filter((eq) => !equipmentIdsToSubmit.includes(eq.id))
       );
 
-      // 4. 🔥 QUAN TRỌNG: Trừ số lượng trên thanh Category (Loại thiết bị)
+      // 4. Cập nhật lại số lượng hiển thị trên Category chip
       setCategories((prevCats) =>
         prevCats.map((cat) => {
-          // Đếm xem trong đống đã chọn, có bao nhiêu cái thuộc Category này
           const countSelectedInThisCat = selectedItems.filter(
             (item) => item.categoryId === cat.id
           ).length;
-
-          // Trừ đi số lượng đã chọn
           const newCount = Math.max(
             0,
             cat.equipmentCount - countSelectedInThisCat
           );
-
-          return {
-            ...cat,
-            equipmentCount: newCount, // Cập nhật số lượng mới
-          };
+          return { ...cat, equipmentCount: newCount };
         })
       );
 
-      // 5. Reset lại các lựa chọn và hiện thông báo
-      setSelectedItems([]); // Xóa danh sách đã chọn
+      // 5. Reset và hiện Modal thành công
+      setSelectedItems([]);
+      setSubmittedCount(countBeforeSubmit);
       setSuccessModalVisible(true);
       setDescription("");
     } catch (error: any) {
-      console.error(error);
-      const msg =
-        error.response?.data?.message || "Lỗi hệ thống hoặc sai dữ liệu.";
-      Alert.alert("Thất bại", msg);
+      console.error("❌ Lỗi gửi API:", error);
+
+      // --- XỬ LÝ LỖI CHI TIẾT TỪ BE ---
+      let errorMsg = "Có lỗi xảy ra khi gửi lịch bảo trì.";
+      const responseData = error.response?.data;
+
+      if (responseData) {
+        if (responseData.errors) {
+          // Lỗi Validation nhiều dòng
+          const errorObj = responseData.errors;
+          const errorList: string[] = [];
+          Object.keys(errorObj).forEach((key) => {
+            const messages = errorObj[key];
+            if (Array.isArray(messages)) {
+              messages.forEach((msg) => errorList.push(`• ${msg}`));
+            }
+          });
+          if (errorList.length > 0) errorMsg = errorList.join("\n");
+        } else if (responseData.message) {
+          // Lỗi có message cụ thể
+          errorMsg = responseData.message;
+        } else if (typeof responseData === "string") {
+          // Lỗi string
+          errorMsg = responseData;
+        }
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+
+      Alert.alert("Không thể tạo lịch", errorMsg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // --- NAVIGATION HANDLERS ---
   const goToHistory = () => {
     setSuccessModalVisible(false);
-    router.push("/(manager)/maintenancehistory" as any);
+    router.push("/(tabs)/home/(manager)/maintenancehistory");
+  };
+
+  const handleSuccessClose = () => {
+    setSuccessModalVisible(false);
+    setSubmittedCount(0);
   };
 
   return (
@@ -285,7 +309,6 @@ export default function CreateEquipmentMaintenanceScreen() {
               style={styles.horizontalScroll}
             >
               {categories.map((cat) => {
-                // 🔥 TÍNH TOÁN SỐ LƯỢNG ĐÃ CHỌN CỦA CAT NÀY
                 const selectedCountInCat = selectedItems.filter(
                   (i) => i.categoryId === cat.id
                 ).length;
@@ -297,7 +320,7 @@ export default function CreateEquipmentMaintenanceScreen() {
                     style={[
                       styles.chip,
                       isSelected && styles.chipActive,
-                      selectedCountInCat > 0 && styles.chipHasSelection, // Style thêm nếu có item được chọn
+                      selectedCountInCat > 0 && styles.chipHasSelection,
                     ]}
                     onPress={() => handleSelectCategory(cat.id)}
                   >
@@ -312,7 +335,6 @@ export default function CreateEquipmentMaintenanceScreen() {
                       ]}
                     >
                       {cat.name}
-                      {/* 🔥 HIỂN THỊ: (Đã chọn / Tổng) hoặc (Tổng) */}
                       {selectedCountInCat > 0
                         ? ` (${selectedCountInCat}/${cat.equipmentCount})`
                         : ` (${cat.equipmentCount})`}
@@ -330,7 +352,6 @@ export default function CreateEquipmentMaintenanceScreen() {
             <View style={styles.sectionHeader}>
               <Monitor size={18} color="#EA580C" />
               <Text style={styles.sectionTitle}>
-                {/* 🔥 Đếm tổng tất cả thiết bị đã chọn */}
                 Chọn thiết bị (Tổng: {selectedItems.length})
               </Text>
             </View>
@@ -347,16 +368,15 @@ export default function CreateEquipmentMaintenanceScreen() {
             ) : (
               <View style={styles.gridContainer}>
                 {specificEquipments.map((eq) => {
-                  // Check xem ID này có trong mảng selectedItems không
                   const isSelected = selectedItems.some((i) => i.id === eq.id);
-
+                  // Xử lý màu sắc trạng thái
                   let statusColor = "#64748B";
                   let statusText = eq.status || "Khác";
-                  if (eq.status === "Sẵn sàng" || eq.status === "Available") {
+                  if (["Sẵn sàng", "Available"].includes(eq.status)) {
                     statusColor = "#16A34A";
                     statusText = "Sẵn sàng";
                   }
-                  if (eq.status === "Hỏng" || eq.status === "Broken") {
+                  if (["Hỏng", "Broken"].includes(eq.status)) {
                     statusColor = "#DC2626";
                     statusText = "Hỏng";
                   }
@@ -403,7 +423,7 @@ export default function CreateEquipmentMaintenanceScreen() {
           </View>
         )}
 
-        {/* 4. TIME */}
+        {/* 4. TIME SECTION */}
         <MaintenanceTimeSection
           startDate={startDate}
           endDate={endDate}
@@ -411,7 +431,7 @@ export default function CreateEquipmentMaintenanceScreen() {
           onEndDateChange={setEndDate}
         />
 
-        {/* 5. DESCRIPTION */}
+        {/* 5. DESCRIPTION SECTION */}
         <MaintenanceDescriptionSection
           description={description}
           onChangeText={setDescription}
@@ -421,13 +441,16 @@ export default function CreateEquipmentMaintenanceScreen() {
         {/* 6. SUBMIT BUTTON */}
         <MaintenanceSubmitButton
           onPress={handleSubmit}
-          disabled={isSubmitting || selectedItems.length === 0}
+          // 🔥 ĐIỀU KIỆN DISABLED MỚI: Check thêm description
+          disabled={
+            isSubmitting || selectedItems.length === 0 || !description.trim()
+          }
           isSubmitting={isSubmitting}
           label={`Xác nhận (${selectedItems.length})`}
         />
       </ScrollView>
 
-      {/* MODALS giữ nguyên ... */}
+      {/* MODAL: CHỌN TIN NHẮN */}
       <SecurityMessagesModal
         visible={msgModalVisible}
         onClose={() => setMsgModalVisible(false)}
@@ -437,39 +460,13 @@ export default function CreateEquipmentMaintenanceScreen() {
         }}
       />
 
-      <Modal
-        animationType="fade"
-        transparent={true}
+      {/* MODAL: THÀNH CÔNG */}
+      <SuccessMaintenanceModal
         visible={successModalVisible}
-        onRequestClose={() => setSuccessModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalIconContainer}>
-              <CheckCircle2 size={48} color="#16A34A" />
-            </View>
-            <Text style={styles.modalTitle}>Thành công!</Text>
-            <Text style={styles.modalMessage}>
-              Đã tạo lịch bảo trì cho {selectedItems.length} thiết bị.
-            </Text>
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalBtnCancel}
-                onPress={() => setSuccessModalVisible(false)}
-              >
-                <Text style={styles.modalBtnCancelText}>Đóng</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalBtnPrimary}
-                onPress={goToHistory}
-              >
-                <History size={18} color="white" />
-                <Text style={styles.modalBtnPrimaryText}>Xem Lịch sử</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={handleSuccessClose}
+        onViewHistory={goToHistory}
+        message={`Đã tạo lịch bảo trì cho ${submittedCount} thiết bị.`}
+      />
     </SafeAreaView>
   );
 }
@@ -487,7 +484,6 @@ const styles = StyleSheet.create({
   backButton: { padding: 4 },
   content: { padding: 16, paddingBottom: 100 },
 
-  // Style riêng
   section: {
     marginBottom: 20,
     backgroundColor: "white",
@@ -514,7 +510,7 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   chipActive: { backgroundColor: "#FFF7ED", borderColor: "#EA580C" },
-  chipHasSelection: { borderColor: "#FB923C", borderWidth: 1.5 }, // Style mới cho category có item đã chọn
+  chipHasSelection: { borderColor: "#FB923C", borderWidth: 1.5 },
   chipText: { fontSize: 14, color: "#334155", fontWeight: "600" },
   chipTextActive: { color: "#EA580C" },
   gridContainer: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
@@ -532,7 +528,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  gridItemText: { fontSize: 13, color: "#334155", fontWeight: "500" }, // Giảm size font chút cho vừa
+  gridItemText: { fontSize: 13, color: "#334155", fontWeight: "500" },
   gridItemTextActive: { color: "#EA580C", fontWeight: "700" },
   emptyState: {
     padding: 20,
@@ -546,68 +542,4 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyText: { fontSize: 13, color: "#94A3B8", textAlign: "center" },
-
-  // Modal Styles - (Giữ nguyên như cũ)
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalContent: {
-    width: "90%",
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 24,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  modalIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#DCFCE7",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#16A34A",
-    marginBottom: 8,
-  },
-  modalMessage: {
-    fontSize: 15,
-    color: "#64748B",
-    textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  modalActions: { flexDirection: "row", gap: 12, width: "100%" },
-  modalBtnCancel: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "#F1F5F9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalBtnCancelText: { fontSize: 15, fontWeight: "600", color: "#475569" },
-  modalBtnPrimary: {
-    flex: 1.5,
-    flexDirection: "row",
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "#EA580C",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalBtnPrimaryText: { fontSize: 15, fontWeight: "600", color: "white" },
 });
