@@ -1,4 +1,3 @@
-import axios from "axios"; // Import axios để lấy Slot Template
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertCircle,
@@ -9,6 +8,7 @@ import {
   Home,
   MapPin,
   Package,
+  Users, // [MỚI] Icon cho khách mời
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -23,6 +23,7 @@ import {
 } from "react-native";
 
 // Animation Imports
+import apiClient from "@/utils/api";
 import Animated, {
   Easing,
   interpolateColor,
@@ -38,12 +39,24 @@ import Svg, { Circle, Path } from "react-native-svg";
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-// --- API CLIENT (Để lấy Slot Template map tên Ca) ---
-const apiClient = axios.create({
-  baseURL: "https://developerops.xyz/api",
-});
+// const apiClient = axios.create({
+//   baseURL: "http://192.168.1.149:7089/api",
+// });
 
 // --- HELPER ---
+const getTypeLabel = (type: string) => {
+  switch (type) {
+    case "Teaching":
+      return "Lịch Dạy Học";
+    case "Project":
+      return "Lịch Dự Án";
+    case "UniversityEvent":
+      return "Sự Kiện Trường";
+    default:
+      return type || "Đặt Lịch";
+  }
+};
+
 const formatDate = (dateString: string) => {
   if (!dateString) return "";
   try {
@@ -59,24 +72,11 @@ const formatDate = (dateString: string) => {
   }
 };
 
-const getTypeLabel = (type: string) => {
-  switch (type) {
-    case "Teaching":
-      return "Lịch Dạy Học";
-    case "Project":
-      return "Lịch Dự Án";
-    case "UniversityEvent":
-      return "Sự Kiện Trường";
-    default:
-      return type || "Đặt Lịch";
-  }
-};
-
 export default function BookingSuccessScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [booking, setBooking] = useState<any>(null);
-  const [slotTemplates, setSlotTemplates] = useState<any[]>([]); // Lưu danh sách Ca (Slot 1, Slot 2...)
+  const [slotTemplates, setSlotTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Animation Values
@@ -101,19 +101,17 @@ export default function BookingSuccessScreen() {
     return () => backHandler.remove();
   }, [router]);
 
-  // --- 2. LOAD DATA & SLOT TEMPLATES ---
+  // --- 2. LOAD DATA ---
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. Parse Data Booking từ Params
         if (params.result) {
           const data = JSON.parse(params.result as string);
           console.log("✅ Success Data:", data);
           setBooking(data);
         }
-
-        // 2. Gọi API lấy Slot Template để biết "Slot ID này là Ca mấy?"
-        const resSlots = await apiClient.get("/Slot");
+        const resSlots = await apiClient.get("/api/Slot");
+        // console.log("✅ Loaded slot templates:", resSlots.data);
         setSlotTemplates(resSlots.data);
       } catch (e) {
         console.error("Error loading success data:", e);
@@ -148,38 +146,22 @@ export default function BookingSuccessScreen() {
         <ActivityIndicator size="large" color="#EA580C" />
       </View>
     );
-
   if (!booking)
     return (
       <View style={styles.centered}>
-        <Text>Không tìm thấy thông tin đơn đặt.</Text>
-        <TouchableOpacity
-          style={{ marginTop: 20 }}
-          onPress={() => router.replace("/(tabs)/home")}
-        >
-          <Text style={{ color: "#EA580C", fontWeight: "bold" }}>
-            Về trang chủ
-          </Text>
+        <Text>Không tìm thấy thông tin.</Text>
+        <TouchableOpacity onPress={() => router.replace("/(tabs)/home")}>
+          <Text style={{ color: "#EA580C" }}>Về trang chủ</Text>
         </TouchableOpacity>
       </View>
     );
 
-  // ============================================================
-  // MAP DATA CHO UI
-  // ============================================================
+  // ==================== MAP DATA ====================
+  const roomName =
+    booking.labRoomResponse?.labName || booking.roomName || "Phòng Lab";
+  const roomLocation =
+    booking.labRoomResponse?.location || booking.roomLocation || "";
 
-  // 1. Map Tên Phòng & Địa chỉ
-  const roomName = booking.labRoomResponse
-    ? booking.labRoomResponse.labName
-    : booking.roomName || "Phòng Lab";
-  const roomLocation = booking.labRoomResponse
-    ? booking.labRoomResponse.location
-    : booking.roomLocation || "";
-  const roomIdDisplay = booking.labRoomResponse
-    ? booking.labRoomResponse.id.substring(0, 8).toUpperCase()
-    : (booking.labRoomId || "").substring(0, 8).toUpperCase();
-
-  // 2. Group Slots & Map Tên Ca
   const groupedSlots = (booking.slots || []).reduce((acc: any, slot: any) => {
     const d = slot.date.split("T")[0];
     if (!acc[d]) acc[d] = [];
@@ -188,24 +170,19 @@ export default function BookingSuccessScreen() {
   }, {});
   const dates = Object.keys(groupedSlots).sort();
 
-  // Helper lấy tên Ca (VD: "Ca 1") từ ID
   const getSlotLabel = (id: string) => {
     const t = slotTemplates.find((x) => x.id === id);
-    // Lấy phần text trước dấu ngoặc. VD: "Slot 1 (07:00...)" -> "Slot 1"
     return t ? t.label.split("(")[0].trim() : "Slot";
   };
 
-  // 3. Thiết bị
   const devices = booking.externalEquipments || [];
 
-  // 4. Type Info
-  const isPriority =
-    booking.type === "UniversityEvent" || booking.status === "Pending";
+  // [MỚI] Lấy danh sách Khách mời
+  const guests = booking.outSideGuests || [];
 
-  // Lấy thông tin chi tiết theo loại
   const projectInfo = booking.project || booking.projectResponse;
   const priorityInfo = booking.priorityDetail || booking.bookingPriorityDetail;
-  const courseInfo = booking.courseResponse; // Teaching thường ko gửi course object lên response create, nhưng nếu có thì tốt
+  const courseInfo = booking.courseResponse;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -239,26 +216,18 @@ export default function BookingSuccessScreen() {
               />
             </Svg>
           </Animated.View>
-
-          <Text style={styles.title}>
-            {isPriority ? "Gửi yêu cầu thành công!" : "Đặt thành công!"}
-          </Text>
-          <Text style={styles.subtitle}>
-            {isPriority
-              ? "Yêu cầu đang chờ Quản lý duyệt."
-              : "Lịch đã được xác nhận vào hệ thống."}
-          </Text>
+          <Text style={styles.title}>Gửi yêu cầu thành công!</Text>
+          <Text style={styles.subtitle}>Yêu cầu đang chờ Quản lý duyệt.</Text>
         </View>
 
-        {/* CARD THÔNG TIN */}
+        {/* CARD INFO */}
         <View style={styles.card}>
-          {/* Booking Info */}
           <View style={styles.cardHeader}>
             <Text style={styles.bookingTitle}>
-              {booking.title || "Không có tiêu đề"}
+              {booking.title || "Tiêu đề trống"}
             </Text>
             <Text style={styles.bookingId}>
-              #{booking.id.substring(0, 6).toUpperCase()}
+              #{booking.id?.substring(0, 6).toUpperCase()}
             </Text>
           </View>
 
@@ -289,7 +258,7 @@ export default function BookingSuccessScreen() {
 
           <View style={styles.divider} />
 
-          {/* --- CHI TIẾT THEO LOẠI --- */}
+          {/* --- CHI TIẾT --- */}
           {projectInfo && (
             <View style={styles.detailSection}>
               <View style={styles.detailHeader}>
@@ -299,11 +268,6 @@ export default function BookingSuccessScreen() {
               <Text style={styles.detailValueBold}>
                 {projectInfo.projectName}
               </Text>
-              {projectInfo.description ? (
-                <Text style={styles.detailValueLight}>
-                  {projectInfo.description}
-                </Text>
-              ) : null}
             </View>
           )}
           {priorityInfo && (
@@ -340,7 +304,7 @@ export default function BookingSuccessScreen() {
             </View>
           )}
 
-          {/* --- LỊCH CHI TIẾT (Ngày & Ca) --- */}
+          {/* --- LỊCH CHI TIẾT --- */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Lịch chi tiết</Text>
             <View style={styles.slotListContainer}>
@@ -367,6 +331,55 @@ export default function BookingSuccessScreen() {
               ))}
             </View>
           </View>
+
+          {/* --- [MỚI] KHÁCH MỜI --- */}
+          {guests.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                Khách mời ({guests.length})
+              </Text>
+              <View style={styles.equipContainer}>
+                {guests.map((guest: any, idx: number) => (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.equipRow,
+                      idx === guests.length - 1 && { borderBottomWidth: 0 },
+                    ]}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 10,
+                        flex: 1,
+                      }}
+                    >
+                      {/* Icon User */}
+                      <View
+                        style={[
+                          styles.equipIcon,
+                          {
+                            backgroundColor: "#EEF2FF",
+                            borderColor: "#C7D2FE",
+                          },
+                        ]}
+                      >
+                        <Users size={16} color="#4F46E5" />
+                      </View>
+                      <View>
+                        <Text style={styles.equipName}>{guest.fullName}</Text>
+                        <Text style={styles.equipDesc}>
+                          {guest.organization}{" "}
+                          {guest.purpose ? `• ${guest.purpose}` : ""}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
 
           {/* --- THIẾT BỊ --- */}
           {devices.length > 0 && (
@@ -440,7 +453,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFF",
   },
-
   header: { alignItems: "center", marginBottom: 24, marginTop: 10 },
   animatedIconWrapper: {
     width: 80,
@@ -466,7 +478,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
   },
-
   card: {
     backgroundColor: "#F8FAFC",
     borderRadius: 20,
@@ -489,7 +500,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   bookingId: { fontSize: 12, color: "#94A3B8", fontWeight: "600" },
-
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -499,13 +509,11 @@ const styles = StyleSheet.create({
   rowText: { fontSize: 14, color: "#475569" },
   subLocation: { fontSize: 13, color: "#64748B", marginTop: 2 },
   bold: { fontWeight: "600", color: "#0F172A" },
-
   badgeContainer: { flexDirection: "row", gap: 8 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   badgeText: { fontSize: 12, fontWeight: "600" },
   divider: { height: 1, backgroundColor: "#E2E8F0", marginVertical: 16 },
 
-  // Detail Sections
   detailSection: { marginBottom: 12 },
   detailHeader: {
     flexDirection: "row",
@@ -519,7 +527,6 @@ const styles = StyleSheet.create({
     color: "#EA580C",
     textTransform: "uppercase",
   },
-  detailValue: { fontSize: 14, color: "#334155" },
   detailValueBold: { fontSize: 14, fontWeight: "600", color: "#0F172A" },
   detailValueLight: { fontSize: 13, color: "#64748B" },
   detailBox: {
@@ -529,8 +536,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
+  detailValue: { fontSize: 14, color: "#334155" },
 
-  // Slots Style
   section: { marginTop: 8, marginBottom: 16 },
   sectionTitle: {
     fontSize: 15,
@@ -558,7 +565,7 @@ const styles = StyleSheet.create({
   },
   slotChipText: { fontSize: 12, color: "#C2410C", fontWeight: "600" },
 
-  // Equip Style
+  // Equipment & Guest List Styles
   equipContainer: {
     backgroundColor: "white",
     borderRadius: 12,
@@ -581,11 +588,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   equipName: { fontSize: 14, color: "#0F172A", fontWeight: "600" },
   equipDesc: { fontSize: 12, color: "#64748B" },
   equipQty: { fontSize: 14, fontWeight: "700", color: "#0F172A" },
-  emptyText: { color: "#94A3B8", fontStyle: "italic" },
 
   footer: { flexDirection: "row", gap: 12 },
   secondaryButton: {

@@ -1,4 +1,4 @@
-// (profile)/index.tsx - ĐÃ SỬA LỖI
+// (profile)/index.tsx
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react-native";
-// 1. Import thêm useEffect
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -20,11 +19,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-// 2. Import component Modal
 import ConfirmationModal from "../../../components/common/ConfirmationModal";
 
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as SecureStore from "expo-secure-store";
+
+// 🟢 1. IMPORT API CLIENT
+import apiClient from "../../../utils/api";
 
 type Setting = {
   icon: React.ElementType;
@@ -59,12 +60,24 @@ const settings: Setting[] = [
   },
 ];
 
+// 🟢 2. ĐỊNH NGHĨA TYPE DỰA TRÊN API
+interface UserProfile {
+  id: string;
+  email: string;
+  userName: string;
+  roles: string[];
+}
+
 export default function Profile() {
   const router = useRouter();
 
   const [isLogoutModalOpen, setLogoutModalOpen] = useState(false);
 
+  // 🟢 3. STATE CHO USER
+  const [userName, setUserName] = useState("Người dùng"); // Mặc định
+
   useEffect(() => {
+    // Cấu hình Google Sign-in
     try {
       GoogleSignin.configure({
         webClientId:
@@ -76,8 +89,22 @@ export default function Profile() {
     } catch (error) {
       console.error("Lỗi khi cấu hình Google Sign-In ở Profile:", error);
     }
+
+    // 🟢 4. GỌI API LẤY TÊN NGƯỜI DÙNG
+    const fetchProfileName = async () => {
+      try {
+        const response = await apiClient.get<UserProfile>("/api/Auth/profile");
+        if (response.data && response.data.userName) {
+          setUserName(response.data.userName);
+        }
+      } catch (error) {
+        console.log("Không thể tải tên người dùng:", error);
+        // Không cần Alert lỗi ở đây để tránh làm phiền người dùng ở màn hình chính
+      }
+    };
+
+    fetchProfileName();
   }, []);
-  // *** KẾT THÚC PHẦN SỬA LỖI ***
 
   const handleNavigation = (path: string) => {
     if (path === "/profile/details") {
@@ -98,21 +125,13 @@ export default function Profile() {
     setLogoutModalOpen(false);
     console.log("Bắt đầu quá trình đăng xuất...");
 
-    // 1. Xử lý Google SignOut
-    // Chúng ta bọc trong try-catch để nếu user không phải là Google User (ví dụ: Security)
-    // thì lỗi sẽ bị bỏ qua và code vẫn chạy tiếp xuống dưới.
     try {
       await GoogleSignin.signOut();
-      // Nếu muốn thu hồi quyền hoàn toàn thì uncomment dòng dưới (thường không cần thiết nếu chỉ logout)
-      // await GoogleSignin.revokeAccess();
       console.log("Đã đăng xuất khỏi Google SDK");
     } catch (error) {
-      // Lỗi này xảy ra khi user chưa đăng nhập Google (ví dụ: Security)
-      // Chúng ta chỉ log ra và BỎ QUA nó, không để nó chặn quy trình logout.
       console.log("Lỗi Google SignOut (có thể bỏ qua nếu là Security):", error);
     }
 
-    // 2. Xóa Token hệ thống (Luôn thực hiện dù là Security hay Student)
     try {
       await SecureStore.deleteItemAsync("accessToken");
       await SecureStore.deleteItemAsync("refreshToken");
@@ -121,7 +140,6 @@ export default function Profile() {
       console.error("Lỗi khi xóa token:", error);
     }
 
-    // 3. Điều hướng về trang Login
     router.replace("/login" as any);
   };
 
@@ -137,10 +155,14 @@ export default function Profile() {
       >
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarFallback}>F</Text>
+            {/* Lấy chữ cái đầu của tên làm avatar fallback */}
+            <Text style={styles.avatarFallback}>
+              {userName.charAt(0).toUpperCase()}
+            </Text>
           </View>
           <View>
-            <Text style={styles.profileName}>Trần Minh Phúc</Text>
+            {/* 🟢 5. HIỂN THỊ TÊN TỪ API */}
+            <Text style={styles.profileName}>{userName}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -207,7 +229,6 @@ export default function Profile() {
   );
 }
 
-// (Phần styles giữ nguyên không đổi)
 const styles = StyleSheet.create({
   container: {
     flex: 1,

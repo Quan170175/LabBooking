@@ -3,12 +3,11 @@ import {
   BookOpen,
   Briefcase,
   Calendar,
-  Clock,
-  HardDrive,
+  Check,
   MapPin,
   Package,
-  X,
   User,
+  X,
 } from "lucide-react-native";
 import React from "react";
 import {
@@ -24,16 +23,17 @@ type Props = {
   visible: boolean;
   booking: any;
   onClose: () => void;
-  slotTemplates?: any[]; // Truyền thêm list slot template để map tên Ca
+  slotTemplates?: any[];
+  onApprove: () => void; // [NEW] Callback Duyệt
+  onReject: () => void; // [NEW] Callback Từ chối
 };
 
 // --- HELPER ---
 const formatDate = (dateString: string) => {
   if (!dateString) return "";
   try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("vi-VN", {
-      weekday: "long",
+    return new Date(dateString).toLocaleDateString("vi-VN", {
+      weekday: "short",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -61,20 +61,26 @@ export default function BookingDetailModal({
   booking,
   onClose,
   slotTemplates = [],
+  onApprove,
+  onReject,
 }: Props) {
   if (!booking) return null;
 
-  // 1. Map Data
+  // 1. Chuẩn hóa dữ liệu (Booking vs ChangeRequest)
+  // ChangeRequest thường dùng 'newTitle', Booking dùng 'title'
+  const title = booking.newTitle || booking.title || "Yêu cầu đặt phòng";
+  const type = booking.originalType || booking.type;
   const roomName =
-    booking.labRoomResponse?.labName || booking.roomName || "Phòng Lab";
-  const roomLocation =
-    booking.labRoomResponse?.location || booking.roomLocation || "";
+    booking.roomName || booking.labRoomResponse?.labName || "Phòng Lab";
   const requesterName =
-    booking.userResponse?.fullName || booking.userName || "Người dùng";
+    booking.userResponse?.fullName || booking.userName || "Người dùng"; // Cần check lại API trả về user info ko
   const requesterEmail = booking.userResponse?.email || booking.userEmail || "";
 
+  // Slot List: ChangeRequest dùng 'newSlots', Booking dùng 'slots'
+  const rawSlots = booking.newSlots || booking.slots || [];
+
   // 2. Group Slots
-  const groupedSlots = (booking.slots || []).reduce((acc: any, slot: any) => {
+  const groupedSlots = rawSlots.reduce((acc: any, slot: any) => {
     const d = slot.date.split("T")[0];
     if (!acc[d]) acc[d] = [];
     acc[d].push(slot.slotId);
@@ -87,11 +93,16 @@ export default function BookingDetailModal({
     return t ? t.label.split("(")[0].trim() : "Slot";
   };
 
-  // 3. Info Objects
-  const projectInfo = booking.project || booking.projectResponse;
-  const priorityInfo = booking.priorityDetail || booking.bookingPriorityDetail;
-  const courseInfo = booking.courseResponse;
-  const devices = booking.externalEquipments || [];
+  // 3. Info Objects (ChangeRequest có prefix 'new...')
+  const projectInfo =
+    booking.newProject || booking.project || booking.projectResponse;
+  const priorityInfo =
+    booking.newPriorityDetail ||
+    booking.priorityDetail ||
+    booking.bookingPriorityDetail;
+  const courseInfo = booking.newCourse || booking.courseResponse; // Check lại field API ChangeRequest trả về course
+  const devices =
+    booking.newExternalEquipments || booking.externalEquipments || [];
 
   return (
     <Modal
@@ -111,59 +122,55 @@ export default function BookingDetailModal({
           </View>
 
           <ScrollView contentContainerStyle={styles.content}>
-            {/* CARD INFO (Style giống Success Screen) */}
             <View style={styles.card}>
-              {/* Header Booking: Title & ID */}
+              {/* Title */}
               <View style={styles.cardHeader}>
-                <Text style={styles.bookingTitle}>
-                  {booking.title || "Yêu cầu đặt phòng"}
-                </Text>
+                <Text style={styles.bookingTitle}>{title}</Text>
                 <Text style={styles.bookingId}>
                   #{booking.id.substring(0, 6).toUpperCase()}
                 </Text>
               </View>
 
-              {/* Người đặt */}
+              {/* Info Rows */}
               <View style={styles.row}>
                 <User size={18} color="#64748B" />
                 <View>
                   <Text style={styles.rowText}>
                     Người đặt: <Text style={styles.bold}>{requesterName}</Text>
                   </Text>
-                  <Text style={styles.subText}>{requesterEmail}</Text>
+                  {requesterEmail ? (
+                    <Text style={styles.subText}>{requesterEmail}</Text>
+                  ) : null}
                 </View>
               </View>
 
-              {/* Phòng */}
               <View style={styles.row}>
                 <MapPin size={18} color="#64748B" />
-                <View>
-                  <Text style={styles.rowText}>
-                    Phòng: <Text style={styles.bold}>{roomName}</Text>
-                  </Text>
-                  {roomLocation ? (
-                    <Text style={styles.subText}>{roomLocation}</Text>
-                  ) : null}
-                </View>
+                <Text style={styles.rowText}>
+                  Phòng: <Text style={styles.bold}>{roomName}</Text>
+                </Text>
               </View>
 
               {/* Badges */}
               <View style={styles.badgeContainer}>
                 <View style={[styles.badge, { backgroundColor: "#E0F2FE" }]}>
                   <Text style={[styles.badgeText, { color: "#0284C7" }]}>
-                    {getTypeLabel(booking.type)}
+                    {getTypeLabel(type)}
                   </Text>
                 </View>
                 <View style={[styles.badge, { backgroundColor: "#FEF3C7" }]}>
                   <Text style={[styles.badgeText, { color: "#D97706" }]}>
-                    {booking.numberOfParticipants || 0} người
+                    {booking.newNumberOfParticipants ||
+                      booking.numberOfParticipants ||
+                      0}{" "}
+                    người
                   </Text>
                 </View>
               </View>
 
               <View style={styles.divider} />
 
-              {/* --- CHI TIẾT --- */}
+              {/* DETAILS */}
               {projectInfo && (
                 <View style={styles.detailSection}>
                   <View style={styles.detailHeader}>
@@ -173,11 +180,11 @@ export default function BookingDetailModal({
                   <Text style={styles.detailValueBold}>
                     {projectInfo.projectName}
                   </Text>
-                  {projectInfo.description ? (
+                  {projectInfo.description && (
                     <Text style={styles.detailValueLight}>
                       {projectInfo.description}
                     </Text>
-                  ) : null}
+                  )}
                 </View>
               )}
 
@@ -220,9 +227,9 @@ export default function BookingDetailModal({
                 </View>
               )}
 
-              {/* --- LỊCH --- */}
+              {/* SLOTS */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Lịch chi tiết</Text>
+                <Text style={styles.sectionTitle}>Lịch trình</Text>
                 <View style={styles.slotListContainer}>
                   {dates.map((date: string) => (
                     <View key={date} style={styles.slotRow}>
@@ -250,10 +257,10 @@ export default function BookingDetailModal({
                 </View>
               </View>
 
-              {/* --- THIẾT BỊ --- */}
+              {/* DEVICES */}
               {devices.length > 0 && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Thiết bị đăng ký</Text>
+                  <Text style={styles.sectionTitle}>Thiết bị</Text>
                   <View style={styles.equipContainer}>
                     {devices.map((d: any, idx: number) => (
                       <View
@@ -280,11 +287,11 @@ export default function BookingDetailModal({
                             <Text style={styles.equipName}>
                               {d.name || d.equipmentName}
                             </Text>
-                            {d.description ? (
+                            {d.description && (
                               <Text style={styles.equipDesc}>
                                 {d.description}
                               </Text>
-                            ) : null}
+                            )}
                           </View>
                         </View>
                         <Text style={styles.equipQty}>x{d.quantity}</Text>
@@ -296,10 +303,25 @@ export default function BookingDetailModal({
             </View>
           </ScrollView>
 
-          {/* FOOTER ACTIONS (Tùy chọn: Có thể thêm nút Duyệt/Từ chối ngay tại đây) */}
+          {/* ACTION BUTTONS (Footer) */}
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.btnClose} onPress={onClose}>
-              <Text style={styles.btnText}>Đóng</Text>
+            <TouchableOpacity
+              style={[styles.btnAction, styles.btnReject]}
+              onPress={onReject}
+            >
+              <X size={18} color="#B91C1C" />
+              <Text style={[styles.btnText, { color: "#B91C1C" }]}>
+                Từ chối
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btnAction, styles.btnApprove]}
+              onPress={onApprove}
+            >
+              <Check size={18} color="#15803D" />
+              <Text style={[styles.btnText, { color: "#15803D" }]}>
+                Duyệt đơn
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -320,7 +342,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
-
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -334,10 +355,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
   closeBtn: { padding: 4 },
-
-  content: { padding: 16 },
-
-  // Card Styles (Copy từ Success Screen)
+  content: { padding: 16, paddingBottom: 40 },
   card: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -360,7 +378,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   bookingId: { fontSize: 12, color: "#94A3B8", fontWeight: "600" },
-
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -370,7 +387,6 @@ const styles = StyleSheet.create({
   rowText: { fontSize: 14, color: "#475569" },
   subText: { fontSize: 13, color: "#64748B", marginTop: 2 },
   bold: { fontWeight: "600", color: "#0F172A" },
-
   badgeContainer: { flexDirection: "row", gap: 8 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   badgeText: { fontSize: 12, fontWeight: "600" },
@@ -462,12 +478,20 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderTopWidth: 1,
     borderTopColor: "#E2E8F0",
+    flexDirection: "row",
+    gap: 12,
   },
-  btnClose: {
-    backgroundColor: "#F1F5F9",
+  btnAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
   },
-  btnText: { color: "#475569", fontWeight: "700", fontSize: 15 },
+  btnReject: { backgroundColor: "#FEF2F2", borderColor: "#FEE2E2" },
+  btnApprove: { backgroundColor: "#F0FDF4", borderColor: "#DCFCE7" },
+  btnText: { fontWeight: "700", fontSize: 15 },
 });

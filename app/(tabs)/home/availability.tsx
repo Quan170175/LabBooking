@@ -14,6 +14,7 @@ import {
 import AvailabilityFilters from "../../../components/home/AvailabilityFilters";
 import apiClient from "../../../utils/api";
 
+// 🟢 1. CẬP NHẬT INTERFACE THEO API MỚI
 export interface Slot {
   id: string;
   startTime: string;

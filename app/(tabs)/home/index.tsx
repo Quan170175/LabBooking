@@ -10,8 +10,10 @@ import {
   LayoutDashboard,
   Monitor,
   Wrench,
+  DoorOpen, // 🟢 Mới: Icon mở cửa
+  History, // 🟢 Mới: Icon lịch sử
 } from "lucide-react-native";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Image,
   ScrollView,
@@ -23,12 +25,12 @@ import {
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { jwtDecode } from "jwt-decode";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated"; // Thêm Animation
+import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 
 import FeatureTile from "../../../components/home/FeatureTile";
 import { registerPushTokenOnServer } from "../../../services/apiserver";
 import { registerForPushNotificationsAsync } from "../../../services/notificationService";
-import "../../../assets/images/flms.png";
+// import "../../../assets/images/flms.png"; // Comment lại dòng này nếu gây lỗi import ảnh, hoặc đảm bảo đường dẫn đúng
 
 // 1. ĐỊNH NGHĨA ROLES
 const ROLES = {
@@ -94,12 +96,11 @@ const APP_SECTIONS = [
         icon: LifeBuoy,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
       },
-
       {
         to: "/home/doorrequest",
         title: "Yêu cầu mở cửa",
         description: "Gửi yêu cầu mở cửa",
-        icon: LifeBuoy,
+        icon: DoorOpen, // 🟢 Đã đổi icon thành Cửa mở
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
       },
     ],
@@ -124,6 +125,13 @@ const APP_SECTIONS = [
         allowedRoles: [ROLES.MANAGER],
       },
       {
+        to: "/(tabs)/home/(manager)/viewequipment",
+        title: "Xem thiết bị",
+        description: "Xem tình trạng thiết bị",
+        icon: Monitor, // 🟢 Đã đổi icon thành Màn hình
+        allowedRoles: [ROLES.MANAGER],
+      },
+      {
         to: "/(tabs)/home/(manager)/create-room-maintenance",
         title: "Bảo trì phòng",
         description: "Đóng phòng để sửa chữa",
@@ -134,14 +142,14 @@ const APP_SECTIONS = [
         to: "/(tabs)/home/(manager)/create-equipment-maintenance",
         title: "Bảo trì thiết bị",
         description: "Sửa chữa thiết bị hỏng",
-        icon: Monitor,
+        icon: Wrench, // Đổi sang Wrench cho đồng bộ với bảo trì
         allowedRoles: [ROLES.MANAGER],
       },
       {
         to: "/(tabs)/home/(manager)/maintenancehistory",
         title: "Lịch sử bảo trì",
         description: "Xem lịch sử bảo trì",
-        icon: Monitor,
+        icon: History, // 🟢 Đã đổi icon thành Lịch sử
         allowedRoles: [ROLES.MANAGER],
       },
     ],
@@ -155,7 +163,7 @@ const APP_SECTIONS = [
         to: "/(tabs)/home/door-requests",
         title: "Yêu cầu mở cửa",
         description: "Xử lý yêu cầu ra vào",
-        icon: LayoutDashboard,
+        icon: DoorOpen, // 🟢 Đã đổi icon thành Cửa mở
         allowedRoles: [ROLES.SECURITYGUARD],
       },
       {

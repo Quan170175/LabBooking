@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 // --- THAY ĐỔI 1: Imports ---
-import axios from "axios"; // Thêm
+import apiClient from "@/utils/api";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator, // Thêm
@@ -16,11 +16,10 @@ import { Path, Svg } from "react-native-svg";
 import BookingCard from "../../components/booking/BookingCard";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
 import BookingProgress from "../../components/booking/BookingProgress";
-
 // --- THAY ĐỔI 2: Thêm API Client ---
-const apiClient = axios.create({
-  baseURL: "https://developerops.xyz/api",
-});
+// const apiClient = axios.create({
+//   baseURL: "http://192.168.1.149:7089/api",
+// });
 
 // --- THAY ĐỔI 3: Xóa Dữ Liệu Giả Lập ---
 // const ROOMS = [ ... ]; // Xóa
@@ -40,7 +39,7 @@ export default function BookRooms() {
       try {
         // Gọi API thật
         const response = await apiClient.get(
-          "/LabRooms?PageNumber=1&PageSize=10"
+          "/api/LabRooms?PageNumber=1&PageSize=10"
         );
         // Dữ liệu phòng nằm trong 'items'
         setRooms(response.data.items);

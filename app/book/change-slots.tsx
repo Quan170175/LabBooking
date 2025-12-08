@@ -1,4 +1,3 @@
-import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft, ChevronRight, RefreshCcw } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -15,9 +14,11 @@ import { Path, Svg } from "react-native-svg";
 import BookingButton from "../../components/booking/BookingButton";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
 
-const apiClient = axios.create({
-  baseURL: "https://developerops.xyz/api",
-});
+import apiClient from "@/utils/api";
+
+// const apiClient = axios.create({
+//   baseURL: "http://192.168.1.149:7089/api",
+// });
 
 // --- HELPER ---
 const weekdays_short = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -68,12 +69,13 @@ export default function ChangeSlotsScreen() {
       setIsLoading(true);
 
       // A. Template
-      const resSlot = await apiClient.get("/Slot");
+      const resSlot = await apiClient.get("/api/Slot");
       setAllSlotsTemplate(resSlot.data);
-
+      console.log("📥 Loaded slot templates:", resSlot.data);
       // B. Booking Detail
-      const resBooking = await apiClient.get(`/Bookings/${bookingId}`);
+      const resBooking = await apiClient.get(`/api/Bookings/${bookingId}`);
       const myBooking = resBooking.data;
+      console.log("📥 Loaded booking detail:", myBooking);
       setBookingDetail(myBooking);
 
       // C. Init State
@@ -109,7 +111,7 @@ export default function ChangeSlotsScreen() {
         endObj.setDate(endObj.getDate() + 6);
         const endStr = formatDateLocal(endObj);
 
-        const resBusy = await apiClient.get("/BookingSlot", {
+        const resBusy = await apiClient.get("/api/BookingSlot", {
           params: {
             LabRoomId: bookingDetail.labRoomId,
             StartDate: startStr,

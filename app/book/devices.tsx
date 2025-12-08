@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -16,6 +15,7 @@ import {
   View,
 } from "react-native";
 // --- QUAN TRỌNG: Thêm Circle vào import ---
+import apiClient from "@/utils/api";
 import Svg, { Circle, Path } from "react-native-svg";
 
 // --- COMPONENTS ---
@@ -133,8 +133,8 @@ const AddGuestModal = ({
   }, [visible, initialData]);
 
   const handleSubmit = () => {
-    if (!fullName.trim() || !email.trim() || !org.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập Tên, Email và Tổ chức.");
+    if (!fullName.trim() || !email.trim()) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập Tên, Email đầy đủ.");
       return;
     }
     onSubmit({ fullName, email, organization: org, purpose });
@@ -224,13 +224,13 @@ const AddGuestModal = ({
 // ====================================================================
 // --- API CLIENT ---
 // ====================================================================
-const apiClient = axios.create({
-  baseURL: "https://developerops.xyz/api",
-});
+// const apiClient = axios.create({
+//   baseURL: "http://192.168.1.149:7089/api",
+// });
 
 const api_getCourses = async (pageNumber: number, pageSize: number) => {
   try {
-    const response = await apiClient.get("/Course", {
+    const response = await apiClient.get("/api/Course", {
       params: { PageNumber: pageNumber, PageSize: pageSize },
     });
     return response.data;
@@ -451,7 +451,7 @@ export default function BookDevices() {
 
       let payload: any = {
         labRoomId: booking.roomId,
-        createdById: "c2f3a4d8-9b7e-43c1-8c4f-2e7a0f4c12ab", // TODO: Auth ID
+        createdById: "5b63378f-f391-4906-88a8-4c903f8a7ded", // TODO: Auth ID
         title: title,
         description: description,
         numberOfParticipants: parseInt(participants),
@@ -499,7 +499,7 @@ export default function BookDevices() {
       }
 
       console.log("🚀 Payload:", JSON.stringify(payload, null, 2));
-      const response = await apiClient.post("/Bookings", payload);
+      const response = await apiClient.post("/api/Bookings", payload);
 
       await AsyncStorage.removeItem("currentBooking");
       router.replace({

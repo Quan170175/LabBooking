@@ -5,7 +5,7 @@ import {
   ChevronDown,
   UserRound,
 } from "lucide-react-native";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -13,10 +13,54 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
+
+// 🟢 1. IMPORT API CLIENT
+import apiClient from "../../../utils/api";
+
+// 🟢 2. ĐỊNH NGHĨA TYPE DỰA TRÊN API
+interface UserProfile {
+  id: string;
+  email: string;
+  userName: string;
+  roles: string[];
+}
 
 export default function ProfileDetails() {
   const router = useRouter();
+
+  // --- STATE ---
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // --- 3. GỌI API LẤY THÔNG TIN ---
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        // Gọi API GET /api/Auth/profile
+        const response = await apiClient.get<UserProfile>("/api/Auth/profile");
+        setUser(response.data);
+      } catch (error) {
+        console.error("Lỗi lấy thông tin cá nhân:", error);
+        Alert.alert("Lỗi", "Không thể tải thông tin cá nhân.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  // --- RENDER LOADING ---
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#EA580C" />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -26,6 +70,10 @@ export default function ProfileDetails() {
     >
       {/* Header */}
       <View style={styles.header}>
+        {/* Nút back nếu cần (đã có trong code gốc của bạn nhưng chưa dùng) */}
+        {/* <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+           <ArrowLeft size={20} color="#1E293B" />
+        </TouchableOpacity> */}
         <Text style={styles.headerTitle}>Thông tin cá nhân</Text>
       </View>
 
@@ -35,29 +83,38 @@ export default function ProfileDetails() {
           <UserRound size={32} color="#EA580C" />
         </View>
         <View>
-          <Text style={styles.summaryName}>Trần Minh Phúc</Text>
+          {/* 🟢 Hiển thị tên từ API */}
+          <Text style={styles.summaryName}>
+            {user?.userName || "Người dùng"}
+          </Text>
+          {/* Hiển thị Role (tuỳ chọn) */}
+          <Text style={styles.summaryPhone}>
+            {user?.roles && user.roles.length > 0
+              ? user.roles.join(", ")
+              : "Member"}
+          </Text>
         </View>
       </View>
 
       {/* Form Section */}
       <View style={styles.formContainer}>
-        {/* --- ĐÃ GỘP: Họ và tên --- */}
+        {/* --- Họ và tên --- */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Họ và tên</Text>
           <TextInput
-            defaultValue="Trần Minh Phúc"
+            value={user?.userName} // 🟢 Data từ API
             editable={false}
             style={[styles.input, styles.readOnlyInput]}
           />
         </View>
 
         <View style={styles.row}>
-          {/* Ngày sinh */}
+          {/* Ngày sinh (API chưa có, để placeholder) */}
           <View style={[styles.inputGroup, { flex: 1 }]}>
             <Text style={styles.label}>Ngày sinh</Text>
             <View>
               <TextInput
-                defaultValue="09/09/2003"
+                defaultValue="--/--/----" // Placeholder vì API không có
                 editable={false}
                 style={[styles.input, styles.readOnlyInput]}
               />
@@ -65,11 +122,11 @@ export default function ProfileDetails() {
             </View>
           </View>
 
-          {/* Giới tính */}
+          {/* Giới tính (API chưa có, để placeholder) */}
           <View style={[styles.inputGroup, { flex: 1 }]}>
             <Text style={styles.label}>Giới tính</Text>
             <View style={[styles.picker, styles.readOnlyBackground]}>
-              <Text style={[styles.pickerText, styles.readOnlyText]}>Nam</Text>
+              <Text style={[styles.pickerText, styles.readOnlyText]}>--</Text>
               <ChevronDown size={18} color="#94A3B8" />
             </View>
           </View>
@@ -79,11 +136,21 @@ export default function ProfileDetails() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
-            defaultValue="phuctmse173500@fpt.edu.vn"
+            value={user?.email} // 🟢 Data từ API
             editable={false}
             style={[styles.input, styles.readOnlyInput]}
           />
         </View>
+
+        {/* ID (Hiển thị thêm cho mục đích debug nếu cần, có thể xóa) */}
+        {/* <View style={styles.inputGroup}>
+          <Text style={styles.label}>User ID</Text>
+          <TextInput
+            value={user?.id}
+            editable={false}
+            style={[styles.input, styles.readOnlyInput, { fontSize: 12 }]}
+          />
+        </View> */}
       </View>
     </ScrollView>
   );
@@ -97,6 +164,10 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingBottom: 40,
+  },
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   header: {
     flexDirection: "row",

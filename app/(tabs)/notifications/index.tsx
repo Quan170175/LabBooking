@@ -1,40 +1,37 @@
-import { useRouter } from "expo-router";
-import { Bell, Check, ChevronRight, Clock4 } from "lucide-react-native";
-import React, { useEffect, useState, useCallback } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { AlertTriangle, Bell, Check, Clock4 } from "lucide-react-native";
+import React, { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  ActivityIndicator,
-  RefreshControl,
 } from "react-native";
-// Không cần import SecureStore ở đây nữa vì api.ts đã lo
-// import * as SecureStore from "expo-secure-store";
 
-// 🟢 1. IMPORT API CLIENT (Đảm bảo đường dẫn đúng với file api.ts của bạn)
-import apiClient from "../../../utils/api";
+import apiClient from "@/utils/api";
 
-// --- CẤU HÌNH API ---
-// Chỉ cần endpoint, Base URL đã có trong apiClient
 const API_ENDPOINT = "/api/Notifications";
 
-// --- INTERFACES (GIỮ NGUYÊN) ---
+// --- INTERFACES ---
+interface NotificationPayload {
+  type: string;
+  consentRequestId?: string;
+  bookingTitle?: string;
+  action?: string;
+  consentStatus?: string;
+}
+
 interface ApiNotification {
   id: string;
   title: string;
   message: string;
-  dataPayload: string;
+  dataPayload: string | null;
   isRead: boolean;
-  createdAt?: string;
-  createdDt?: string;
-}
-
-interface ApiResponse {
-  items: ApiNotification[];
-  totalItemsCount: number;
+  createdAt: string;
 }
 
 interface NotificationItem {
@@ -43,33 +40,15 @@ interface NotificationItem {
   description: string;
   time: string;
   read: boolean;
-  type: "info" | "actionable_reschedule";
-  affectedBooking?: {
-    originalBookingId: string;
-    roomId: string;
-    roomName: string;
-    slotsLostCount: number;
+  type: string;
+  dataPayload?: string;
+  actionData?: {
+    consentId: string;
+    bookingTitle: string;
   };
 }
 
-// --- DỮ LIỆU CỐ ĐỊNH (GIỮ NGUYÊN) ---
-const ACTIONABLE_NOTIFICATION: NotificationItem = {
-  id: "100",
-  title: "Yêu cầu dời lịch của bạn!",
-  description:
-    "Lịch của bạn tại phòng Lab A101 (Slot 1, 04/10/2025) đã bị trùng với một sự kiện ưu tiên. Vui lòng chọn Hủy lịch hoặc Đổi sang một slot khác.",
-  time: "03/10/2025 09:15",
-  read: false,
-  type: "actionable_reschedule",
-  affectedBooking: {
-    originalBookingId: "booking123",
-    roomId: "lab1",
-    roomName: "Phòng Lab A101",
-    slotsLostCount: 1,
-  },
-};
-
-// --- HELPER FORMAT DATE (GIỮ NGUYÊN) ---
+// --- HELPER ---
 const formatDate = (dateString?: string) => {
   if (!dateString) return "";
   try {
@@ -78,16 +57,16 @@ const formatDate = (dateString?: string) => {
       date.getMonth() + 1
     )
       .toString()
-      .padStart(2, "0")}/${date.getFullYear()} ${date
-      .getHours()
+      .padStart(2, "0")} ${date.getHours().toString().padStart(2, "0")}:${date
+      .getMinutes()
       .toString()
-      .padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
+      .padStart(2, "0")}`;
   } catch (e) {
     return dateString || "";
   }
 };
 
-// --- COMPONENT CARD (GIỮ NGUYÊN) ---
+// --- COMPONENT CARD ---
 function NotificationCard({
   notification,
   onCancel,
@@ -95,84 +74,126 @@ function NotificationCard({
   onMarkRead,
 }: {
   notification: NotificationItem;
-  onCancel: (id: string) => void;
-  onReschedule: (id: string, booking: any) => void;
+  onCancel: (id: string, consentId?: string) => void;
+  onReschedule: (id: string, consentId?: string) => void;
   onMarkRead: (id: string) => void;
 }) {
-  const isActionable =
-    notification.type === "actionable_reschedule" && !notification.read;
+  // 1. Parse Payload để lấy trạng thái thực tế
+  let consentStatus = "Pending";
+  try {
+    if (notification.dataPayload) {
+      const parsed = JSON.parse(notification.dataPayload);
+      if (parsed.consentStatus) {
+        consentStatus = parsed.consentStatus;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Logic hiển thị
+  const isRead = notification.read;
+
+  // Case A: Cần hành động (Status Pending + Là loại Actionable)
+  // Bỏ điều kiện !isRead để dù đọc rồi vẫn hiện nút nếu chưa xử lý xong
+  const showActions =
+    consentStatus === "Pending" &&
+    notification.type === "actionable_reschedule";
+
+  // Case B: Đang chờ duyệt (Status Rescheduled)
+  // Bỏ điều kiện !isRead để dù đọc rồi vẫn hiện trạng thái chờ
+  const showWaiting = consentStatus === "Rescheduled";
 
   return (
     <TouchableOpacity
-      style={[styles.card, notification.read && styles.cardRead]}
+      style={[
+        styles.card,
+        isRead && styles.cardRead, // Nếu đã đọc thì hiện màu xám
+      ]}
       onPress={() => {
-        onMarkRead(notification.id);
-        if (isActionable) {
-          onReschedule(notification.id, notification.affectedBooking);
+        // Chỉ cho phép bấm vào thẻ để mark read khi KHÔNG PHẢI là Action/Waiting
+        if (!showActions && !showWaiting) {
+          onMarkRead(notification.id);
         }
       }}
+      activeOpacity={0.7}
     >
+      {/* --- ICON KHÁC NHAU THEO TRẠNG THÁI --- */}
       <View
         style={[
           styles.iconContainer,
-          notification.read && styles.iconContainerRead,
-          isActionable && styles.iconContainerActionable,
+          isRead && styles.iconContainerRead,
+          (showActions || showWaiting) && styles.iconContainerActionable,
         ]}
       >
-        {notification.read ? (
+        {showActions ? (
+          // ⚠️ Cần hành động
+          <AlertTriangle size={20} color="#EA580C" />
+        ) : showWaiting ? (
+          // ⏳ Đang chờ (Dùng Clock4 thay cho Hourglass)
+          <Clock4 size={20} color="#D97706" />
+        ) : isRead ? (
+          // ✅ Đã xong / Đã đọc
           <Check size={20} color="#94a3b8" />
         ) : (
+          // 🔔 Thông báo thường
           <Bell size={20} color="#ea580c" />
         )}
       </View>
+
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
-          <Text
-            style={[
-              styles.cardTitle,
-              notification.read && styles.cardTitleRead,
-            ]}
-          >
+          <Text style={[styles.cardTitle, isRead && styles.cardTitleRead]}>
             {notification.title}
           </Text>
-          <ChevronRight size={16} color="#94a3b8" />
+          {!isRead && <View style={styles.unreadDot} />}
         </View>
-        <Text
-          style={[
-            styles.cardDescription,
-            notification.read && styles.cardDescRead,
-          ]}
-        >
+
+        <Text style={[styles.cardDescription, isRead && styles.cardDescRead]}>
           {notification.description}
         </Text>
 
-        {isActionable && (
+        {/* --- NÚT BẤM (Pending / Rejected) --- */}
+        {showActions && notification.actionData && (
           <View style={styles.actionButtonContainer}>
             <TouchableOpacity
-              onPress={() => onCancel(notification.id)}
+              onPress={() =>
+                onCancel(notification.id, notification.actionData?.consentId)
+              }
               style={[styles.actionButton, styles.cancelButton]}
             >
               <Text style={[styles.actionButtonText, styles.cancelButtonText]}>
-                Hủy lịch
+                Hủy slot cũ
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               onPress={() =>
-                onReschedule(notification.id, notification.affectedBooking)
+                onReschedule(
+                  notification.id,
+                  notification.actionData?.consentId
+                )
               }
               style={[styles.actionButton, styles.rescheduleButton]}
             >
               <Text
                 style={[styles.actionButtonText, styles.rescheduleButtonText]}
               >
-                Đổi lịch
+                Chọn lại lịch
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
+        {/* --- THÔNG BÁO CHỜ (Rescheduled) --- */}
+        {showWaiting && (
+          <View style={styles.waitingContainer}>
+            <Text style={styles.waitingText}>
+              ⏳ Đã gửi yêu cầu đổi. Vui lòng chờ duyệt.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.cardFooter}>
-          <Clock4 size={14} color="#94a3b8" />
+          <Clock4 size={12} color="#94a3b8" />
           <Text style={styles.cardTime}>{notification.time}</Text>
         </View>
       </View>
@@ -184,117 +205,152 @@ function NotificationCard({
 export default function NotificationsScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
-
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    ACTIONABLE_NOTIFICATION,
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // --- 1. LẤY DANH SÁCH THÔNG BÁO (DÙNG API CLIENT) ---
-  const fetchNotifications = async () => {
+  // --- LẤY DỮ LIỆU ---
+  const fetchNotifications = useCallback(async () => {
     try {
-      // 🟢 KHÔNG CẦN: Lấy token thủ công. apiClient tự làm.
-
-      // 🟢 THAY ĐỔI: Dùng apiClient.get
-      // Axios cho phép truyền params dưới dạng object, sạch hơn query string
-      const response = await apiClient.get<ApiResponse>(API_ENDPOINT, {
-        params: {
-          PageNumber: 1,
-          PageSize: 5,
-        },
+      // PageSize = 10 để tránh lỗi 400
+      const response = await apiClient.get(API_ENDPOINT, {
+        params: { PageNumber: 1, PageSize: 10 },
       });
 
-      // Axios trả về data nằm trong response.data
-      const data = response.data;
+      const responseData = response.data;
+      const items = responseData?.data?.items || responseData?.items || [];
 
-      if (data && data.items) {
-        const mappedData: NotificationItem[] = data.items.map((item) => ({
-          id: item.id,
-          title: item.title,
-          description: item.message,
-          time: formatDate(item.createdAt || item.createdDt),
-          read: item.isRead,
-          type: "info",
-        }));
-        setNotifications([ACTIONABLE_NOTIFICATION, ...mappedData]);
+      console.log("📥 Loaded notifications:", items.length);
+
+      if (Array.isArray(items)) {
+        const mappedData: NotificationItem[] = items.map(
+          (item: ApiNotification) => {
+            let payloadObj: NotificationPayload | null = null;
+            let uiType: "info" | "actionable_reschedule" = "info";
+
+            try {
+              if (item.dataPayload) {
+                payloadObj = JSON.parse(item.dataPayload);
+                if (payloadObj?.type === "OVERRIDE_CONSENT") {
+                  uiType = "actionable_reschedule";
+                }
+              }
+            } catch (e) {
+              console.log("Payload parse error:", item.id);
+            }
+
+            return {
+              id: item.id,
+              title: item.title,
+              description: item.message,
+              time: formatDate(item.createdAt),
+              read: item.isRead,
+              type: uiType,
+              dataPayload: item.dataPayload || undefined,
+              actionData: payloadObj?.consentRequestId
+                ? {
+                    consentId: payloadObj.consentRequestId,
+                    bookingTitle: payloadObj.bookingTitle || "",
+                  }
+                : undefined,
+            };
+          }
+        );
+
+        setNotifications(mappedData);
       }
     } catch (error: any) {
-      // Interceptor của apiClient sẽ lo việc refresh token hoặc logout nếu cần.
-      // Ở đây ta chỉ log lỗi nếu nó không phải 401 (vì 401 interceptor xử lý rồi)
-      console.error("Lỗi khi tải thông báo:", error);
+      console.error("❌ Error fetching notifications:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
-  // --- 2. HÀM GỌI API ĐÁNH DẤU ĐÃ ĐỌC (DÙNG API CLIENT PUT) ---
+  // 👇 QUAN TRỌNG: Dùng useFocusEffect để tự reload data khi quay lại màn hình
+  useFocusEffect(
+    useCallback(() => {
+      fetchNotifications();
+    }, [fetchNotifications])
+  );
+
+  // --- ACTIONS ---
   const handleMarkAsRead = async (id: string) => {
-    const targetItem = notifications.find((i) => i.id === id);
-    if (targetItem?.read) return;
+    const target = notifications.find((i) => i.id === id);
+    if (target?.read) return;
 
-    // 2.1. Optimistic Update (Cập nhật UI trước)
     setNotifications((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, read: true } : item))
+      prev.map((i) => (i.id === id ? { ...i, read: true } : i))
     );
 
-    if (id === "100") return;
-
-    // 2.2. Gọi API ngầm
     try {
-      // 🟢 THAY ĐỔI: Dùng apiClient.put
-      const url = `${API_ENDPOINT}/${id}/read`;
-      console.log("Marking as read:", url);
-
-      // apiClient tự động gắn Authorization Header
-      await apiClient.put(url);
-
-      console.log("Marked read success");
+      await apiClient.put(`${API_ENDPOINT}/${id}/read`);
     } catch (error) {
-      console.error("API Mark Read Error:", error);
-      // Nếu cần, có thể revert UI lại ở đây
+      console.error("Mark read failed:", error);
     }
   };
 
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
+  const handleCancel = (notiId: string, consentId?: string) => {
+    if (!consentId) return;
+
+    Alert.alert(
+      "Xác nhận hủy",
+      "Bạn chấp nhận mất các slot bị trùng và không chọn lịch bù?",
+      [
+        { text: "Quay lại", style: "cancel" },
+        {
+          text: "Đồng ý Hủy",
+          style: "destructive",
+          onPress: async () => {
+            // Optimistic Update
+            setNotifications((prev) =>
+              prev.map((i) => (i.id === notiId ? { ...i, read: true } : i))
+            );
+
+            try {
+              await Promise.all([
+                apiClient.post("/api/BookingConsent/resolve", {
+                  consentId: consentId,
+                  action: "Cancel",
+                }),
+                apiClient.put(`${API_ENDPOINT}/${notiId}/read`),
+              ]);
+
+              Alert.alert("Thành công", "Đã xác nhận hủy lịch.");
+              fetchNotifications();
+            } catch (e: any) {
+              // Rollback
+              setNotifications((prev) =>
+                prev.map((i) => (i.id === notiId ? { ...i, read: false } : i))
+              );
+              Alert.alert("Lỗi", "Không thể thực hiện tác vụ.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReschedule = (notiId: string, consentId?: string) => {
+    if (!consentId) return;
+    router.push({
+      pathname: "/book/reschedule-slots",
+      params: { consentId: consentId, notificationId: notiId },
+    } as any);
+  };
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchNotifications();
-  }, []);
-
-  const unread = notifications.filter((item) => !item.read);
-  const list = activeTab === "all" ? notifications : unread;
-
-  const handleCancel = (id: string) => {
-    Alert.alert("Xác nhận", "Bạn muốn hủy lịch này?", [
-      { text: "Không", style: "cancel" },
-      {
-        text: "Có",
-        style: "destructive",
-        onPress: () => handleMarkAsRead(id),
-      },
-    ]);
-  };
-
-  const handleReschedule = (id: string, booking: any) => {
-    handleMarkAsRead(id);
-    router.push({
-      pathname: "/book/reschedule-slots" as any,
-      params: {
-        roomId: booking.roomId,
-        roomName: booking.roomName,
-        slotsToPick: booking.slotsLostCount || 1,
-        bookingId: booking.originalBookingId,
-      },
-    });
-  };
+  }, [fetchNotifications]);
 
   const renderContent = () => {
-    if (loading && !refreshing)
+    const list =
+      activeTab === "all"
+        ? notifications
+        : notifications.filter((i) => !i.read);
+
+    if (loading && !refreshing && list.length === 0)
       return (
         <ActivityIndicator
           size="large"
@@ -302,17 +358,19 @@ export default function NotificationsScreen() {
           style={{ marginTop: 40 }}
         />
       );
+
     if (list.length === 0) {
       return (
-        <View style={styles.emptyStateContainer}>
-          <Text style={styles.emptyStateTitle}>Không có thông báo</Text>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Không có thông báo nào.</Text>
         </View>
       );
     }
-    return list.map((notification) => (
+
+    return list.map((item) => (
       <NotificationCard
-        key={notification.id}
-        notification={notification}
+        key={item.id}
+        notification={item}
         onCancel={handleCancel}
         onReschedule={handleReschedule}
         onMarkRead={handleMarkAsRead}
@@ -334,7 +392,6 @@ export default function NotificationsScreen() {
     >
       <View style={styles.header}>
         <Text style={styles.title}>Thông báo</Text>
-        <Text style={styles.subtitle}>Theo dõi mọi cập nhật về lịch</Text>
       </View>
 
       <View style={styles.tabsContainer}>
@@ -373,67 +430,80 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff7ed" },
-  contentContainer: { padding: 16, paddingBottom: 120 },
-  header: { alignItems: "center", marginBottom: 24 },
+  contentContainer: { padding: 16, paddingBottom: 100 },
+  header: { alignItems: "center", marginBottom: 16 },
   title: { fontSize: 22, fontWeight: "bold", color: "#1e293b" },
-  subtitle: {
-    fontSize: 14,
-    color: "#64748b",
-    marginTop: 4,
-    textAlign: "center",
-  },
+
   tabsContainer: {
     flexDirection: "row",
     backgroundColor: "white",
-    borderRadius: 999,
+    borderRadius: 99,
     padding: 4,
     borderWidth: 1,
     borderColor: "#ffedd5",
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  tab: { flex: 1, paddingVertical: 8, borderRadius: 99, alignItems: "center" },
   activeTab: { backgroundColor: "#f97316" },
-  tabText: { fontSize: 14, fontWeight: "600", color: "#475569" },
+  tabText: { fontSize: 14, fontWeight: "600", color: "#64748b" },
   activeTabText: { color: "white" },
+
   listContainer: { marginTop: 16, gap: 12 },
+  emptyContainer: { alignItems: "center", marginTop: 40 },
+  emptyText: { color: "#94a3b8", fontSize: 14 },
+
   card: {
     flexDirection: "row",
     gap: 12,
     backgroundColor: "white",
-    borderRadius: 24,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: "#ffedd5",
+    shadowColor: "#ea580c",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  cardRead: { backgroundColor: "#f8fafc", borderColor: "#f1f5f9" },
+  cardRead: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#f1f5f9",
+    shadowOpacity: 0,
+  },
+
   iconContainer: {
     height: 40,
     width: 40,
-    flexShrink: 0,
     backgroundColor: "#fff7ed",
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 2,
   },
   iconContainerRead: { backgroundColor: "#f1f5f9" },
-  iconContainerActionable: { borderColor: "#ea580c", borderWidth: 1 },
-  cardContent: { flex: 1, gap: 4 },
+  iconContainerActionable: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+    borderWidth: 1,
+  },
+
+  cardContent: { flex: 1, gap: 6 },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 8,
   },
-  cardTitle: { flex: 1, fontSize: 16, fontWeight: "600", color: "#1e293b" },
-  cardTitleRead: { color: "#64748b" },
-  cardDescription: { fontSize: 14, color: "#64748b", lineHeight: 20 },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: "#1e293b", flex: 1 },
+  cardTitleRead: { color: "#64748b", fontWeight: "600" },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ea580c",
+    marginTop: 6,
+  },
+
+  cardDescription: { fontSize: 14, color: "#334155", lineHeight: 20 },
   cardDescRead: { color: "#94a3b8" },
+
   cardFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -441,31 +511,36 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   cardTime: { fontSize: 12, color: "#94a3b8" },
-  actionButtonContainer: { flexDirection: "row", gap: 10, marginTop: 12 },
+
+  actionButtonContainer: { flexDirection: "row", gap: 8, marginTop: 8 },
   actionButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  actionButtonText: { fontSize: 14, fontWeight: "600" },
   cancelButton: {
     backgroundColor: "#f1f5f9",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#cbd5e1",
   },
-  cancelButtonText: { color: "#334155" },
+  cancelButtonText: { color: "#475569", fontSize: 13, fontWeight: "600" },
+  actionButtonText: { fontSize: 13, fontWeight: "600" },
   rescheduleButton: { backgroundColor: "#ea580c" },
-  rescheduleButtonText: { color: "white" },
-  emptyStateContainer: {
+  rescheduleButtonText: { color: "white", fontSize: 13, fontWeight: "600" },
+
+  waitingContainer: {
+    marginTop: 8,
+    backgroundColor: "#FEF3C7",
+    padding: 8,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#fed7aa",
-    borderStyle: "dashed",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 24,
-    alignItems: "center",
+    borderColor: "#FDE68A",
   },
-  emptyStateTitle: { fontSize: 14, fontWeight: "600", color: "#c2410c" },
+  waitingText: {
+    color: "#D97706",
+    fontSize: 13,
+    fontWeight: "500",
+  },
 });

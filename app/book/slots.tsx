@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
@@ -17,21 +16,25 @@ import BookingButton from "../../components/booking/BookingButton";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
 import BookingProgress from "../../components/booking/BookingProgress";
 
+import apiClient from "@/utils/api";
+
 // ====================================================================
 // --- API ---
 // ====================================================================
 
-const apiClient = axios.create({
-  baseURL: "https://developerops.xyz/api",
-});
+// const apiClient = axios.create({
+//   baseURL: "http://192.168.1.149:7089/api",
+// });
 
 const api_getSlotTemplates = async () => {
-  const response = await apiClient.get("/Slot");
+  const response = await apiClient.get("/api/Slot");
+  console.log("✅ Loaded slot templates:", response.data);
   return response.data;
 };
 
 const api_getRoomDetails = async (roomId: string) => {
-  const response = await apiClient.get(`/LabRooms/${roomId}`);
+  const response = await apiClient.get(`/api/LabRooms/${roomId}`);
+  console.log("✅ Loaded room details:", response.data);
   return response.data;
 };
 
@@ -41,9 +44,10 @@ const api_getUnavailableSlots = async (
   endDate: string
 ) => {
   try {
-    const response = await apiClient.get("/BookingSlot", {
+    const response = await apiClient.get("/api/BookingSlot", {
       params: { LabRoomId: roomId, StartDate: startDate, EndDate: endDate },
     });
+    console.log("✅ Loaded unavailable slots:", response.data);
     return response.data;
   } catch (e: any) {
     console.error("Lỗi tải lịch:", e);

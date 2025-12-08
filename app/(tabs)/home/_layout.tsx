@@ -50,6 +50,10 @@ export default function HomeStackLayout() {
         name="(manager)/maintenancehistory"
         options={{ header: () => <AppHeader /> }}
       />
+      <Stack.Screen
+        name="(manager)/viewequipment"
+        options={{ header: () => <AppHeader /> }}
+      />
 
       <Stack.Screen
         name="(security)/door-requests"

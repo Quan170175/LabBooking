@@ -1,16 +1,12 @@
-import { Calendar, Check, Clock, X } from "lucide-react-native";
+import { Calendar, Check, Clock, Info, X } from "lucide-react-native";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-// Helper: Gom nhóm slot theo ngày (VD: "22/11 (1 ca)")
 const formatSlotsSummary = (slots: any[]) => {
   if (!slots || slots.length === 0) return "Không thay đổi lịch";
-
   const grouped: Record<string, number> = {};
-
   slots.forEach((s) => {
     try {
-      // Xử lý ngày: Lấy dd/MM
       const dateStr = new Date(s.date).toLocaleDateString("vi-VN", {
         day: "2-digit",
         month: "2-digit",
@@ -21,28 +17,26 @@ const formatSlotsSummary = (slots: any[]) => {
       return;
     }
   });
-
   return Object.keys(grouped)
     .map((date) => `${date} (${grouped[date]} ca)`)
     .join(", ");
 };
 
 type Props = {
-  request: any; // Nhận vào object BookingChangeRequestResponse
+  request: any;
   onApprove: () => void;
   onReject: () => void;
+  onDetail: () => void; // [NEW] Thêm prop onDetail
 };
 
 export default function ManagerChangeCard({
   request,
   onApprove,
   onReject,
+  onDetail,
 }: Props) {
-  // Phân biệt loại request để đổi màu sắc
-  const isSystemOverride = request.requestType === "SystemOverride"; // Do hệ thống tạo khi bị đè
-  const isUserRequest = request.requestType === "UserRequest"; // Do user xin đổi
-
-  // Format ngày tạo
+  const isSystemOverride = request.requestType === "SystemOverride";
+  const isUserRequest = request.requestType === "UserRequest";
   const createdDate = new Date(request.createdAt).toLocaleDateString("vi-VN", {
     day: "2-digit",
     month: "2-digit",
@@ -57,11 +51,9 @@ export default function ManagerChangeCard({
         isSystemOverride ? styles.overrideBorder : styles.changeBorder,
       ]}
     >
-      {/* Header: Tên Phòng + Tag Loại */}
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.roomName}>{request.roomName || "Phòng Lab"}</Text>
-
-        {/* Tag hiển thị trạng thái đặc biệt */}
         {isSystemOverride && (
           <View style={styles.tagWarn}>
             <Text style={styles.tagWarnText}>System Override</Text>
@@ -74,12 +66,12 @@ export default function ManagerChangeCard({
         )}
       </View>
 
-      {/* Tiêu đề mới */}
+      {/* Title */}
       <Text style={styles.title} numberOfLines={2}>
         {request.newTitle || "Tiêu đề trống"}
       </Text>
 
-      {/* Thông tin phụ: Ngày tạo + Loại gốc */}
+      {/* Meta Info */}
       <View style={styles.metaContainer}>
         <Clock size={12} color="#64748B" />
         <Text style={styles.metaInfo}>
@@ -88,7 +80,7 @@ export default function ManagerChangeCard({
         </Text>
       </View>
 
-      {/* Box hiển thị Slot Mới (Tóm tắt) */}
+      {/* Slots */}
       <View style={styles.slotContainer}>
         <Calendar size={14} color="#4F46E5" style={{ marginTop: 2 }} />
         <Text style={styles.slotText}>
@@ -97,8 +89,9 @@ export default function ManagerChangeCard({
         </Text>
       </View>
 
-      {/* Nút bấm Actions */}
+      {/* Footer: 3 Nút Bấm */}
       <View style={styles.buttonContainer}>
+        {/* Từ chối */}
         <TouchableOpacity
           style={[styles.button, styles.rejectButton]}
           onPress={onReject}
@@ -109,6 +102,18 @@ export default function ManagerChangeCard({
           </Text>
         </TouchableOpacity>
 
+        {/* Chi tiết */}
+        <TouchableOpacity
+          style={[styles.button, styles.detailButton]}
+          onPress={onDetail}
+        >
+          <Info size={16} color="#0369A1" />
+          <Text style={[styles.buttonText, styles.detailButtonText]}>
+            Chi tiết
+          </Text>
+        </TouchableOpacity>
+
+        {/* Duyệt */}
         <TouchableOpacity
           style={[styles.button, styles.approveButton]}
           onPress={onApprove}
@@ -136,10 +141,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  // Style riêng cho 2 loại request
-  changeBorder: { borderColor: "#C7D2FE", backgroundColor: "#EEF2FF" }, // Xanh dương nhạt
-  overrideBorder: { borderColor: "#FDBA74", backgroundColor: "#FFF7ED" }, // Cam nhạt
-
+  changeBorder: { borderColor: "#C7D2FE", backgroundColor: "#EEF2FF" },
+  overrideBorder: { borderColor: "#FDBA74", backgroundColor: "#FFF7ED" },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -152,7 +155,6 @@ const styles = StyleSheet.create({
     color: "#475569",
     textTransform: "uppercase",
   },
-
   tagInfo: {
     backgroundColor: "#DBEAFE",
     paddingHorizontal: 8,
@@ -160,7 +162,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   tagInfoText: { fontSize: 10, color: "#1E40AF", fontWeight: "700" },
-
   tagWarn: {
     backgroundColor: "#FFEDD5",
     paddingHorizontal: 8,
@@ -168,9 +169,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   tagWarnText: { fontSize: 10, color: "#9A3412", fontWeight: "700" },
-
   title: { fontSize: 16, fontWeight: "700", color: "#0F172A", marginBottom: 6 },
-
   metaContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -178,7 +177,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   metaInfo: { fontSize: 12, color: "#64748B" },
-
   slotContainer: {
     flexDirection: "row",
     gap: 8,
@@ -190,9 +188,10 @@ const styles = StyleSheet.create({
   },
   slotText: { fontSize: 13, color: "#312E81", flex: 1, lineHeight: 18 },
 
+  // Button Styles
   buttonContainer: {
     flexDirection: "row",
-    gap: 12,
+    gap: 8,
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
@@ -205,21 +204,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 10,
     borderRadius: 8,
-    gap: 6,
+    gap: 4,
   },
-  buttonText: { fontSize: 14, fontWeight: "600" },
+  buttonText: { fontSize: 13, fontWeight: "600" },
 
   rejectButton: {
-    backgroundColor: "#FEF2F2",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#FEE2E2",
+    borderColor: "#FECACA",
   },
   rejectButtonText: { color: "#B91C1C" },
 
-  approveButton: {
-    backgroundColor: "#F0FDF4",
+  detailButton: {
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#DCFCE7",
+    borderColor: "#BAE6FD",
+  },
+  detailButtonText: { color: "#0284C7" },
+
+  approveButton: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
   },
   approveButtonText: { color: "#15803D" },
 });

@@ -1,4 +1,3 @@
-import axios from "axios";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,47 +10,42 @@ import {
 } from "react-native";
 
 // Components
+import BookingDetailModal from "../../../../components/manager/BookingDetailModal";
 import ManagerApprovalCard from "../../../../components/manager/ManagerApprovalCard";
 import ManagerChangeCard from "../../../../components/manager/ManagerChangeCard";
-import BookingDetailModal from "../../../../components/manager/BookingDetailModal";
+// 👇 IMPORT MODAL MỚI
+import RejectModal from "../../../../components/manager/RejectModal";
 
-// API Config
-const apiClient = axios.create({ baseURL: "https://developerops.xyz/api" });
+import apiClient from "../../../../utils/api";
 
-type ActiveTab = "standard" | "priority" | "change";
+type ActiveTab = "booking" | "change";
 
 export default function ManagerApprovalsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [allRequests, setAllRequests] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("standard");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("booking");
 
-  // State cho Modal Chi Tiết
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [slotTemplates, setSlotTemplates] = useState<any[]>([]); // Để map tên Ca trong Modal
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
 
-  // Lab ID của Manager (Cần lấy động từ User Context/Storage thực tế)
-  const managerLabId = "427b0284-4aa9-4f21-b2f3-cb8d851a72cb";
+  // --- STATE MỚI CHO REJECT MODAL ---
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [itemToReject, setItemToReject] = useState<any>(null);
 
-  // --- 1. LOAD DATA ---
+  const [slotTemplates, setSlotTemplates] = useState<any[]>([]);
+
+  // --- 1. LOAD DATA (Giữ nguyên) ---
   const loadData = async () => {
     setIsLoading(true);
     try {
       const [resBookings, resChanges, resSlots] = await Promise.all([
-        // API 1: Lấy đơn đặt mới (Booking)
-        apiClient.get("/Bookings/pending", { params: { labId: managerLabId } }),
-        // API 2: Lấy yêu cầu thay đổi (ChangeRequest)
-        apiClient.get("/BookingChangeRequest/pending", {
-          params: { labId: managerLabId },
-        }),
-        // API 3: Lấy Slot Template (để hiển thị tên Ca trong Modal)
-        apiClient.get("/Slot"),
+        apiClient.get("/api/Bookings/pending"),
+        apiClient.get("/api/BookingChangeRequest/pending"),
+        apiClient.get("/api/Slot"),
       ]);
 
-      // Lưu Slot Templates
       setSlotTemplates(resSlots.data);
 
-      // Đánh dấu loại (Tagging) để dễ filter
       const listBookings = resBookings.data.map((b: any) => ({
         ...b,
         uiType: "BOOKING",
@@ -61,16 +55,17 @@ export default function ManagerApprovalsScreen() {
         uiType: "CHANGE_REQUEST",
       }));
 
-      // Gộp và Sắp xếp (Mới nhất lên đầu)
       const combined = [...listBookings, ...listChanges].sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
 
       setAllRequests(combined);
-    } catch (e) {
-      console.error("Load approvals error:", e);
-      // Alert.alert("Lỗi", "Không tải được danh sách yêu cầu."); // Có thể bỏ qua nếu không muốn spam alert
+    } catch (e: any) {
+      console.error("Load error:", e);
+      if (e.response?.status === 401)
+        Alert.alert("Lỗi", "Hết phiên đăng nhập.");
+      else Alert.alert("Lỗi", "Không tải được dữ liệu.");
     } finally {
       setIsLoading(false);
     }
@@ -80,65 +75,80 @@ export default function ManagerApprovalsScreen() {
     loadData();
   }, []);
 
-  // --- 2. FILTER DATA ---
-  const standardBookings = useMemo(
-    () =>
-      allRequests.filter(
-        (b) => b.uiType === "BOOKING" && b.type !== "UniversityEvent"
-      ),
-    [allRequests]
-  );
-
-  const changeBookings = useMemo(
-    () => allRequests.filter((b) => b.uiType === "CHANGE_REQUEST"),
-    [allRequests]
-  );
-
-  // --- 3. ACTIONS ---
-
-  // Mở Modal xem chi tiết
   const openDetail = (item: any) => {
-    // Nếu là ChangeRequest, bạn có thể cần map lại dữ liệu cho khớp với cấu trúc Modal mong đợi
-    // Hoặc update Modal để nhận type ChangeRequest.
-    // Ở đây giả sử cấu trúc item tương đồng hoặc Modal tự handle.
     setSelectedBooking(item);
-    setModalVisible(true);
+    setDetailModalVisible(true);
   };
 
-  // Xử lý Duyệt / Từ chối
-  const handleAction = async (item: any, isApprove: boolean) => {
+  // --- 2. LOGIC PRE-ACTION (Phân loại nút bấm) ---
+  const onActionPress = (item: any, isApprove: boolean) => {
+    if (isApprove) {
+      // Nếu duyệt -> Gọi API luôn (hoặc hiện Alert confirm nhẹ)
+      callApiAction(item, true, null);
+    } else {
+      // Nếu từ chối -> Mở Modal nhập lý do
+      setItemToReject(item);
+      setRejectModalVisible(true);
+    }
+  };
+
+  // --- 3. GỌI API THỰC SỰ ---
+  const callApiAction = async (
+    item: any,
+    isApprove: boolean,
+    reason: string | null
+  ) => {
     try {
-      let endpoint = "";
-      if (item.uiType === "CHANGE_REQUEST") {
-        endpoint = `/BookingChangeRequests/${item.id}/${
-          isApprove ? "approve" : "reject"
-        }`;
-      } else {
-        endpoint = `/Bookings/${item.id}/${isApprove ? "approve" : "reject"}`;
+      const action = isApprove ? "approve" : "reject";
+      const endpoint =
+        item.uiType === "CHANGE_REQUEST"
+          ? `/api/BookingChangeRequest/${action}`
+          : `/api/Bookings/${action}`;
+
+      // Payload: Thêm reason nếu là Reject
+      const payload: any = { bookingId: item.id };
+      if (!isApprove && reason) {
+        payload.reason = reason;
       }
 
-      console.log(`🚀 Calling: ${endpoint}`);
-      await apiClient.put(endpoint);
+      await apiClient.put(endpoint, payload);
 
       Alert.alert(
         "Thành công",
         `Đã ${isApprove ? "duyệt" : "từ chối"} yêu cầu.`
       );
 
-      // Đóng modal nếu đang mở
-      setModalVisible(false);
-      // Reload lại danh sách
+      // Reset state & Load lại
+      setDetailModalVisible(false);
+      setRejectModalVisible(false);
+      setItemToReject(null);
       loadData();
     } catch (error: any) {
       console.error(error);
-      const msg = error.response?.data?.message || "Lỗi hệ thống khi xử lý.";
+      const msg = error.response?.data?.message || "Lỗi hệ thống.";
       Alert.alert("Thất bại", msg);
     }
   };
 
-  // --- 4. RENDER LIST ---
+  // --- 4. CALLBACK TỪ MODAL REJECT ---
+  const handleConfirmReject = (reason: string) => {
+    if (!itemToReject) return;
+    // Gọi API với reason
+    callApiAction(itemToReject, false, reason);
+  };
+
+  // --- RENDER ---
+  const bookingRequests = useMemo(
+    () => allRequests.filter((b) => b.uiType === "BOOKING"),
+    [allRequests]
+  );
+  const changeRequests = useMemo(
+    () => allRequests.filter((b) => b.uiType === "CHANGE_REQUEST"),
+    [allRequests]
+  );
+
   const renderList = () => {
-    if (isLoading) {
+    if (isLoading)
       return (
         <ActivityIndicator
           style={styles.centered}
@@ -146,50 +156,19 @@ export default function ManagerApprovalsScreen() {
           color="#EA580C"
         />
       );
-    }
 
-    let data = [];
+    let data: any[] = [];
     let EmptyComp = null;
-    let renderItem: any = null;
 
     switch (activeTab) {
-      case "standard":
-        data = standardBookings;
+      case "booking":
+        data = bookingRequests;
         EmptyComp = <Text style={styles.emptyText}>Không có đơn đặt mới.</Text>;
-        renderItem = ({ item }: any) => (
-          // Bọc trong TouchableOpacity để bấm vào xem chi tiết
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => openDetail(item)}
-            style={{ marginBottom: 12 }}
-          >
-            <ManagerApprovalCard
-              booking={item}
-              onApprove={() => handleAction(item, true)}
-              onReject={() => handleAction(item, false)}
-            />
-          </TouchableOpacity>
-        );
         break;
-
       case "change":
-        data = changeBookings;
+        data = changeRequests;
         EmptyComp = (
           <Text style={styles.emptyText}>Không có yêu cầu thay đổi.</Text>
-        );
-        renderItem = ({ item }: any) => (
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => openDetail(item)}
-            style={{ marginBottom: 12 }}
-          >
-            {/* Dùng Component Card riêng cho Change Request nếu có */}
-            <ManagerChangeCard
-              request={item}
-              onApprove={() => handleAction(item, true)}
-              onReject={() => handleAction(item, false)}
-            />
-          </TouchableOpacity>
         );
         break;
     }
@@ -197,11 +176,31 @@ export default function ManagerApprovalsScreen() {
     return (
       <FlatList
         data={data}
-        renderItem={renderItem}
         keyExtractor={(item) => item.id}
         ListEmptyComponent={EmptyComp}
         contentContainerStyle={{ paddingBottom: 100 }}
-        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => {
+          // Pass hàm onActionPress vào thay vì gọi api trực tiếp
+          if (item.uiType === "CHANGE_REQUEST") {
+            return (
+              <ManagerChangeCard
+                request={item}
+                onApprove={() => onActionPress(item, true)}
+                onReject={() => onActionPress(item, false)}
+                onDetail={() => openDetail(item)}
+              />
+            );
+          } else {
+            return (
+              <ManagerApprovalCard
+                booking={item}
+                onApprove={() => onActionPress(item, true)}
+                onReject={() => onActionPress(item, false)}
+                onDetail={() => openDetail(item)}
+              />
+            );
+          }
+        }}
       />
     );
   };
@@ -212,17 +211,16 @@ export default function ManagerApprovalsScreen() {
         <Text style={styles.title}>Duyệt yêu cầu</Text>
       </View>
 
-      {/* Tab Selector */}
       <View style={styles.tabContainer}>
         <TabButton
           title="Lịch mới"
-          count={standardBookings.length}
-          isActive={activeTab === "standard"}
-          onPress={() => setActiveTab("standard")}
+          count={bookingRequests.length}
+          isActive={activeTab === "booking"}
+          onPress={() => setActiveTab("booking")}
         />
         <TabButton
           title="Thay đổi"
-          count={changeBookings.length}
+          count={changeRequests.length}
           isActive={activeTab === "change"}
           onPress={() => setActiveTab("change")}
         />
@@ -230,45 +228,38 @@ export default function ManagerApprovalsScreen() {
 
       <View style={styles.listContainer}>{renderList()}</View>
 
-      {/* --- MODAL CHI TIẾT --- */}
+      {/* DETAIL MODAL (Cần sửa cả nút trong Detail Modal nếu có) */}
       <BookingDetailModal
-        visible={modalVisible}
+        visible={detailModalVisible}
         booking={selectedBooking}
-        onClose={() => setModalVisible(false)}
         slotTemplates={slotTemplates}
+        onClose={() => setDetailModalVisible(false)}
+        // Sửa prop onApprove/onReject để dùng chung logic
+        onApprove={() => onActionPress(selectedBooking, true)}
+        onReject={() => onActionPress(selectedBooking, false)}
+      />
+
+      {/* 👇 MODAL TỪ CHỐI MỚI */}
+      <RejectModal
+        visible={rejectModalVisible}
+        onClose={() => setRejectModalVisible(false)}
+        onConfirm={handleConfirmReject}
       />
     </View>
   );
 }
 
-// Tab Component
-const TabButton = ({
-  title,
-  count,
-  isActive,
-  onPress,
-  isPriority = false,
-}: any) => (
+// ... (Giữ nguyên TabButton và Styles)
+const TabButton = ({ title, count, isActive, onPress }: any) => (
   <TouchableOpacity
     style={[styles.tab, isActive && styles.tabActive]}
     onPress={onPress}
   >
-    <Text
-      style={[
-        styles.tabText,
-        isActive && styles.tabTextActive,
-        isPriority && !isActive && styles.tabTextPriority,
-      ]}
-    >
+    <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
       {title}
     </Text>
     {count > 0 && (
-      <View
-        style={[
-          styles.badge,
-          isPriority ? styles.badgePriority : styles.badgeDefault,
-        ]}
-      >
+      <View style={styles.badge}>
         <Text style={styles.badgeText}>{count}</Text>
       </View>
     )}
@@ -305,16 +296,14 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomColor: "#EA580C" },
   tabText: { fontSize: 14, fontWeight: "600", color: "#64748B" },
   tabTextActive: { color: "#EA580C" },
-  tabTextPriority: { color: "#D97706" },
   badge: {
     borderRadius: 99,
     paddingHorizontal: 6,
     paddingVertical: 2,
     minWidth: 20,
     alignItems: "center",
+    backgroundColor: "#E0F2FE",
   },
-  badgeDefault: { backgroundColor: "#E0F2FE" },
-  badgePriority: { backgroundColor: "#FEF9C3" },
   badgeText: { fontSize: 12, fontWeight: "600", color: "#0369A1" },
   listContainer: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   emptyText: {
