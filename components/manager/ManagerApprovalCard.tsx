@@ -1,7 +1,9 @@
 import {
+  AlertCircle,
   BookOpen,
   CalendarClock,
   Check,
+  Info,
   MapPin,
   Users,
   X,
@@ -9,34 +11,26 @@ import {
 import React, { useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-// --- TYPE DEFINITIONS (Dựa trên JSON bạn gửi) ---
-type Slot = {
-  id: string;
-  date: string; // "2025-11-24"
-  slotId: string;
-};
-
+// --- TYPE DEFINITIONS ---
+type Slot = { id: string; date: string; slotId: string };
 type LabRoomResponse = {
   labName: string;
   location: string;
   maximumLimit: number;
 };
+type CourseResponse = { courseCode: string; courseName: string };
 
-type CourseResponse = {
-  courseCode: string;
-  courseName: string;
-};
-
-// Định nghĩa lại type Booking cho khớp với API mới
 export type BookingRequest = {
   id: string;
   title: string;
   description: string;
-  type: string; // "Teaching"
-  status: string; // "Pending"
+  type: string;
+  status: string;
   numberOfParticipants: number;
   labRoomResponse: LabRoomResponse;
-  courseResponse?: CourseResponse; // Có thể null nếu không phải teaching
+  courseResponse?: CourseResponse;
+  priorityDetail?: any; // Thêm
+  bookingPriorityDetail?: any; // Thêm
   slots: Slot[];
 };
 
@@ -44,12 +38,12 @@ type Props = {
   booking: BookingRequest;
   onApprove: () => void;
   onReject: () => void;
-  onPress?: () => void; // Thêm sự kiện bấm vào cả thẻ để xem chi tiết
+  onDetail: () => void;
 };
 
-// --- HELPER FUNCTION ---
+// Helper format ngày
 const formatDate = (dateString: string) => {
-  const parts = dateString.split("-"); // 2025-11-24
+  const parts = dateString.split("-");
   if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
   return dateString;
 };
@@ -58,40 +52,37 @@ export default function ManagerApprovalCard({
   booking,
   onApprove,
   onReject,
-  onPress,
+  onDetail,
 }: Props) {
-  // Logic hiển thị Slot: Gom nhóm theo ngày
+  // Logic hiển thị slot
   const slotSummary = useMemo(() => {
     if (!booking.slots || booking.slots.length === 0) return "Chưa có lịch";
-
-    // Gom slot theo ngày
     const groups: Record<string, number> = {};
     booking.slots.forEach((s) => {
-      if (!groups[s.date]) groups[s.date] = 0;
-      groups[s.date]++;
+      const datePart = s.date.split("T")[0]; // Cắt chuỗi ngày để gom nhóm đúng
+      if (!groups[datePart]) groups[datePart] = 0;
+      groups[datePart]++;
     });
-
-    // Tạo chuỗi hiển thị: "24/11 (1 slot), 26/11 (1 slot)"
     const lines = Object.keys(groups).map(
       (date) => `${formatDate(date)} (${groups[date]} ca)`
     );
-
     return lines.join(" • ");
   }, [booking.slots]);
 
+  // Lấy thông tin Priority (nếu có)
+  const priorityData = booking.priorityDetail || booking.bookingPriorityDetail;
+
   return (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.7}
-      onPress={onPress} // Cho phép bấm vào xem chi tiết
-    >
-      {/* 1. Header: Tiêu đề & Loại */}
+    <View style={styles.card}>
+      {/* 1. Header */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>
             {booking.title}
           </Text>
-          <Text style={styles.idText}>ID: {booking.id.slice(0, 8)}...</Text>
+          <Text style={styles.idText}>
+            ID: {booking.id.slice(0, 8).toUpperCase()}
+          </Text>
         </View>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{booking.type}</Text>
@@ -100,9 +91,9 @@ export default function ManagerApprovalCard({
 
       <View style={styles.divider} />
 
-      {/* 2. Body: Thông tin chi tiết */}
+      {/* 2. Body */}
       <View style={styles.body}>
-        {/* Phòng Lab */}
+        {/* Phòng */}
         <View style={styles.row}>
           <MapPin size={16} color="#F97316" />
           <Text style={styles.rowText}>
@@ -116,7 +107,7 @@ export default function ManagerApprovalCard({
           </Text>
         </View>
 
-        {/* Môn học (Nếu có) */}
+        {/* [HIỂN THỊ RIÊNG] Môn học (Teaching) */}
         {booking.courseResponse && (
           <View style={styles.row}>
             <BookOpen size={16} color="#6366F1" />
@@ -129,12 +120,37 @@ export default function ManagerApprovalCard({
           </View>
         )}
 
-        {/* Sĩ số & Sức chứa */}
+        {/* [HIỂN THỊ RIÊNG] Sự kiện ưu tiên (Priority) */}
+        {priorityData && (
+          <View style={[styles.row, { alignItems: "flex-start" }]}>
+            <AlertCircle size={16} color="#DC2626" style={{ marginTop: 2 }} />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  styles.rowText,
+                  { color: "#DC2626", fontWeight: "700" },
+                ]}
+              >
+                Sự kiện ưu tiên
+              </Text>
+              <Text
+                style={[
+                  styles.rowText,
+                  { fontSize: 13, fontStyle: "italic", color: "#7F1D1D" },
+                ]}
+              >
+                {priorityData.justification}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Sĩ số */}
         <View style={styles.row}>
           <Users size={16} color="#0EA5E9" />
           <Text style={styles.rowText}>
             Sĩ số: {booking.numberOfParticipants} /{" "}
-            {booking.labRoomResponse?.maximumLimit} sinh viên
+            {booking.labRoomResponse?.maximumLimit}
           </Text>
         </View>
 
@@ -149,29 +165,42 @@ export default function ManagerApprovalCard({
         </View>
       </View>
 
-      {/* 3. Footer: Nút bấm */}
+      {/* 3. Footer: HÀNG 3 NÚT BẤM */}
       <View style={styles.buttonContainer}>
+        {/* Nút 1: Từ chối */}
         <TouchableOpacity
           style={[styles.button, styles.rejectButton]}
           onPress={onReject}
         >
-          <X size={18} color="#EF4444" />
+          <X size={16} color="#EF4444" />
           <Text style={[styles.buttonText, styles.rejectButtonText]}>
             Từ chối
           </Text>
         </TouchableOpacity>
 
+        {/* Nút 2: Chi tiết (NẰM GIỮA) */}
+        <TouchableOpacity
+          style={[styles.button, styles.detailButton]}
+          onPress={onDetail}
+        >
+          <Info size={16} color="#0369A1" />
+          <Text style={[styles.buttonText, styles.detailButtonText]}>
+            Chi tiết
+          </Text>
+        </TouchableOpacity>
+
+        {/* Nút 3: Duyệt */}
         <TouchableOpacity
           style={[styles.button, styles.approveButton]}
           onPress={onApprove}
         >
-          <Check size={18} color="#16A34A" />
+          <Check size={16} color="#16A34A" />
           <Text style={[styles.buttonText, styles.approveButtonText]}>
-            Duyệt đơn
+            Duyệt
           </Text>
         </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -189,8 +218,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-
-  // Header
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -210,38 +237,38 @@ const styles = StyleSheet.create({
     color: "#475569",
     textTransform: "uppercase",
   },
-
   divider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 12 },
-
-  // Body Rows
   body: { gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   rowText: { fontSize: 14, color: "#334155", flex: 1 },
 
-  // Buttons
+  // --- BUTTON STYLES ---
   buttonContainer: {
     flexDirection: "row",
-    gap: 12,
+    gap: 8,
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
   },
+
   button: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 10,
-    gap: 6,
+    gap: 4,
   },
-  buttonText: { fontSize: 14, fontWeight: "700" },
+  buttonText: { fontSize: 12, fontWeight: "700" },
 
-  // Button Colors
-  rejectButton: { backgroundColor: "#FEF2F2" }, // Đỏ rất nhạt
-  rejectButtonText: { color: "#EF4444" }, // Đỏ đậm
+  rejectButton: { backgroundColor: "#FEF2F2" },
+  rejectButtonText: { color: "#EF4444" },
 
-  approveButton: { backgroundColor: "#F0FDF4" }, // Xanh lá rất nhạt
-  approveButtonText: { color: "#16A34A" }, // Xanh lá đậm
+  detailButton: { backgroundColor: "#E0F2FE" },
+  detailButtonText: { color: "#0284C7" },
+
+  approveButton: { backgroundColor: "#F0FDF4" },
+  approveButtonText: { color: "#16A34A" },
 });

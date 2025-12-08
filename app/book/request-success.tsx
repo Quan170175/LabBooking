@@ -1,4 +1,3 @@
-import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertCircle,
@@ -11,7 +10,8 @@ import {
   Minus,
   Package,
   Plus,
-} from "lucide-react-native"; // Thêm Plus, Minus
+  Users, // [MỚI] Icon Users
+} from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -35,8 +35,10 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
 
+import apiClient from "@/utils/api";
+
 // --- CONFIG & HELPER ---
-const apiClient = axios.create({ baseURL: "https://developerops.xyz/api" });
+// const apiClient = axios.create({ baseURL: "http://192.168.1.149:7089/api" });
 
 const formatDate = (d: string) => {
   try {
@@ -72,11 +74,8 @@ export default function RequestSuccessScreen() {
 
   const [requestData, setRequestData] = useState<any>(null);
   const [slotTemplates, setSlotTemplates] = useState<any[]>([]);
-
-  // State cho slot thêm/xóa
   const [addedSlots, setAddedSlots] = useState<any[]>([]);
   const [removedSlots, setRemovedSlots] = useState<any[]>([]);
-
   const [loading, setLoading] = useState(true);
 
   // --- ANIMATION HOOKS ---
@@ -91,7 +90,6 @@ export default function RequestSuccessScreen() {
   const animatedCheckProps = useAnimatedProps(() => ({
     strokeDashoffset: CHECK_LENGTH * (1 - progress.value),
   }));
-
   const animatedIconStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
     backgroundColor: interpolateColor(
@@ -105,18 +103,16 @@ export default function RequestSuccessScreen() {
   useEffect(() => {
     const init = async () => {
       try {
-        // 1. Parse kết quả trả về từ API
         if (params.result) {
           const data = JSON.parse(params.result as string);
           setRequestData(data);
         }
-        // 2. Parse danh sách Slot Thêm/Xóa từ params (truyền từ trang trước)
         if (params.addedSlots)
           setAddedSlots(JSON.parse(params.addedSlots as string));
         if (params.removedSlots)
           setRemovedSlots(JSON.parse(params.removedSlots as string));
 
-        const resSlots = await apiClient.get("/Slot");
+        const resSlots = await apiClient.get("/api/Slot");
         setSlotTemplates(resSlots.data);
       } catch (e) {
         console.error("Error loading success data:", e);
@@ -134,7 +130,6 @@ export default function RequestSuccessScreen() {
       }
     );
 
-    // Start Animation
     scale.value = withSpring(1, { damping: 12 });
     progress.value = withDelay(
       300,
@@ -157,7 +152,7 @@ export default function RequestSuccessScreen() {
       </View>
     );
 
-  // --- LOGIC GROUP SLOT THEO NGÀY ---
+  // --- HELPER ---
   const getSlotName = (id: string) => {
     const t = slotTemplates.find((x) => x.id === id);
     return t ? t.label.split("(")[0].trim() : "Slot";
@@ -174,18 +169,18 @@ export default function RequestSuccessScreen() {
 
   const groupedAdded = groupSlots(addedSlots);
   const groupedRemoved = groupSlots(removedSlots);
-
-  // Lấy danh sách ngày (gộp cả thêm và xóa để sort)
   const allDates = Array.from(
     new Set([...Object.keys(groupedAdded), ...Object.keys(groupedRemoved)])
   ).sort();
 
   const devices = requestData.newExternalEquipments || [];
+  const guests = requestData.newOutSideGuests || []; // [MỚI] Lấy danh sách khách
 
   // --- RENDER UI ---
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+        {/* HEADER */}
         <View style={styles.header}>
           <Animated.View
             style={[styles.animatedIconWrapper, animatedIconStyle]}
@@ -221,7 +216,7 @@ export default function RequestSuccessScreen() {
         </View>
 
         <View style={styles.card}>
-          {/* Header Card */}
+          {/* INFO CƠ BẢN */}
           <View style={styles.cardHeader}>
             <Text style={styles.reqTitle}>
               {requestData.newTitle || "Không có tiêu đề"}
@@ -246,9 +241,8 @@ export default function RequestSuccessScreen() {
           <View style={styles.row}>
             <MapPin size={16} color="#64748B" />
             <Text style={styles.rowText}>
-              {requestData.roomName || "Phòng Lab"}
+              {requestData.roomName || "Phòng Lab"}{" "}
               <Text style={{ color: "#94A3B8", fontSize: 12 }}>
-                {" "}
                 (ID: {requestData.labRoomId?.substring(0, 6).toUpperCase()})
               </Text>
             </Text>
@@ -269,7 +263,7 @@ export default function RequestSuccessScreen() {
 
           <View style={styles.divider} />
 
-          {/* Project Info */}
+          {/* PROJECT INFO */}
           {requestData.newProject && (
             <View style={styles.subSection}>
               <View style={styles.subHeader}>
@@ -282,7 +276,7 @@ export default function RequestSuccessScreen() {
             </View>
           )}
 
-          {/* Priority Info */}
+          {/* PRIORITY INFO */}
           {requestData.newPriorityDetail && (
             <View style={styles.subSection}>
               <View style={styles.subHeader}>
@@ -304,7 +298,7 @@ export default function RequestSuccessScreen() {
             </View>
           )}
 
-          {/* --- SLOTS CHANGES (MỚI) --- */}
+          {/* SLOTS CHANGES */}
           <View style={styles.subSection}>
             <View style={styles.subHeader}>
               <Calendar size={14} color="#2563EB" />
@@ -318,17 +312,13 @@ export default function RequestSuccessScreen() {
                   Không có thay đổi về thời gian.
                 </Text>
               )}
-
               {allDates.map((date) => {
                 const added = groupedAdded[date] || [];
                 const removed = groupedRemoved[date] || [];
-
                 return (
                   <View key={date} style={styles.slotRowDateGroup}>
                     <Text style={styles.dateText}>{formatDate(date)}</Text>
-
                     <View style={styles.slotChangesWrapper}>
-                      {/* Slot Bị Xóa */}
                       {removed.map((sid: string) => (
                         <View
                           key={`rem_${sid}`}
@@ -342,8 +332,6 @@ export default function RequestSuccessScreen() {
                           </Text>
                         </View>
                       ))}
-
-                      {/* Slot Thêm Mới */}
                       {added.map((sid: string) => (
                         <View
                           key={`add_${sid}`}
@@ -362,7 +350,29 @@ export default function RequestSuccessScreen() {
             </View>
           </View>
 
-          {/* Devices */}
+          {/* [MỚI] GUESTS SECTION */}
+          {guests.length > 0 && (
+            <View style={styles.subSection}>
+              <View style={styles.subHeader}>
+                <Users size={14} color="#4F46E5" />
+                <Text style={[styles.subTitle, { color: "#4F46E5" }]}>
+                  Khách mời bên ngoài
+                </Text>
+              </View>
+              {guests.map((g: any, idx: number) => (
+                <View key={idx} style={styles.equipRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.equipName}>{g.fullName}</Text>
+                    <Text style={styles.equipDesc}>
+                      {g.organization} {g.purpose ? `• ${g.purpose}` : ""}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* DEVICES */}
           {devices.length > 0 && (
             <View style={styles.subSection}>
               <View style={styles.subHeader}>
@@ -375,7 +385,7 @@ export default function RequestSuccessScreen() {
                 <View key={idx} style={styles.equipRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.equipName}>
-                      {eq.equipmentName || eq.name || "Thiết bị"}
+                      {eq.name || "Thiết bị"}
                     </Text>
                     {eq.description ? (
                       <Text style={styles.equipDesc}>{eq.description}</Text>
@@ -389,6 +399,7 @@ export default function RequestSuccessScreen() {
         </View>
       </ScrollView>
 
+      {/* FOOTER */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={styles.secondaryButton}
@@ -413,7 +424,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF", paddingTop: 40 },
   content: { padding: 20, paddingBottom: 100, alignItems: "center" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-
   header: { alignItems: "center", marginBottom: 24, marginTop: 10 },
   animatedIconWrapper: {
     width: 80,
@@ -429,7 +439,6 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
   subtitle: { fontSize: 14, color: "#64748B", marginTop: 4 },
-
   card: {
     width: "100%",
     backgroundColor: "#F8FAFC",
@@ -459,14 +468,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   statusText: { fontSize: 12, fontWeight: "700", color: "#D97706" },
-
   row: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   rowText: { fontSize: 14, color: "#334155" },
-
   badgeContainer: { flexDirection: "row", gap: 8, marginTop: 8 },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   badgeText: { fontSize: 12, fontWeight: "600" },
-
   divider: { height: 1, backgroundColor: "#E2E8F0", marginVertical: 16 },
 
   subSection: { marginBottom: 16 },
@@ -498,7 +504,6 @@ const styles = StyleSheet.create({
   },
   noteText: { fontSize: 13, color: "#64748B", fontStyle: "italic" },
 
-  // --- STYLES CHO SLOT THÊM/XÓA ---
   slotContainer: { gap: 12, paddingLeft: 8 },
   slotRowDateGroup: { marginBottom: 4 },
   dateText: {
@@ -508,7 +513,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   slotChangesWrapper: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-
   slotChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -518,12 +522,8 @@ const styles = StyleSheet.create({
     gap: 4,
     borderWidth: 1,
   },
-
-  // Style cho Slot Thêm
   slotChipAdded: { backgroundColor: "#DCFCE7", borderColor: "#86EFAC" },
   chipTextAdded: { fontSize: 12, color: "#16A34A", fontWeight: "700" },
-
-  // Style cho Slot Xóa
   slotChipRemoved: { backgroundColor: "#FEE2E2", borderColor: "#FECACA" },
   chipTextRemoved: {
     fontSize: 12,
@@ -531,7 +531,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textDecorationLine: "line-through",
   },
-
   chipText: { fontSize: 12 },
 
   equipRow: {

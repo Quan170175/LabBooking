@@ -134,7 +134,18 @@ export default function LoginScreen() {
       }
     } catch (error: any) {
       console.error("Lỗi trong quá trình đăng nhập hoặc gọi API:", error);
+      try {
+        // 1. Xóa sạch token cũ (nếu có) để tránh app hiểu lầm là đã login
+        await SecureStore.deleteItemAsync("accessToken");
+        await SecureStore.deleteItemAsync("refreshToken");
 
+        // 2. Đăng xuất khỏi Google SDK trên thiết bị
+        // Để lần sau user ấn vào nút Login, nó sẽ hiện bảng chọn tài khoản lại
+        // thay vì tự động dùng tài khoản lỗi vừa rồi.
+        await GoogleSignin.signOut();
+      } catch (cleanupError) {
+        console.log("Lỗi khi dọn dẹp session:", cleanupError);
+      }
       if (error.response) {
         const errorMessage =
           error.response.data?.message || "Có lỗi xảy ra từ server.";

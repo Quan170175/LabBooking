@@ -1,9 +1,9 @@
-import axios from "axios";
 import { useRouter } from "expo-router";
-import { CalendarClock } from "lucide-react-native"; // Icon đồng hồ
+import { AlertCircle, CalendarClock } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,12 +11,13 @@ import {
   View,
 } from "react-native";
 import { Path, Svg } from "react-native-svg";
+
+// --- COMPONENTS ---
 import BookingCard from "../../components/booking/BookingCard";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
 
-const apiClient = axios.create({
-  baseURL: "https://developerops.xyz/api",
-});
+// --- IMPORT API CLIENT ---
+import apiClient from "../../utils/api";
 
 // --- HELPER ---
 const getTypeLabel = (type: string) => {
@@ -40,13 +41,21 @@ export default function SelectBookingToChange() {
   useEffect(() => {
     const loadBookings = async () => {
       try {
-        const userId = "c2f3a4d8-9b7e-43c1-8c4f-2e7a0f4c12ab"; // TODO: Lấy ID thật
-        const response = await apiClient.get("/Bookings/changeable", {
-          params: { userId: userId },
-        });
+        setIsLoading(true);
+        console.log("📥 Fetching changeable bookings...");
+
+        // Gọi API lấy danh sách (Backend đã update thêm field hasPendingChangeRequest)
+        const response = await apiClient.get("/api/Bookings/changeable");
+
+        console.log(`✅ Loaded ${response.data} bookings.`);
         setBookings(response.data);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Lỗi tải bookings:", error);
+        if (error.response?.status === 401) {
+          Alert.alert("Lỗi", "Phiên đăng nhập hết hạn.");
+        } else {
+          Alert.alert("Lỗi", "Không tải được danh sách.");
+        }
       } finally {
         setIsLoading(false);
       }
@@ -55,12 +64,14 @@ export default function SelectBookingToChange() {
   }, []);
 
   const handleSelectBooking = (bookingId: string) => {
+    console.log("✏️ Chọn booking để thay đổi:", bookingId);
     router.push({
-      pathname: "/book/change-slots",
+      pathname: "/book/change-slots", // Hoặc change-slots tùy flow
       params: { bookingId: bookingId },
     } as any);
   };
 
+  // Icon header
   const headerIcon = (
     <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <Path
@@ -85,7 +96,7 @@ export default function SelectBookingToChange() {
       <BookingPageHeader
         icon={headerIcon}
         title="Chọn lịch cần thay đổi"
-        subtitle="Chọn lịch đã đặt để dời ngày hoặc chỉnh sửa thông tin"
+        subtitle="Danh sách các lịch đã được duyệt có thể chỉnh sửa"
       />
 
       {isLoading ? (
@@ -100,12 +111,14 @@ export default function SelectBookingToChange() {
         <View style={styles.listContainer}>
           {bookings.map((b) => {
             // --- LOGIC HIỂN THỊ ---
-            const roomDisplay = b.labRoomResponse
-              ? `${b.labRoomResponse.labName} - ${b.labRoomResponse.location}`
-              : `Phòng: ${b.labRoomId.substring(0, 8).toUpperCase()}`;
-
-            // Tính số slot chưa diễn ra
+            const roomDisplay =
+              b.labRoomResponse?.labName || `Phòng: ${b.labRoomId}`;
             const totalSlots = b.slots?.length || 0;
+
+            // Check xem có đơn pending không (QUAN TRỌNG)
+            const isPendingChange = b.hasPendingChangeRequest === true;
+
+            // Đếm số slot tương lai
             const now = new Date();
             now.setHours(0, 0, 0, 0);
             const futureSlots = (b.slots || []).filter(
@@ -114,26 +127,21 @@ export default function SelectBookingToChange() {
 
             return (
               <BookingCard key={b.id} layout="default">
-                {/* QUAN TRỌNG: View này giúp chia đôi hàng ngang */}
                 <View style={styles.cardContainer}>
-                  {/* 1. CỘT TRÁI (Nội dung Text) - Chiếm hết chỗ trống */}
+                  {/* 1. CỘT TRÁI: THÔNG TIN */}
                   <View style={styles.textColumn}>
-                    {/* Dòng 1: Tiêu đề */}
                     <Text style={styles.bookingTitle} numberOfLines={1}>
                       {b.title || "Không có tiêu đề"}
                     </Text>
 
-                    {/* Dòng 2: Tên Phòng */}
                     <Text style={styles.roomName} numberOfLines={1}>
                       {roomDisplay}
                     </Text>
 
-                    {/* Dòng 3: Loại & Số người */}
                     <Text style={styles.metaText}>
                       {getTypeLabel(b.type)} • {b.numberOfParticipants} người
                     </Text>
 
-                    {/* Dòng 4: Slot Info */}
                     <View style={styles.slotRow}>
                       <CalendarClock
                         size={14}
@@ -149,15 +157,38 @@ export default function SelectBookingToChange() {
                         slot chưa diễn ra
                       </Text>
                     </View>
+
+                    {/* [MỚI] Dòng thông báo nhỏ nếu đang Pending */}
+                    {isPendingChange && (
+                      <View style={styles.pendingNote}>
+                        <AlertCircle size={12} color="#D97706" />
+                        <Text style={styles.pendingNoteText}>
+                          Đang có yêu cầu sửa đổi chờ duyệt
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
-                  {/* 2. CỘT PHẢI (Nút bấm) - Kích thước tự động */}
-                  <TouchableOpacity
-                    onPress={() => handleSelectBooking(b.id)}
-                    style={styles.selectButton}
-                  >
-                    <Text style={styles.selectButtonText}>Sửa</Text>
-                  </TouchableOpacity>
+                  {/* 2. CỘT PHẢI: NÚT BẤM */}
+                  <View style={styles.actionColumn}>
+                    <TouchableOpacity
+                      onPress={() => handleSelectBooking(b.id)}
+                      disabled={isPendingChange} // Chặn bấm nếu đang pending
+                      style={[
+                        styles.selectButton,
+                        isPendingChange && styles.disabledButton, // Style xám nếu pending
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.selectButtonText,
+                          isPendingChange && styles.disabledButtonText,
+                        ]}
+                      >
+                        {isPendingChange ? "Đã gửi" : "Sửa"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </BookingCard>
             );
@@ -179,19 +210,14 @@ const styles = StyleSheet.create({
   },
   listContainer: { gap: 16 },
 
-  // --- LAYOUT CHÍNH ---
   cardContainer: {
-    flexDirection: "row", // Xếp ngang
-    alignItems: "center", // Căn giữa dọc
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
   },
-
-  // Cột trái: flex: 1 để đẩy nút sang lề phải
-  textColumn: {
-    flex: 1,
-    paddingRight: 12,
-  },
+  textColumn: { flex: 1, paddingRight: 12 },
+  actionColumn: { alignItems: "flex-end" },
 
   bookingTitle: {
     fontSize: 16,
@@ -207,20 +233,39 @@ const styles = StyleSheet.create({
   },
   metaText: { fontSize: 13, color: "#64748B", marginBottom: 6 },
 
-  // Dòng slot
   slotRow: { flexDirection: "row", alignItems: "center" },
   slotText: { fontSize: 13, color: "#334155" },
 
-  // Nút bấm
+  // Styles cho dòng thông báo nhỏ
+  pendingNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+  },
+  pendingNoteText: { fontSize: 11, color: "#D97706", fontStyle: "italic" },
+
+  // Styles Nút
   selectButton: {
     backgroundColor: "#FFF7ED",
     borderWidth: 1,
     borderColor: "#FFDCC6",
-    paddingVertical: 10, // Tăng nhẹ chiều cao nút cho dễ bấm
+    paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 10,
+    minWidth: 80,
+    alignItems: "center",
   },
   selectButtonText: { color: "#C2410C", fontWeight: "600", fontSize: 13 },
+
+  // Styles Disabled (Khi đang chờ duyệt)
+  disabledButton: {
+    backgroundColor: "#F3F4F6",
+    borderColor: "#E5E7EB",
+  },
+  disabledButtonText: {
+    color: "#9CA3AF",
+  },
 
   emptyContainer: { alignItems: "center", marginTop: 40 },
   emptyText: { textAlign: "center", color: "#64748B", fontSize: 15 },

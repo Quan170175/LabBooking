@@ -1,4 +1,3 @@
-import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -11,16 +10,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Path, Svg } from "react-native-svg";
+import { Circle, Path, Svg } from "react-native-svg";
 
 // --- COMPONENTS ---
 import AddDeviceModal, {
   CustomDevice,
 } from "../../components/booking/AddDeviceModal";
+import AddGuestModal, { Guest } from "../../components/booking/AddGuestModal"; // [CHECK]
 import BookingButton from "../../components/booking/BookingButton";
 import BookingCard from "../../components/booking/BookingCard";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";
 import ConfirmationModal from "../../components/common/ConfirmationModal";
+
+// --- API CLIENT ---
+import apiClient from "../../utils/api";
 
 // --- ICONS ---
 const DeviceIcon = () => (
@@ -62,15 +65,26 @@ const MonitorIcon = () => (
     />
   </Svg>
 );
+const UserIcon = () => (
+  <Svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="#64748B"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <Circle cx="12" cy="7" r="4" />
+  </Svg>
+);
 
-// --- API CONFIG ---
-// const apiClient = axios.create({ baseURL: "https://developerops.xyz/api" });
-const apiClient = axios.create({ baseURL: "https://developerops.xyz/api" });
-
-// API lấy chi tiết phòng (để lấy Equipments & MaxCapacity)
+// API Get Room
 const api_getRoomDetails = async (roomId: string) => {
   try {
-    const response = await apiClient.get(`/LabRooms/${roomId}`);
+    const response = await apiClient.get(`/api/LabRooms/${roomId}`);
     return response.data;
   } catch (e) {
     console.error("API Room Details Error:", e);
@@ -86,11 +100,10 @@ export default function ChangeDetailsScreen() {
     ? JSON.parse(params.currentSlots as string)
     : [];
 
-  // --- STATE ---
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Common Info
+  // Info
   const [roomName, setRoomName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -98,70 +111,62 @@ export default function ChangeDetailsScreen() {
   const [originalType, setOriginalType] = useState("");
   const [maxCapacity, setMaxCapacity] = useState(0);
 
-  // Type Specific Data
+  // Type Data
   const [courseData, setCourseData] = useState<any>(null);
   const [priorityData, setPriorityData] = useState<any>(null);
   const [projectName, setProjectName] = useState("");
   const [projectDesc, setProjectDesc] = useState("");
 
-  // Devices
+  // Devices & Guests
   const [customDevices, setCustomDevices] = useState<CustomDevice[]>([]);
-  const [existingDevices, setExistingDevices] = useState<any[]>([]); // Thiết bị có sẵn tại phòng
+  const [existingDevices, setExistingDevices] = useState<any[]>([]);
+  const [guests, setGuests] = useState<Guest[]>([]);
 
-  // Modals
+  // Modals Device
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [deviceToEdit, setDeviceToEdit] = useState<CustomDevice | null>(null);
   const [deviceToDeleteId, setDeviceToDeleteId] = useState<string | null>(null);
 
+  // Modals Guest
+  const [isGuestModalOpen, setGuestModalOpen] = useState(false);
+  const [guestToEdit, setGuestToEdit] = useState<Guest | null>(null);
+  const [guestToDeleteId, setGuestToDeleteId] = useState<string | null>(null);
+
+  // Slot Changes
   const [addedSlots, setAddedSlots] = useState<any[]>([]);
   const [removedSlots, setRemovedSlots] = useState<any[]>([]);
-
   const getSlotKey = (date: string, slotId: string) =>
     `${date.split("T")[0]}_${slotId}`;
-  // --- LOAD DATA (Sửa lại logic gọi API) ---
+
+  // --- LOAD DATA ---
   useEffect(() => {
     if (!bookingId) return;
-
     const loadData = async () => {
       try {
         setIsLoading(true);
-        console.log(`📥 Loading Booking: ${bookingId}`);
-        const res = await apiClient.get(`/Bookings/${bookingId}`);
+        const res = await apiClient.get(`/api/Bookings/${bookingId}`);
         const data = res.data;
 
-        // --- SAFETY CHECK KHI FILL FORM ---
-        // Đảm bảo title luôn là string, participants luôn là string
-        setTitle(data.title ? String(data.title) : "");
-        setDescription(data.description ? String(data.description) : "");
-
-        // Convert số thành chuỗi để hiển thị trong TextInput
+        setTitle(data.title || "");
+        setDescription(data.description || "");
         setParticipants(
           data.numberOfParticipants ? String(data.numberOfParticipants) : "0"
         );
-
         setOriginalType(data.type);
 
+        // Calculate Slot Changes
         if (data.slots) {
-          const originalSlots = data.slots; // Danh sách cũ từ DB
-
-          // Tạo Set Key cho danh sách cũ
+          const originalSlots = data.slots;
           const originalKeys = new Set(
             originalSlots.map((s: any) => getSlotKey(s.date, s.slotId))
           );
-
-          // Tạo Set Key cho danh sách mới (người dùng chọn từ trang trước)
           const newKeys = new Set(
             desiredSlots.map((s: any) => getSlotKey(s.date, s.slotId))
           );
 
-          // 1. Tìm Slot MỚI THÊM (Có trong Mới nhưng không có trong Cũ)
           const added = desiredSlots.filter(
             (s: any) => !originalKeys.has(getSlotKey(s.date, s.slotId))
           );
-
-          // 2. Tìm Slot BỊ HỦY (Có trong Cũ nhưng không có trong Mới)
-          // Lưu ý: data.slots của BE trả về object Slot đầy đủ, còn desiredSlots chỉ có slotId/date
-          // nên ta cần map lại cấu trúc cho đồng bộ nếu muốn hiển thị đẹp
           const removed = originalSlots.filter(
             (s: any) => !newKeys.has(getSlotKey(s.date, s.slotId))
           );
@@ -170,48 +175,38 @@ export default function ChangeDetailsScreen() {
           setRemovedSlots(removed);
         }
 
-        // 3. Xác định Room ID chuẩn
-        // (Đôi khi Backend trả id phòng nằm trong object con labRoomResponse)
+        // Room Info
         const roomId = data.labRoomResponse?.id || data.labRoomId;
-        console.log("📍 Room ID Detected:", roomId);
-
         if (data.labRoomResponse) {
           setRoomName(data.labRoomResponse.labName);
           setMaxCapacity(data.labRoomResponse.maximumLimit || 0);
         }
 
-        // 4. Lấy thông tin phòng chi tiết (để lấy Thiết bị có sẵn)
-        // Nếu trong booking data chưa có equipments, ta phải gọi API phòng
+        // Room Devices
         let roomEquipments = [];
-        if (
-          data.labRoomResponse?.equipments &&
-          data.labRoomResponse.equipments.length > 0
-        ) {
+        if (data.labRoomResponse?.equipments?.length > 0) {
           roomEquipments = data.labRoomResponse.equipments;
         } else if (roomId) {
-          console.log(`🌐 Calling API /LabRooms/${roomId} ...`);
           const roomData = await api_getRoomDetails(roomId);
           if (roomData) {
-            console.log("✅ Room Data Loaded:", roomData);
-            setRoomName(roomData.labName); // Cập nhật lại cho chắc
+            setRoomName(roomData.labName);
             setMaxCapacity(roomData.maximumLimit || 0);
             roomEquipments = roomData.equipments || [];
           }
         }
         setExistingDevices(roomEquipments);
 
-        // 5. Fill dữ liệu riêng theo loại (Project/Teaching/Priority)
-        if (data.type === "Teaching" && data.courseResponse) {
+        // Type Data
+        if (data.type === "Teaching" && data.courseResponse)
           setCourseData(data.courseResponse);
-        } else if (data.type === "Project" && data.projectResponse) {
+        else if (data.type === "Project" && data.projectResponse) {
           setProjectName(data.projectResponse.projectName || "");
           setProjectDesc(data.projectResponse.description || "");
-        } else if (data.type === "UniversityEvent" && data.priorityDetail) {
+        } else if (data.type === "UniversityEvent" && data.priorityDetail)
           setPriorityData(data.priorityDetail);
-        }
 
-        // 6. Fill thiết bị mang vào (Custom Devices)
-        if (data.externalEquipments && data.externalEquipments.length > 0) {
+        // Custom Devices
+        if (data.externalEquipments?.length > 0) {
           setCustomDevices(
             data.externalEquipments.map((e: any) => ({
               id: Math.random().toString(),
@@ -221,9 +216,24 @@ export default function ChangeDetailsScreen() {
             }))
           );
         }
+
+        // [MỚI] Guests (Đã map purposeOfVisit)
+        if (data.outSideGuests?.length > 0) {
+          setGuests(
+            data.outSideGuests.map((g: any) => ({
+              id: Math.random().toString(),
+              fullName: g.fullName,
+              email: g.email,
+              organization: g.organization || "",
+
+              // 👇 QUAN TRỌNG: Dùng purposeOfVisit
+              purposeOfVisit: g.purposeOfVisit || "",
+            }))
+          );
+        }
       } catch (e) {
-        console.error("❌ Load Data Error:", e);
-        Alert.alert("Lỗi", "Không tải được dữ liệu booking cũ.");
+        console.error(e);
+        Alert.alert("Lỗi", "Không tải được dữ liệu.");
         router.back();
       } finally {
         setIsLoading(false);
@@ -232,13 +242,13 @@ export default function ChangeDetailsScreen() {
     loadData();
   }, [bookingId]);
 
-  // --- HANDLERS ---
+  // --- HANDLERS DEVICE ---
   const handleOpenAddModal = () => {
     setDeviceToEdit(null);
     setDeviceModalOpen(true);
   };
-  const handleOpenEditModal = (device: CustomDevice) => {
-    setDeviceToEdit(device);
+  const handleOpenEditModal = (d: CustomDevice) => {
+    setDeviceToEdit(d);
     setDeviceModalOpen(true);
   };
   const handleAddOrUpdateDevice = (data: Omit<CustomDevice, "id">) => {
@@ -253,59 +263,67 @@ export default function ChangeDetailsScreen() {
         { id: Date.now().toString(), ...data },
       ]);
   };
-  const handleOpenDeleteConfirm = (id: string) => {
-    setDeviceToDeleteId(id);
-  };
-  const handleConfirmDelete = () => {
+  const handleConfirmDeleteDevice = () => {
     setCustomDevices((prev) => prev.filter((d) => d.id !== deviceToDeleteId));
     setDeviceToDeleteId(null);
   };
 
+  // --- [MỚI] HANDLERS GUEST ---
+  const handleOpenAddGuest = () => {
+    setGuestToEdit(null);
+    setGuestModalOpen(true);
+  };
+  const handleOpenEditGuest = (g: Guest) => {
+    setGuestToEdit(g);
+    setGuestModalOpen(true);
+  };
+  const handleAddOrUpdateGuest = (data: Omit<Guest, "id">) => {
+    setGuestModalOpen(false);
+    if (guestToEdit)
+      setGuests((prev) =>
+        prev.map((g) => (g.id === guestToEdit.id ? { ...g, ...data } : g))
+      );
+    else setGuests((prev) => [...prev, { id: Date.now().toString(), ...data }]);
+  };
+  const handleConfirmDeleteGuest = () => {
+    setGuests((prev) => prev.filter((g) => g.id !== guestToDeleteId));
+    setGuestToDeleteId(null);
+  };
+
   // --- SUBMIT ---
   const handleSubmit = async () => {
-    if (!title.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập tiêu đề.");
-      return;
-    }
-
-    const numParticipants = parseInt(participants) || 0;
-    if (numParticipants <= 0) {
-      Alert.alert("Lỗi", "Số người tham gia phải > 0.");
-      return;
-    }
-
-    // Chặn nếu vượt quá sức chứa
-    if (maxCapacity > 0 && numParticipants > maxCapacity) {
-      Alert.alert(
-        "Quá tải",
-        `Phòng ${roomName} chỉ chứa tối đa ${maxCapacity} người.\nVui lòng giảm số lượng hoặc chọn phòng khác.`
-      );
-      return;
-    }
+    if (!title.trim()) return Alert.alert("Lỗi", "Nhập tiêu đề.");
+    const num = parseInt(participants) || 0;
+    if (num <= 0) return Alert.alert("Lỗi", "Số người > 0.");
+    if (maxCapacity > 0 && num > maxCapacity)
+      return Alert.alert("Quá tải", `Phòng chứa tối đa ${maxCapacity} người.`);
 
     setIsSubmitting(true);
     try {
       let payload: any = {
         bookingId: bookingId,
-        requestedById: "c2f3a4d8-9b7e-43c1-8c4f-2e7a0f4c12ab", // TODO: Lấy ID thật
-
         newTitle: title,
         newDescription: description,
-        newNumberOfParticipants: numParticipants,
-
+        newNumberOfParticipants: num,
         desiredSlots: desiredSlots.map((s: any) => ({
           date: s.date,
           slotId: s.slotId,
         })),
-
         newExternalEquipments: customDevices.map((d) => ({
           name: d.name,
-          description: d.desc || "",
+          description: d.desc,
           quantity: d.qty,
+        })),
+
+        // 👇 QUAN TRỌNG: Dùng purposeOfVisit
+        newOutSideGuests: guests.map((g) => ({
+          fullName: g.fullName,
+          email: g.email,
+          organization: g.organization,
+          purposeOfVisit: g.purposeOfVisit,
         })),
       };
 
-      // Chỉ gửi Project nếu là Project
       if (originalType === "Project") {
         payload.newProject = {
           projectName: projectName,
@@ -314,22 +332,23 @@ export default function ChangeDetailsScreen() {
         };
       }
 
-      console.log("🚀 Sending Request:", payload);
-      const response = await apiClient.post("/BookingChangeRequest", payload);
+      // 👇 Gọi API chuẩn với /api/ và tên controller số nhiều
+      const response = await apiClient.post(
+        "/api/BookingChangeRequest",
+        payload
+      );
 
-      // Chuyển sang trang Success
-      console.error("truoc khi goi api request booking change", response.data);
       router.replace({
         pathname: "/book/request-success",
-
         params: {
           result: JSON.stringify(response.data),
-          addedSlots: JSON.stringify(addedSlots), // <--- Truyền danh sách thêm
-          removedSlots: JSON.stringify(removedSlots), // <--- Truyền danh sách xóa
+          addedSlots: JSON.stringify(addedSlots),
+          removedSlots: JSON.stringify(removedSlots),
         },
       } as any);
     } catch (error: any) {
       console.error("Submit Error:", error);
+      console.log("Failed URL:", error.config?.baseURL + error.config?.url);
       Alert.alert("Thất bại", error.response?.data?.title || "Lỗi hệ thống");
     } finally {
       setIsSubmitting(false);
@@ -343,83 +362,73 @@ export default function ChangeDetailsScreen() {
       </View>
     );
 
-  // --- RENDER UI ---
-  const renderTeachingInfo = () => (
-    <View style={styles.formSection}>
-      <Text style={styles.sectionHeaderTitle}>Thông tin Lớp học</Text>
-      <View style={styles.readOnlyBox}>
-        <Text style={styles.inputLabel}>Môn học</Text>
-        <View style={styles.readOnlyRow}>
-          <Text style={styles.readOnlyText}>
-            {courseData
-              ? `${courseData.courseCode} - ${courseData.courseName}`
-              : "Không có thông tin"}
-          </Text>
-          <LockIcon />
-        </View>
-      </View>
-    </View>
-  );
-
-  const renderPriorityInfo = () => (
-    <View style={styles.formSection}>
-      <Text style={styles.sectionHeaderTitle}>Thông tin Sự kiện</Text>
-      <View style={styles.readOnlyBox}>
-        <Text style={styles.inputLabel}>Lý do ưu tiên</Text>
-        <View style={styles.readOnlyRow}>
-          <Text style={styles.readOnlyText}>
-            {priorityData?.justification || "Không có nội dung"}
-          </Text>
-          <LockIcon />
-        </View>
-      </View>
-    </View>
-  );
-
-  const renderProjectFields = () => (
-    <View style={styles.formSection}>
-      <Text style={styles.sectionHeaderTitle}>Thông tin Dự án</Text>
-      <Text style={styles.inputLabel}>
-        Tên dự án <Text style={styles.required}>*</Text>
-      </Text>
-      <TextInput
-        style={styles.input}
-        value={projectName}
-        onChangeText={setProjectName}
-        placeholder="Tên dự án..."
-      />
-      <Text style={styles.inputLabel}>Mô tả dự án</Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        multiline
-        value={projectDesc}
-        onChangeText={setProjectDesc}
-        placeholder="Mô tả..."
-      />
-    </View>
-  );
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <BookingPageHeader
         icon={<DeviceIcon />}
         title="Cập nhật thông tin"
-        subtitle={`Yêu cầu đổi lịch cho phòng ${roomName || "..."}`}
+        subtitle={`Yêu cầu đổi lịch cho phòng ${roomName}`}
       />
 
-      {originalType === "Teaching" && renderTeachingInfo()}
-      {originalType === "UniversityEvent" && renderPriorityInfo()}
-      {originalType === "Project" && renderProjectFields()}
+      {/* ... RENDER TYPES ... */}
+      {originalType === "Teaching" && (
+        <View style={styles.formSection}>
+          <Text style={styles.sectionHeaderTitle}>Thông tin Lớp học</Text>
+          <View style={styles.readOnlyBox}>
+            <Text style={styles.inputLabel}>Môn học</Text>
+            <View style={styles.readOnlyRow}>
+              <Text style={styles.readOnlyText}>
+                {courseData
+                  ? `${courseData.courseCode} - ${courseData.courseName}`
+                  : "Không có thông tin"}
+              </Text>
+              <LockIcon />
+            </View>
+          </View>
+        </View>
+      )}
+
+      {originalType === "UniversityEvent" && (
+        <View style={styles.formSection}>
+          <Text style={styles.sectionHeaderTitle}>Thông tin Sự kiện</Text>
+          <View style={styles.readOnlyBox}>
+            <Text style={styles.inputLabel}>Lý do ưu tiên</Text>
+            <View style={styles.readOnlyRow}>
+              <Text style={styles.readOnlyText}>
+                {priorityData?.justification || "Không có nội dung"}
+              </Text>
+              <LockIcon />
+            </View>
+          </View>
+        </View>
+      )}
+
+      {originalType === "Project" && (
+        <View style={styles.formSection}>
+          <Text style={styles.sectionHeaderTitle}>Thông tin Dự án</Text>
+          <Text style={styles.inputLabel}>
+            Tên dự án <Text style={styles.required}>*</Text>
+          </Text>
+          <TextInput
+            style={styles.input}
+            value={projectName}
+            onChangeText={setProjectName}
+          />
+          <Text style={styles.inputLabel}>Mô tả dự án</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            multiline
+            value={projectDesc}
+            onChangeText={setProjectDesc}
+          />
+        </View>
+      )}
 
       {/* COMMON INFO */}
       <View style={styles.formSection}>
         <Text style={styles.sectionHeaderTitle}>Thông tin chung</Text>
-
-        <Text style={styles.inputLabel}>
-          Tiêu đề <Text style={styles.required}>*</Text>
-        </Text>
+        <Text style={styles.inputLabel}>Tiêu đề *</Text>
         <TextInput style={styles.input} value={title} onChangeText={setTitle} />
-
         <Text style={styles.inputLabel}>Mô tả</Text>
         <TextInput
           style={[styles.input, styles.textArea]}
@@ -427,15 +436,8 @@ export default function ChangeDetailsScreen() {
           value={description}
           onChangeText={setDescription}
         />
-
         <Text style={styles.inputLabel}>
-          Số người tham gia <Text style={styles.required}>*</Text>
-          {maxCapacity > 0 && (
-            <Text style={{ fontSize: 12, color: "#64748B", fontWeight: "400" }}>
-              {" "}
-              (Max: {maxCapacity})
-            </Text>
-          )}
+          Số người * {maxCapacity > 0 && `(Max: ${maxCapacity})`}
         </Text>
         <TextInput
           style={styles.input}
@@ -445,7 +447,7 @@ export default function ChangeDetailsScreen() {
         />
       </View>
 
-      {/* [MỚI] EXISTING DEVICES (TỰ ĐỘNG LẤY) */}
+      {/* EXISTING DEVICES */}
       <View style={styles.section}>
         <Text style={styles.sectionTitleMain}>Có sẵn tại phòng</Text>
         {existingDevices.length === 0 ? (
@@ -474,6 +476,58 @@ export default function ChangeDetailsScreen() {
         )}
       </View>
 
+      {/* [MỚI] SECTION KHÁCH MỜI */}
+      <View style={[styles.section, { marginTop: 24 }]}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitleMain}>Khách mời bên ngoài</Text>
+          <TouchableOpacity
+            onPress={handleOpenAddGuest}
+            style={styles.addButtonSmall}
+          >
+            <Text style={styles.addButtonTextSmall}>+ Thêm</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.deviceList}>
+          {guests.length === 0 && (
+            <Text style={styles.emptyText}>Chưa có khách mời nào.</Text>
+          )}
+          {guests.map((g) => (
+            <BookingCard key={g.id} layout="default">
+              <View style={styles.deviceInfoContainer}>
+                <View
+                  style={[styles.deviceIcon, { backgroundColor: "#F1F5F9" }]}
+                >
+                  <UserIcon />
+                </View>
+                <View style={styles.deviceTextWrapper}>
+                  <Text style={styles.deviceName}>{g.fullName}</Text>
+                  <Text style={styles.deviceDesc}>
+                    {g.organization}{" "}
+                    {g.purposeOfVisit ? `• ${g.purposeOfVisit}` : ""}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  onPress={() => handleOpenEditGuest(g)}
+                  style={styles.cardButton}
+                >
+                  <Text style={styles.cardButtonText}>Sửa</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setGuestToDeleteId(g.id)}
+                  style={styles.cardButton}
+                >
+                  <Text style={[styles.cardButtonText, styles.deleteText]}>
+                    Xóa
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </BookingCard>
+          ))}
+        </View>
+      </View>
+
       {/* CUSTOM DEVICES */}
       <View style={[styles.section, { marginTop: 24 }]}>
         <View style={styles.sectionHeader}>
@@ -487,7 +541,7 @@ export default function ChangeDetailsScreen() {
         </View>
         <View style={styles.deviceList}>
           {customDevices.length === 0 && (
-            <Text style={styles.emptyText}>Chưa khai báo thiết bị nào.</Text>
+            <Text style={styles.emptyText}>Chưa khai báo thiết bị.</Text>
           )}
           {customDevices.map((d) => (
             <BookingCard key={d.id} layout="default">
@@ -510,7 +564,7 @@ export default function ChangeDetailsScreen() {
                   <Text style={styles.cardButtonText}>Sửa</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => handleOpenDeleteConfirm(d.id)}
+                  onPress={() => setDeviceToDeleteId(d.id)}
                   style={styles.cardButton}
                 >
                   <Text style={[styles.cardButtonText, styles.deleteText]}>
@@ -531,6 +585,7 @@ export default function ChangeDetailsScreen() {
         />
       </View>
 
+      {/* MODALS */}
       <AddDeviceModal
         visible={isDeviceModalOpen}
         onClose={() => setDeviceModalOpen(false)}
@@ -544,7 +599,23 @@ export default function ChangeDetailsScreen() {
         confirmText="Xóa"
         cancelText="Hủy"
         onClose={() => setDeviceToDeleteId(null)}
-        onConfirm={handleConfirmDelete}
+        onConfirm={handleConfirmDeleteDevice}
+      />
+
+      <AddGuestModal
+        visible={isGuestModalOpen}
+        onClose={() => setGuestModalOpen(false)}
+        onSubmit={handleAddOrUpdateGuest}
+        initialData={guestToEdit}
+      />
+      <ConfirmationModal
+        visible={!!guestToDeleteId}
+        title="Xóa khách"
+        message="Xóa khách mời này?"
+        confirmText="Xóa"
+        cancelText="Hủy"
+        onClose={() => setGuestToDeleteId(null)}
+        onConfirm={handleConfirmDeleteGuest}
       />
     </ScrollView>
   );
@@ -559,7 +630,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFF7ED",
   },
-
   formSection: {
     marginBottom: 24,
     backgroundColor: "white",
@@ -593,7 +663,6 @@ const styles = StyleSheet.create({
     color: "#0F172A",
   },
   textArea: { height: 80, textAlignVertical: "top" },
-
   readOnlyBox: { marginBottom: 12 },
   readOnlyRow: {
     flexDirection: "row",
@@ -606,7 +675,6 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   readOnlyText: { fontSize: 14, color: "#64748B", fontWeight: "500" },
-
   section: { marginTop: 12 },
   sectionHeader: {
     flexDirection: "row",
@@ -615,7 +683,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitleMain: { fontSize: 18, fontWeight: "600", color: "#0F172A" },
-
   deviceList: { gap: 12 },
   deviceInfoContainer: {
     flexDirection: "row",
@@ -640,12 +707,10 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   deviceDesc: { fontSize: 13, color: "#64748B" },
-
   cardActions: { flexDirection: "column", alignItems: "flex-end", gap: 8 },
   cardButton: {},
   cardButtonText: { fontSize: 13, fontWeight: "500", color: "#0F172A" },
   deleteText: { color: "#DC2626" },
-
   emptyText: {
     color: "#94A3B8",
     fontStyle: "italic",
@@ -661,6 +726,5 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   addButtonTextSmall: { color: "#EA580C", fontSize: 13, fontWeight: "600" },
-
   footer: { marginTop: 32 },
 });
