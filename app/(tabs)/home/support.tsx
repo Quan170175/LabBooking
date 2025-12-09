@@ -22,7 +22,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  RefreshControl,
 } from "react-native";
+
+import apiClient from "../../../utils/api";
 
 // --- Types ---
 type FAQItem = {
@@ -31,12 +34,15 @@ type FAQItem = {
   answer: string;
 };
 
+// Cập nhật Type: Thêm field answer
 type SupportTicket = {
-  id: number;
-  subject: string;
-  message: string;
+  id: string;
+  title: string;
+  content: string;
   createdAt: string;
-  status: "pending" | "resolved";
+  status: string;
+  respondedAt?: string;
+  answer?: string;
 };
 
 export default function SupportScreen() {
@@ -46,6 +52,7 @@ export default function SupportScreen() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [faqs, setFaqs] = useState<FAQItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Form States
   const [isFormVisible, setIsFormVisible] = useState(false);
@@ -69,18 +76,33 @@ export default function SupportScreen() {
     setIsLoading(false);
   }
 
+  const onRefresh = async () => {
+    setIsRefreshing(true);
+    await loadTickets();
+    setIsRefreshing(false);
+  };
+
+  // 🟢 1. GET Tickets
   async function loadTickets() {
     try {
-      const s = await AsyncStorage.getItem("supportTickets");
-      const data = JSON.parse(s || "[]");
-      setTickets(Array.isArray(data) ? data.reverse() : []);
-    } catch (e) {
-      console.error(e);
+      const response = await apiClient.get("/api/Supports/my");
+      const data = response.data;
+
+      if (Array.isArray(data)) {
+        const sortedData = data.sort(
+          (a: SupportTicket, b: SupportTicket) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        setTickets(sortedData);
+      } else {
+        setTickets([]);
+      }
+    } catch (e: any) {
+      console.error("❌ Error loading tickets:", e);
     }
   }
 
   async function fetchFAQs() {
-    await new Promise((r) => setTimeout(r, 500));
     setFaqs([
       {
         id: 1,
@@ -101,6 +123,7 @@ export default function SupportScreen() {
     ]);
   }
 
+  // 🟢 2. POST Ticket
   async function submitTicket() {
     if (!subject.trim() || !message.trim()) {
       Alert.alert(
@@ -111,28 +134,27 @@ export default function SupportScreen() {
     }
 
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 800));
-
-    const newTicket: SupportTicket = {
-      id: Date.now(),
-      subject,
-      message,
-      createdAt: new Date().toISOString(),
-      status: "pending",
-    };
 
     try {
-      const current = [...tickets];
-      const updatedList = [newTicket, ...current];
-      await AsyncStorage.setItem("supportTickets", JSON.stringify(updatedList));
+      const payload = {
+        title: subject.trim(),
+        content: message.trim(),
+      };
 
-      setTickets(updatedList);
+      await apiClient.post("/api/Supports", payload);
+      Alert.alert("Thành công", "Yêu cầu hỗ trợ đã được gửi!");
+
       setSubject("");
       setMessage("");
       setIsFormVisible(false);
-      Alert.alert("Thành công", "Yêu cầu của bạn đã được gửi!");
-    } catch (e) {
-      Alert.alert("Lỗi", "Không thể lưu yêu cầu.");
+      loadTickets();
+    } catch (error: any) {
+      console.error("❌ Error submitting ticket:", error);
+      let errorMsg = "Không thể gửi yêu cầu.";
+      if (error.response?.data?.message) {
+        errorMsg = error.response.data.message;
+      }
+      Alert.alert("Thất bại", errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -140,6 +162,32 @@ export default function SupportScreen() {
 
   const toggleFaq = (id: string | number) => {
     setExpandedFaqId(expandedFaqId === id ? null : id);
+  };
+
+  // Helper render status (Updated Logic)
+  const renderStatus = (status: string) => {
+    // Enum logic: Pending | Responded | Ignored
+    let label = "Đang chờ";
+    let color = "#D97706"; // Yellow text
+    let bg = "#FEF3C7"; // Yellow bg
+
+    const s = status || "Pending";
+
+    if (s === "Responded") {
+      label = "Đã phản hồi";
+      color = "#15803d"; // Green text
+      bg = "#dcfce7"; // Green bg
+    } else if (s === "Ignored") {
+      label = "Từ chối"; // <-- Đã sửa text
+      color = "#DC2626"; // Red text (Đỏ đậm hơn chút cho dễ đọc)
+      bg = "#FEE2E2"; // Red bg (Nền đỏ nhạt cảnh báo)
+    }
+
+    return (
+      <View style={[styles.statusBadge, { backgroundColor: bg }]}>
+        <Text style={[styles.statusText, { color: color }]}>{label}</Text>
+      </View>
+    );
   };
 
   // --- RENDER ---
@@ -152,9 +200,8 @@ export default function SupportScreen() {
   }
 
   return (
-    // 🟢 SỬA BACKGROUND MÀU KEM
     <SafeAreaView style={styles.root}>
-      {/* 🟢 HEADER MỚI ĐỒNG BỘ */}
+      {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Trung tâm hỗ trợ</Text>
         <Text style={styles.headerSub}>Giải đáp thắc mắc và gửi yêu cầu</Text>
@@ -163,6 +210,13 @@ export default function SupportScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            colors={["#EA580C"]}
+          />
+        }
       >
         {/* PHẦN 1: FAQ */}
         <View style={styles.section}>
@@ -222,17 +276,18 @@ export default function SupportScreen() {
             <View style={styles.ticketList}>
               {tickets.map((t) => (
                 <View key={t.id} style={styles.ticketItem}>
+                  {/* Ticket Header */}
                   <View style={styles.ticketHeader}>
                     <Text style={styles.ticketSubject} numberOfLines={1}>
-                      {t.subject}
+                      {t.title}
                     </Text>
-                    <View style={styles.statusBadge}>
-                      <Text style={styles.statusText}>Đang xử lý</Text>
-                    </View>
+                    {renderStatus(t.status)}
                   </View>
-                  <Text style={styles.ticketMessage} numberOfLines={2}>
-                    {t.message}
-                  </Text>
+
+                  {/* Nội dung câu hỏi */}
+                  <Text style={styles.ticketMessage}>{t.content}</Text>
+
+                  {/* Footer (Ngày tháng) */}
                   <View style={styles.ticketFooter}>
                     <Clock size={12} color="#94A3B8" />
                     <Text style={styles.ticketDate}>
@@ -243,17 +298,44 @@ export default function SupportScreen() {
                       })}
                     </Text>
                   </View>
+
+                  {/* --- KHỐI HIỂN THỊ TRẢ LỜI CỦA ADMIN --- */}
+                  {t.status === "Responded" && (
+                    <View style={styles.adminResponseBox}>
+                      <View style={styles.adminResponseHeader}>
+                        <Text style={styles.adminLabel}>Admin phản hồi:</Text>
+                        {t.respondedAt && (
+                          <Text style={styles.adminTime}>
+                            {new Date(t.respondedAt).toLocaleDateString(
+                              "vi-VN"
+                            )}
+                          </Text>
+                        )}
+                      </View>
+                      <Text style={styles.adminAnswerText}>
+                        {t.answer || "Nội dung đang cập nhật..."}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* --- KHỐI HIỂN THỊ KHI BỊ TỪ CHỐI (IGNORE) --- */}
+                  {t.status === "Ignored" && (
+                    <View style={styles.ignoredBox}>
+                      <Text style={styles.ignoredText}>
+                        Yêu cầu này bị từ chối vì không hợp lệ.
+                      </Text>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>
           )}
         </View>
 
-        {/* Padding bottom để list không bị FAB che khi cuộn hết */}
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* FAB - ĐẨY CAO TRÁNH BOTNAV */}
+      {/* FAB Button */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => setIsFormVisible(true)}
@@ -322,11 +404,9 @@ export default function SupportScreen() {
 }
 
 const styles = StyleSheet.create({
-  // 🟢 Update background
   root: { flex: 1, backgroundColor: "#FFF7ED" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  // 🟢 Update Header Styles
   header: {
     padding: 16,
     backgroundColor: "#FFF7ED",
@@ -435,20 +515,64 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statusBadge: {
-    backgroundColor: "#FEF3C7",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  statusText: { fontSize: 11, fontWeight: "600", color: "#D97706" },
+  statusText: { fontSize: 11, fontWeight: "600" },
   ticketMessage: { fontSize: 14, color: "#475569", marginBottom: 8 },
   ticketFooter: { flexDirection: "row", alignItems: "center", gap: 4 },
   ticketDate: { fontSize: 12, color: "#94A3B8" },
 
-  // FAB - ĐÃ ĐƯỢC KÉO LÊN
+  // --- STYLES MỚI CHO PHẦN TRẢ LỜI CỦA ADMIN ---
+  adminResponseBox: {
+    marginTop: 12,
+    backgroundColor: "#F0FDF4", // Nền xanh lá nhạt
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#22C55E", // Viền xanh lá đậm
+  },
+  adminResponseHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  adminLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#15803d",
+  },
+  adminTime: {
+    fontSize: 11,
+    color: "#166534",
+    opacity: 0.7,
+  },
+  adminAnswerText: {
+    fontSize: 14,
+    color: "#334155",
+    lineHeight: 20,
+  },
+  // --- STYLES CHO PHẦN TỪ CHỐI ---
+  ignoredBox: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    paddingTop: 8,
+    backgroundColor: "#FFF1F2", // Thêm nền đỏ rất nhạt cho box thông báo từ chối
+    padding: 8,
+    borderRadius: 6,
+  },
+  ignoredText: {
+    fontStyle: "italic",
+    fontSize: 12,
+    color: "#DC2626", // Chữ đỏ đậm cho dễ đọc
+  },
+  // ---------------------------------------------
+
   fab: {
     position: "absolute",
-    bottom: 110, // Kéo lên cao để tránh BotNav
+    bottom: 110,
     right: 16,
     left: 16,
     backgroundColor: "#EA580C",

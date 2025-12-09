@@ -68,13 +68,13 @@ const APP_SECTIONS = [
         icon: ClipboardList,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
       },
-      {
-        to: "/home/timetable",
-        title: "Thời khóa biểu",
-        description: "Lịch toàn trường",
-        icon: CalendarDays,
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      },
+      // {
+      //   to: "/home/timetable",
+      //   title: "Thời khóa biểu",
+      //   description: "Lịch toàn trường",
+      //   icon: CalendarDays,
+      //   allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
+      // },
       {
         to: "/(tabs)/home/(manager)/viewequipment",
         title: "Xem thiết bị",
