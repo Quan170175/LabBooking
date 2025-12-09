@@ -1,31 +1,36 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Stack } from "expo-router";
-import { ChevronLeft, ChevronRight } from "lucide-react-native";
-import React, { useEffect, useMemo, useState } from "react";
+import apiClient from "@/utils/api";
+import { useFocusEffect } from "expo-router";
+import { ChevronLeft, ChevronRight, Clock, X } from "lucide-react-native";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
+  RefreshControl,
   ScrollView,
-  StyleProp,
   StyleSheet,
   Text,
-  TextStyle,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 
-// --- IMPORT COMPONENT MỚI ---
-// (Hãy đảm bảo đường dẫn này đúng với nơi bạn tạo file SlotTimeInfo.tsx)
-import SlotTimeInfo from "../../../components/home/SlotTimeInfo";
+// --- INTERFACES ---
+interface SlotTemplate {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+}
 
-// --- CẤU HÌNH CỐ ĐỊNH ---
-const SLOTS = [
-  { id: "slot1", label: "Slot 1" },
-  { id: "slot2", label: "Slot 2" },
-  { id: "slot3", label: "Slot 3" },
-  { id: "slot4", label: "Slot 4" },
-];
+interface Booking {
+  id: string;
+  title: string;
+  status: string | number;
+  labRoom?: { labName: string; location?: string };
+  slots?: { slotId: string; date: string; status: number }[];
+}
 
+// --- HELPER ---
 const weekdays_short = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 
 const getMonday = (d: Date) => {
@@ -35,74 +40,132 @@ const getMonday = (d: Date) => {
   return new Date(d.setDate(diff));
 };
 
-// -------------------------
+const formatDateLocal = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
-export default function TimetableScreen() {
+const formatTime = (time: string) => {
+  if (!time) return "";
+  return time.split(":").slice(0, 2).join(":");
+};
+
+export default function PersonalScheduleScreen() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Data
+  const [slotTemplates, setSlotTemplates] = useState<SlotTemplate[]>([]);
+  const [myScheduleMap, setMyScheduleMap] = useState<Map<string, any>>(
+    new Map()
+  );
+
+  // Date & Modal State
   const [currentMonday, setCurrentMonday] = useState(getMonday(new Date()));
   const [weekDates, setWeekDates] = useState<Date[]>([]);
-  const [allBookings, setAllBookings] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null); // State cho Modal nhỏ
 
-  // 1. Load data
-  useEffect(() => {
-    const loadAllBookings = async () => {
-      setIsLoading(true);
-      try {
-        const storedBookings = await AsyncStorage.getItem("bookings");
-        const bookings = storedBookings ? JSON.parse(storedBookings) : [];
-        setAllBookings(Array.isArray(bookings) ? bookings : []);
-      } catch (e) {
-        console.error("Lỗi khi đọc bookings:", e);
-        Alert.alert("Lỗi", "Không thể tải dữ liệu lịch đặt.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadAllBookings();
+  // --- 1. LOAD DATA ---
+  const fetchData = useCallback(async () => {
+    try {
+      const [resSlots, resHistory] = await Promise.all([
+        apiClient.get("/api/Slot"),
+        apiClient.get("/api/Bookings/timetable"),
+      ]);
+
+      // A. Template Slots
+      const templates: SlotTemplate[] =
+        resSlots.data?.data || resSlots.data || [];
+      templates.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      setSlotTemplates(templates);
+
+      // B. Booking History
+      const responseData = resHistory.data;
+      const bookings: Booking[] = responseData?.data || responseData || [];
+
+      const scheduleMap = new Map<string, any>();
+
+      bookings.forEach((booking) => {
+        const isApproved =
+          booking.status === 1 || booking.status === "Approved";
+        if (!isApproved) return;
+
+        if (booking.slots) {
+          booking.slots.forEach((slot) => {
+            if (slot.status === 0) {
+              // Active
+              const dateStr = slot.date.split("T")[0];
+              const key = `${dateStr}::${slot.slotId}`;
+
+              // Lưu info để hiển thị trong Modal
+              scheduleMap.set(key, {
+                bookingTitle: booking.title,
+                labName: booking.labRoom?.labName || "Phòng Lab",
+                location: booking.labRoom?.location || "Chưa cập nhật",
+                bookingId: booking.id,
+              });
+            }
+          });
+        }
+      });
+
+      setMyScheduleMap(scheduleMap);
+    } catch (error) {
+      console.error("Lỗi tải lịch:", error);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
-  // 2. Tính toán slot đã đặt (Gộp tất cả các phòng lại để xem tổng quan)
-  const allUnavailableSlots = useMemo(() => {
-    const newUnavailableSlots = new Set<string>();
-    allBookings.forEach((b: any) => {
-      // Nếu booking bị từ chối hoặc hủy thì không tính là unavailable
-      if (b.status === "rejected" || b.status === "cancelled") return;
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
-      (b.slots || []).forEach((s: any) => {
-        newUnavailableSlots.add(`${s.date}::${s.slotId}`);
-      });
-    });
-    return newUnavailableSlots;
-  }, [allBookings]);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchData();
+  }, [fetchData]);
 
-  // 3. Xử lý lịch tuần
-  useEffect(() => {
+  // --- 2. DATE LOGIC ---
+  React.useEffect(() => {
     const dates = [];
     for (let i = 0; i < 7; i++) {
-      const newDate = new Date(currentMonday);
-      newDate.setDate(currentMonday.getDate() + i);
-      dates.push(newDate);
+      const d = new Date(currentMonday);
+      d.setDate(currentMonday.getDate() + i);
+      dates.push(d);
     }
     setWeekDates(dates);
   }, [currentMonday]);
 
-  const handlePrevWeek = () => {
+  const handlePrevWeek = () =>
     setCurrentMonday((prev) => {
-      const newDate = new Date(prev);
-      newDate.setDate(prev.getDate() - 7);
-      return newDate;
+      const d = new Date(prev);
+      d.setDate(prev.getDate() - 7);
+      return d;
     });
+  const handleNextWeek = () =>
+    setCurrentMonday((prev) => {
+      const d = new Date(prev);
+      d.setDate(prev.getDate() + 7);
+      return d;
+    });
+
+  const handleSlotPress = (
+    bookingInfo: any,
+    date: string,
+    slotLabel: string
+  ) => {
+    // Mở Modal nhỏ với thông tin chi tiết
+    setSelectedBooking({ ...bookingInfo, date, slotLabel });
   };
 
-  const handleNextWeek = () => {
-    setCurrentMonday((prev) => {
-      const newDate = new Date(prev);
-      newDate.setDate(prev.getDate() + 7);
-      return newDate;
-    });
-  };
-
-  if (isLoading || weekDates.length === 0) {
+  // --- RENDER ---
+  if (isLoading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#EA580C" />
@@ -110,101 +173,220 @@ export default function TimetableScreen() {
     );
   }
 
-  const startDate = weekDates[0];
-  const endDate = weekDates[6];
-  const dateRange = `${startDate.getDate()}/${
-    startDate.getMonth() + 1
-  } - ${endDate.getDate()}/${endDate.getMonth() + 1}/${endDate.getFullYear()}`;
+  const dateRange = `${weekDates[0]?.getDate()}/${
+    weekDates[0]?.getMonth() + 1
+  } - ${weekDates[6]?.getDate()}/${
+    weekDates[6]?.getMonth() + 1
+  }/${weekDates[6]?.getFullYear()}`;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: "Thời khóa biểu" }} />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Thời khóa biểu chung</Text>
-        <Text style={styles.subtitle}>
-          Xem tình trạng slot của toàn bộ hệ thống
-        </Text>
-      </View>
-
-      {/* Navigation */}
-      <View style={styles.calendarNav}>
-        <TouchableOpacity onPress={handlePrevWeek} style={styles.navButton}>
-          <ChevronLeft size={20} color="#EA580C" />
-        </TouchableOpacity>
-        <Text style={styles.dateRangeText}>{dateRange}</Text>
-        <TouchableOpacity onPress={handleNextWeek} style={styles.navButton}>
-          <ChevronRight size={20} color="#EA580C" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Calendar Grid */}
-      <View style={styles.calendarContainer}>
-        <View style={styles.weekdaysHeader}>
-          {weekDates.map((date, dayIndex) => (
-            <View key={date.toISOString()} style={styles.dayHeader}>
-              <Text style={styles.dayNameText}>{weekdays_short[dayIndex]}</Text>
-              <Text style={styles.dateNumText}>{date.getDate()}</Text>
-            </View>
-          ))}
+    <View style={{ flex: 1, backgroundColor: "#FFF7ED" }}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#EA580C"]}
+          />
+        }
+      >
+        {/* HEADER */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Thời khóa biểu cá nhân</Text>
+          <Text style={styles.subtitle}>
+            Xem tình trạng slot đã được lưu trong hệ thống
+          </Text>
         </View>
 
-        <View style={styles.slotsGrid}>
-          {weekDates.map((date) => (
-            <View key={date.toISOString()} style={styles.dayColumn}>
-              {SLOTS.map((slot) => {
-                // Sửa lỗi timezone bằng hàm format date local (giống các file khác)
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, "0");
-                const day = String(date.getDate()).padStart(2, "0");
-                const dateString = `${year}-${month}-${day}`;
+        {/* NAVIGATION */}
+        <View style={styles.calendarNav}>
+          <TouchableOpacity onPress={handlePrevWeek} style={styles.navButton}>
+            <ChevronLeft size={20} color="#EA580C" />
+          </TouchableOpacity>
+          <Text style={styles.dateRangeText}>{dateRange}</Text>
+          <TouchableOpacity onPress={handleNextWeek} style={styles.navButton}>
+            <ChevronRight size={20} color="#EA580C" />
+          </TouchableOpacity>
+        </View>
 
-                const isBooked = allUnavailableSlots.has(
-                  `${dateString}::${slot.id}`
-                );
+        {/* GRID */}
+        <View style={styles.calendarContainer}>
+          {/* Header Days */}
+          <View style={styles.weekdaysHeader}>
+            {weekDates.map((d, i) => (
+              <View key={i} style={styles.dayHeader}>
+                <Text style={styles.dayNameText}>{weekdays_short[i]}</Text>
+                <Text
+                  style={[
+                    styles.dateNumText,
+                    formatDateLocal(d) === formatDateLocal(new Date()) && {
+                      color: "#EA580C",
+                    },
+                  ]}
+                >
+                  {d.getDate()}
+                </Text>
+              </View>
+            ))}
+          </View>
 
-                const slotStyle = isBooked
-                  ? styles.unavailableSlot
-                  : styles.availableSlot;
+          {/* Slots Rows */}
+          <View style={styles.slotsGrid}>
+            {weekDates.map((date, i) => (
+              <View key={i} style={styles.dayColumn}>
+                {slotTemplates.map((slot, index) => {
+                  const dateStr = formatDateLocal(date);
+                  const key = `${dateStr}::${slot.id}`;
 
-                let textStyle: StyleProp<TextStyle> = [styles.slotLabel];
-                if (isBooked) {
-                  textStyle.push(styles.unavailableSlotText);
-                }
+                  const myBooking = myScheduleMap.get(key);
+                  const hasBooking = !!myBooking;
 
-                return (
-                  <View key={slot.id} style={[styles.slotButton, slotStyle]}>
-                    <Text style={textStyle}>{slot.label}</Text>
+                  // Tạo nhãn "Slot 1", "Slot 2"... cho đẹp đội hình
+                  const displayLabel = `Slot ${index + 1}`;
+
+                  return (
+                    <TouchableOpacity
+                      key={slot.id}
+                      style={[
+                        styles.slotButton,
+                        // Nếu có lịch -> Màu Cam, Không -> Màu Trắng
+                        hasBooking
+                          ? styles.unavailableSlot
+                          : styles.availableSlot,
+                      ]}
+                      // Bấm vào hiện popup
+                      onPress={() =>
+                        hasBooking &&
+                        handleSlotPress(myBooking, dateStr, displayLabel)
+                      }
+                      activeOpacity={hasBooking ? 0.7 : 1}
+                    >
+                      <Text
+                        style={[
+                          styles.slotLabel,
+                          // Chữ đổi màu theo trạng thái
+                          hasBooking && styles.unavailableSlotText,
+                        ]}
+                      >
+                        {displayLabel}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* LEGEND */}
+        <View style={styles.legendRow}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendBox, styles.availableSlot]} />
+            <Text style={styles.legendText}>Còn trống</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendBox, styles.unavailableSlot]} />
+            <Text style={styles.legendText}>Đã đặt (Của tôi)</Text>
+          </View>
+        </View>
+
+        {/* INFO SECTION (Render động từ API Slot Template) */}
+        <View style={styles.infoContainer}>
+          <View style={styles.infoHeaderRow}>
+            <Clock size={16} color="#EA580C" />
+            <Text style={styles.infoTitle}>Khung giờ hoạt động</Text>
+          </View>
+
+          <View style={styles.infoGrid}>
+            {slotTemplates.map((slot, index) => (
+              <View
+                key={slot.id}
+                style={[
+                  styles.infoRow,
+                  index === slotTemplates.length - 1 && styles.lastInfoRow,
+                ]}
+              >
+                <Text style={styles.infoLabel}>Slot {index + 1}:</Text>
+                <Text style={styles.infoValue}>
+                  {formatTime(slot.startTime)} - {formatTime(slot.endTime)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* POPUP MODAL (Cái "nhỏ nhỏ" bạn yêu cầu) */}
+      <Modal
+        visible={!!selectedBooking}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedBooking(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSelectedBooking(null)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Thông tin đặt phòng</Text>
+                <TouchableOpacity onPress={() => setSelectedBooking(null)}>
+                  <X size={20} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              {selectedBooking && (
+                <View style={styles.modalBody}>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Ngày:</Text>
+                    <Text style={styles.modalValue}>
+                      {selectedBooking.date}
+                    </Text>
                   </View>
-                );
-              })}
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Khung giờ:</Text>
+                    <Text style={styles.modalValue}>
+                      {selectedBooking.slotLabel}
+                    </Text>
+                  </View>
+                  <View style={styles.divider} />
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Phòng:</Text>
+                    <Text
+                      style={[
+                        styles.modalValue,
+                        { color: "#EA580C", fontWeight: "700" },
+                      ]}
+                    >
+                      {selectedBooking.labName}
+                    </Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Sự kiện:</Text>
+                    <Text style={styles.modalValue}>
+                      {selectedBooking.bookingTitle}
+                    </Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Vị trí:</Text>
+                    <Text style={styles.modalValue}>
+                      {selectedBooking.location}
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
-          ))}
-        </View>
-      </View>
-
-      {/* --- PHẦN 1: CHÚ THÍCH MÀU SẮC --- */}
-      <View style={styles.legendRow}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendBox, styles.availableSlot]} />
-          <Text style={styles.legendText}>Còn trống</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendBox, styles.unavailableSlot]} />
-          <Text style={styles.legendText}>Đã được đặt</Text>
-        </View>
-      </View>
-
-      {/* --- PHẦN 2: KHUNG GIỜ HOẠT ĐỘNG (COMPONENT TÁI SỬ DỤNG) --- */}
-      <View style={styles.infoSection}>
-        <SlotTimeInfo />
-      </View>
-    </ScrollView>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
+    </View>
   );
 }
 
-// --- Styles (Đã xóa các style thừa) ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   content: { padding: 16, paddingBottom: 100 },
@@ -214,20 +396,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFF7ED",
   },
-  header: {
-    marginBottom: 16,
-    marginTop: 8,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#0F172A",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#64748B",
-  },
+
+  header: { marginBottom: 16, marginTop: 8 },
+  title: { fontSize: 22, fontWeight: "800", color: "#0F172A", marginBottom: 4 },
+  subtitle: { fontSize: 14, color: "#64748B" },
+
+  // NAV
   calendarNav: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -241,11 +415,9 @@ const styles = StyleSheet.create({
     borderColor: "#FFE8DA",
   },
   navButton: { padding: 8 },
-  dateRangeText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#C2410C",
-  },
+  dateRangeText: { fontSize: 14, fontWeight: "600", color: "#C2410C" },
+
+  // GRID CONTAINER
   calendarContainer: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -258,29 +430,21 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+
   weekdaysHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 12,
     paddingHorizontal: 4,
   },
-  dayHeader: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
-  dayNameText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#64748B",
-  },
-  dateNumText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#1E293B",
-  },
+  dayHeader: { flex: 1, alignItems: "center", gap: 4 },
+  dayNameText: { fontSize: 11, fontWeight: "500", color: "#64748B" },
+  dateNumText: { fontSize: 13, fontWeight: "600", color: "#1E293B" },
+
   slotsGrid: { flexDirection: "row", gap: 6 },
   dayColumn: { flex: 1, gap: 6 },
+
+  // BUTTON STYLES (Đẹp như bản cứng)
   slotButton: {
     width: "100%",
     height: 36,
@@ -289,34 +453,88 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
   },
-  availableSlot: { backgroundColor: "#fff", borderColor: "#F1F5F9" },
-  unavailableSlot: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
-  slotLabel: { fontSize: 11, fontWeight: "500", color: "#0F172A" },
-  unavailableSlotText: { color: "#CBD5E1" },
 
-  // --- STYLES CHO LEGEND ---
+  // Style Trống
+  availableSlot: { backgroundColor: "#fff", borderColor: "#F1F5F9" },
+  slotLabel: { fontSize: 11, fontWeight: "500", color: "#0F172A" },
+
+  // Style Đã đặt (Màu cam)
+  unavailableSlot: { backgroundColor: "#EA580C", borderColor: "#EA580C" },
+  unavailableSlotText: { color: "white", fontWeight: "700" }, // Chữ trắng trên nền cam cho nổi
+
+  // LEGEND
   legendRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     marginTop: 16,
     marginBottom: 4,
   },
-  legendItem: {
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 8 },
+  legendBox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1 },
+  legendText: { fontSize: 13, color: "#475569" },
+
+  // INFO SECTION (Tái tạo SlotTimeInfo nhưng dùng data động)
+  infoContainer: {
+    marginTop: 20,
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  infoHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    marginBottom: 12,
   },
-  legendBox: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    borderWidth: 1,
+  infoTitle: { fontSize: 14, fontWeight: "700", color: "#0F172A" },
+  infoGrid: { gap: 4 },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
-  legendText: { fontSize: 13, color: "#475569" },
+  lastInfoRow: { borderBottomWidth: 0 },
+  infoLabel: { fontSize: 13, fontWeight: "600", color: "#EA580C" },
+  infoValue: { fontSize: 13, color: "#334155", fontWeight: "500" },
 
-  // --- STYLES CHO CONTAINER CHỨA INFO ---
-  infoSection: {
-    marginTop: 12,
-    // Không cần style nền/border ở đây nữa vì component con đã tự lo
+  // MODAL STYLES
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
+  modalContent: {
+    width: "85%",
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
+  modalBody: { gap: 12 },
+  modalRow: { flexDirection: "row", alignItems: "flex-start" },
+  modalLabel: { width: 80, fontSize: 14, color: "#64748B" },
+  modalValue: { flex: 1, fontSize: 14, color: "#0F172A", fontWeight: "500" },
+  divider: { height: 1, backgroundColor: "#E2E8F0", marginVertical: 4 },
 });

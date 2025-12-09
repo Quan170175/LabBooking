@@ -16,7 +16,7 @@ import { Circle, Path, Svg } from "react-native-svg";
 import AddDeviceModal, {
   CustomDevice,
 } from "../../components/booking/AddDeviceModal";
-import AddGuestModal, { Guest } from "../../components/booking/AddGuestModal"; // [CHECK]
+import AddGuestModal, { Guest } from "../../components/booking/AddGuestModal";
 import BookingButton from "../../components/booking/BookingButton";
 import BookingCard from "../../components/booking/BookingCard";
 import BookingPageHeader from "../../components/booking/BookingPageHeader";

@@ -75,6 +75,62 @@ const APP_SECTIONS = [
         icon: CalendarDays,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
       },
+      {
+        to: "/(tabs)/home/(manager)/viewequipment",
+        title: "Xem thiết bị",
+        description: "Xem tình trạng thiết bị",
+        icon: Monitor,
+        allowedRoles: [ROLES.MANAGER],
+      },
+    ],
+  },
+  {
+    id: "admin",
+    title: "Khu vực quản lý",
+    description: "Chức năng dành riêng cho Manager",
+    items: [
+      {
+        to: "/(tabs)/home/approvals",
+        title: "Phê duyệt",
+        description: "Duyệt yêu cầu",
+        icon: LayoutDashboard,
+        allowedRoles: [ROLES.MANAGER],
+      },
+      {
+        to: "/(tabs)/home/security-incidents",
+        title: "Sự cố bảo mật",
+        description: "Báo cáo sự cố",
+        icon: ShieldCheck,
+        allowedRoles: [ROLES.MANAGER],
+      },
+    ],
+  },
+  {
+    id: "manager",
+    title: "Khu vực bảo trì",
+    description: "Chức năng dành riêng cho Manager",
+    items: [
+      {
+        to: "/(tabs)/home/(manager)/create-room-maintenance",
+        title: "Bảo trì phòng",
+        description: "Đóng phòng để sửa chữa",
+        icon: Wrench,
+        allowedRoles: [ROLES.MANAGER],
+      },
+      {
+        to: "/(tabs)/home/(manager)/create-equipment-maintenance",
+        title: "Bảo trì thiết bị",
+        description: "Sửa chữa thiết bị hỏng",
+        icon: Wrench,
+        allowedRoles: [ROLES.MANAGER],
+      },
+      {
+        to: "/(tabs)/home/(manager)/maintenancehistory",
+        title: "Lịch sử bảo trì",
+        description: "Xem lịch sử bảo trì",
+        icon: History,
+        allowedRoles: [ROLES.MANAGER],
+      },
     ],
   },
   {
@@ -100,57 +156,8 @@ const APP_SECTIONS = [
         to: "/home/doorrequest",
         title: "Yêu cầu mở cửa",
         description: "Gửi yêu cầu mở cửa",
-        icon: DoorOpen, // 🟢 Đã đổi icon thành Cửa mở
+        icon: DoorOpen,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      },
-    ],
-  },
-  {
-    id: "admin",
-    title: "Khu vực quản lý",
-    description: "Chức năng dành riêng cho Manager",
-    items: [
-      {
-        to: "/(tabs)/home/approvals",
-        title: "Phê duyệt",
-        description: "Duyệt yêu cầu",
-        icon: LayoutDashboard,
-        allowedRoles: [ROLES.MANAGER],
-      },
-      {
-        to: "/(tabs)/home/security-incidents",
-        title: "Sự cố bảo mật",
-        description: "Báo cáo sự cố",
-        icon: ShieldCheck,
-        allowedRoles: [ROLES.MANAGER],
-      },
-      {
-        to: "/(tabs)/home/(manager)/viewequipment",
-        title: "Xem thiết bị",
-        description: "Xem tình trạng thiết bị",
-        icon: Monitor, // 🟢 Đã đổi icon thành Màn hình
-        allowedRoles: [ROLES.MANAGER],
-      },
-      {
-        to: "/(tabs)/home/(manager)/create-room-maintenance",
-        title: "Bảo trì phòng",
-        description: "Đóng phòng để sửa chữa",
-        icon: Wrench,
-        allowedRoles: [ROLES.MANAGER],
-      },
-      {
-        to: "/(tabs)/home/(manager)/create-equipment-maintenance",
-        title: "Bảo trì thiết bị",
-        description: "Sửa chữa thiết bị hỏng",
-        icon: Wrench, // Đổi sang Wrench cho đồng bộ với bảo trì
-        allowedRoles: [ROLES.MANAGER],
-      },
-      {
-        to: "/(tabs)/home/(manager)/maintenancehistory",
-        title: "Lịch sử bảo trì",
-        description: "Xem lịch sử bảo trì",
-        icon: History, // 🟢 Đã đổi icon thành Lịch sử
-        allowedRoles: [ROLES.MANAGER],
       },
     ],
   },
@@ -163,7 +170,7 @@ const APP_SECTIONS = [
         to: "/(tabs)/home/door-requests",
         title: "Yêu cầu mở cửa",
         description: "Xử lý yêu cầu ra vào",
-        icon: DoorOpen, // 🟢 Đã đổi icon thành Cửa mở
+        icon: DoorOpen,
         allowedRoles: [ROLES.SECURITYGUARD],
       },
       {

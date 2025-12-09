@@ -92,7 +92,7 @@ const INCIDENT_TYPES = [
 // Giá trị hiển thị tiếng Việt
 const IMPORTANCE_LEVELS = ["Thấp", "Vừa", "Cao"];
 
-// 🔥 HÀM MỚI: CHUYỂN ĐỔI TIẾNG VIỆT SANG GIÁ TRỊ API MONG MUỐN
+// HÀM MỚI: CHUYỂN ĐỔI TIẾNG VIỆT SANG GIÁ TRỊ API MONG MUỐN
 const mapImportanceToApi = (level: string): string => {
   switch (level) {
     case "Cao":
@@ -197,48 +197,38 @@ export default function CreateIncidentScreen() {
     if (!isValid) return;
     setIsSubmitting(true);
 
-    // 🔥 CHUYỂN ĐỔI GIÁ TRỊ TIẾNG VIỆT SANG TIẾNG ANH CHO API
     const apiImportanceLevel = mapImportanceToApi(importance);
 
     try {
-      // LOGIC GỬI MỚI: Xử lý việc API chỉ nhận 1 ID nhưng UI chọn nhiều
+      let payload: any = {
+        labRoomId: selectedRoomId,
+        type: selectedType,
+        importanceLevel: apiImportanceLevel,
+        description: description,
+      };
+
       if (
         selectedType === "EquipmentFailure" &&
         selectedEquipmentIds.length > 0
       ) {
-        // Nếu chọn nhiều thiết bị -> Tạo nhiều request gửi song song
-        const requests = selectedEquipmentIds.map((eqId) => {
-          return apiClient.post("/api/Incidents", {
-            labRoomId: selectedRoomId,
-            type: selectedType,
-            importanceLevel: apiImportanceLevel, // 🔥 DÙNG GIÁ TRỊ ĐÃ CHUYỂN ĐỔI
-            description: description,
-            equipmentId: eqId,
-          });
-        });
-
-        console.log(`Đang gửi ${requests.length} báo cáo lỗi thiết bị...`);
-        await Promise.all(requests);
+        // 🔥 GỬI MỘT REQUEST DUY NHẤT VỚI DANH SÁCH ID
+        payload.equipmentIds = selectedEquipmentIds; // Thêm mảng IDs vào payload
+        console.log("Submitting multiple equipment failure incident:", payload);
       } else {
-        // Các loại lỗi khác (Cháy, Nổ...) -> Gửi 1 lần
-        const payload = {
-          labRoomId: selectedRoomId,
-          type: selectedType,
-          importanceLevel: apiImportanceLevel, // 🔥 DÙNG GIÁ TRỊ ĐÃ CHUYỂN ĐỔI
-          description: description,
-          equipmentId: null,
-        };
-
+        // Gửi 1 request duy nhất (cho các loại sự cố khác)
+        // Trong trường hợp này, API có thể yêu cầu equipmentId là null hoặc không có.
+        // Giả sử API tự xử lý nếu không có equipmentIds.
         console.log("Submitting single incident:", payload);
-        await apiClient.post("/api/Incidents", payload);
       }
 
-      // Hiện modal thành công
+      // 2. Gọi API tạo Incident
+      await apiClient.post("/api/Incidents", payload);
+
       setIsSuccessModalVisible(true);
     } catch (error: any) {
       console.error("❌ Lỗi gửi API:", error);
 
-      // 🔥 LOGIC BẮT LỖI TỐI ƯU (Bao gồm bắt data.message và errors)
+      // LOGIC BẮT LỖI TỪ BE (ĐÃ CẬP NHẬT)
       let errorMsg = "Có lỗi xảy ra khi gửi báo cáo.";
       const responseData = error.response?.data;
       const status = error.response?.status;
@@ -247,31 +237,37 @@ export default function CreateIncidentScreen() {
       console.log("[Response Data]:", responseData);
 
       if (responseData) {
-        // Ưu tiên 1: Lấy message trực tiếp từ backend (Thường có trong lỗi 400/500)
-        if (typeof responseData === "object" && responseData.message) {
-          errorMsg = responseData.message;
-        }
-        // Ưu tiên 2: Nếu là lỗi Validation của .NET (nằm trong trường 'errors')
-        // Đây là trường hợp mà Response Data bạn vừa gửi đã xảy ra (Lỗi validation 400)
-        else if (status === 400 && responseData.errors) {
-          const errorData = responseData.errors;
-          const firstKey = Object.keys(errorData)[0];
-          if (firstKey && errorData[firstKey]) {
-            // Lấy lỗi đầu tiên trong object errors
-            errorMsg = `${firstKey}: ${
-              Array.isArray(errorData[firstKey])
-                ? errorData[firstKey][0]
-                : errorData[firstKey]
-            }`;
+        // 1. Trường hợp lỗi Validation (errors object)
+        if (responseData.errors) {
+          const errorObj = responseData.errors;
+          const errorList: string[] = [];
+
+          // Duyệt qua từng key lỗi (ví dụ: 'Description', 'LabRoomId'...)
+          Object.keys(errorObj).forEach((key) => {
+            const messages = errorObj[key];
+            if (Array.isArray(messages)) {
+              messages.forEach((msg) => errorList.push(`• ${msg}`));
+            }
+          });
+
+          if (errorList.length > 0) {
+            // Hiển thị tối đa 5 lỗi
+            errorMsg = errorList.slice(0, 5).join("\n");
+            if (errorList.length > 5) {
+              errorMsg += "\n(Và nhiều lỗi khác...)";
+            }
           }
         }
-        // Ưu tiên 3: Nếu data trả về là string
+        // 2. Trường hợp có message cụ thể
+        else if (responseData.message) {
+          errorMsg = responseData.message;
+        }
+        // 3. Trường hợp trả về string trực tiếp
         else if (typeof responseData === "string") {
           errorMsg = responseData;
         }
-      }
-      // Ưu tiên cuối cùng: Lấy message từ object error (ví dụ: Network Error)
-      else if (error.message) {
+      } else if (error.message) {
+        // Lỗi network hoặc client side
         errorMsg = error.message;
       }
 
