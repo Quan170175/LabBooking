@@ -24,8 +24,8 @@ type Props = {
   booking: any;
   onClose: () => void;
   slotTemplates?: any[];
-  onApprove: () => void; // [NEW] Callback Duyệt
-  onReject: () => void; // [NEW] Callback Từ chối
+  onApprove: () => void;
+  onReject: () => void;
 };
 
 // --- HELPER ---

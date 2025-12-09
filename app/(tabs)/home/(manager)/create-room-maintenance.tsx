@@ -9,16 +9,13 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
-  // 🔥 Đã xóa import Modal
 } from "react-native";
 import { useRouter } from "expo-router";
-import { ChevronLeft } from "lucide-react-native"; // CheckCircle2 và History không cần thiết nữa
+import { ChevronLeft } from "lucide-react-native";
 
 import apiClient from "../../../../utils/api";
-import SecurityMessagesModal from "../../../../components/security/SecurityMessagesModal";
-
 // 🔥 IMPORT MODAL CHUNG MỚI
-import SuccessMaintenanceModal from "../../../../components/manager/maintenance/SuccessMaintenanceModal"; // Thay đổi đường dẫn nếu cần
+import SuccessMaintenanceModal from "../../../../components/manager/maintenance/SuccessMaintenanceModal";
 
 // 🔥 Component Chung
 import RoomInfoSection from "../../../../components/manager/maintenance/RoomInfoSection";
@@ -150,7 +147,6 @@ export default function CreateMaintenanceScreen() {
         <MaintenanceDescriptionSection
           description={description}
           onChangeText={setDescription}
-          onOpenTemplate={() => setMsgModalVisible(true)}
         />
 
         <MaintenanceSubmitButton
@@ -161,13 +157,6 @@ export default function CreateMaintenanceScreen() {
       </ScrollView>
 
       {/* --- MODALS --- */}
-
-      {/* 1. Modal Tin nhắn Security (Giữ nguyên) */}
-      <SecurityMessagesModal
-        visible={msgModalVisible}
-        onClose={() => setMsgModalVisible(false)}
-        onSelectMessage={handleSelectMessage}
-      />
 
       {/* 2. 🔥 Modal Thành công MỚI */}
       <SuccessMaintenanceModal
