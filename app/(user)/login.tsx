@@ -130,7 +130,7 @@ export default function LoginScreen() {
           );
         }
       } else {
-        Alert.alert("Lỗi", "Không lấy được idToken từ Google.");
+        Alert.alert("Nhắc nhở", "Hãy chọn một tài khoản để đăng nhập.");
       }
     } catch (error: any) {
       console.error("Lỗi trong quá trình đăng nhập hoặc gọi API:", error);
