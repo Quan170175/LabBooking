@@ -21,7 +21,7 @@ export default function BookingHistoryCard({
 
   // --- LOGIC HIỂN THỊ SLOT XỊN XÒ ---
   const slotsDisplay = useMemo(() => {
-    if (!b.slots || b.slots.length === 0) return ["Đang cập nhật lịch..."];
+    if (!b.slots || b.slots.length === 0) return ["Lịch trống hoặc bị từ chối"];
 
     // 1. Gom nhóm theo ngày (Group by Date)
     const grouped: Record<string, string[]> = {};
