@@ -1,5 +1,3 @@
-// CreateMaintenanceScreen.tsx (Đã được chỉnh sửa)
-
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -48,7 +46,7 @@ export default function CreateMaintenanceScreen() {
 
   // Modal State
   const [successModalVisible, setSuccessModalVisible] = useState(false);
-  const [msgModalVisible, setMsgModalVisible] = useState(false);
+  // const [msgModalVisible, setMsgModalVisible] = useState(false); // (Nếu không dùng có thể bỏ)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -75,11 +73,6 @@ export default function CreateMaintenanceScreen() {
     };
     fetchProfile();
   }, []);
-
-  const handleSelectMessage = (content: string) => {
-    setDescription(content);
-    setMsgModalVisible(false);
-  };
 
   const handleSubmit = async () => {
     if (!labInfo?.id || !description.trim()) return;
@@ -115,14 +108,10 @@ export default function CreateMaintenanceScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <ChevronLeft size={24} color="#0F172A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Bảo trì Phòng</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle}>Tạo lịch bảo trì</Text>
+        <Text style={styles.headerSub}>
+          Lên kế hoạch bảo trì cho phòng Lab của bạn
+        </Text>
       </View>
 
       <ScrollView
@@ -157,13 +146,10 @@ export default function CreateMaintenanceScreen() {
       </ScrollView>
 
       {/* --- MODALS --- */}
-
-      {/* 2. 🔥 Modal Thành công MỚI */}
       <SuccessMaintenanceModal
         visible={successModalVisible}
         onClose={handleSuccessClose}
         onViewHistory={goToHistory}
-        // Thông báo cố định cho Bảo trì Phòng
         message={`Lịch bảo trì phòng ${
           labInfo?.labName || ""
         } đã được tạo thành công.`}
@@ -173,79 +159,38 @@ export default function CreateMaintenanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  // 🔥 Giữ lại toàn bộ styles (trừ Modal styles đã bị xóa/chuyển qua file mới)
   container: { flex: 1, backgroundColor: "#FFF7ED" },
-  header: {
+
+  // Navigation Bar
+  navBar: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
+  },
+  backButton: {
+    padding: 4,
+    marginLeft: -4, // Căn lề trái sát hơn một chút
+  },
+
+  // Header Section (Giống Support Screen)
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     backgroundColor: "#FFF7ED",
   },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
-  backButton: { padding: 4 },
-  content: { padding: 16, paddingBottom: 100 },
-
-  // 🔥 Xóa toàn bộ Modal Styles cũ vì đã chuyển qua SuccessMaintenanceModal.tsx
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalContent: {
-    width: "90%",
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 24,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  modalIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#DCFCE7",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 20,
+  headerTitle: {
+    fontSize: 24, // To hơn
     fontWeight: "800",
-    color: "#16A34A",
-    marginBottom: 8,
+    color: "#0F172A",
+    paddingTop: 20,
   },
-  modalMessage: {
-    fontSize: 15,
+  headerSub: {
+    fontSize: 14,
     color: "#64748B",
-    textAlign: "center",
-    marginBottom: 24,
+    marginTop: 4,
   },
-  modalActions: { flexDirection: "row", gap: 12, width: "100%" },
-  modalBtnCancel: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "#F1F5F9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalBtnCancelText: { fontSize: 15, fontWeight: "600", color: "#475569" },
-  modalBtnPrimary: {
-    flex: 1.5,
-    flexDirection: "row",
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "#EA580C",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalBtnPrimaryText: { fontSize: 15, fontWeight: "600", color: "white" },
+
+  content: { padding: 16, paddingBottom: 100 },
 });
