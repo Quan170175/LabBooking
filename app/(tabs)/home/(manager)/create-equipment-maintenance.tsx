@@ -11,18 +11,18 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
-  ChevronLeft,
   Monitor,
   AlertCircle,
-  Layers,
   CheckCircle2,
+  Layers,
 } from "lucide-react-native";
 
 import apiClient from "../../../../utils/api";
-import SecurityMessagesModal from "../../../../components/security/SecurityMessagesModal";
+
+// 🔥 IMPORT MODAL CHUNG (Đảm bảo đường dẫn đúng)
 import SuccessMaintenanceModal from "../../../../components/manager/maintenance/SuccessMaintenanceModal";
 
-// Import các Component con (giả sử bạn đã tách ra như cấu trúc trước)
+// 🔥 Component Chung
 import RoomInfoSection from "../../../../components/manager/maintenance/RoomInfoSection";
 import MaintenanceTimeSection from "../../../../components/manager/maintenance/MaintenanceTimeSection";
 import MaintenanceDescriptionSection from "../../../../components/manager/maintenance/MaintenanceDescriptionSection";
@@ -77,7 +77,6 @@ export default function CreateEquipmentMaintenanceScreen() {
   );
 
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
-
   const [isLoadingRoom, setIsLoadingRoom] = useState(true);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isLoadingSpecific, setIsLoadingSpecific] = useState(false);
@@ -90,7 +89,6 @@ export default function CreateEquipmentMaintenanceScreen() {
 
   // Modals
   const [successModalVisible, setSuccessModalVisible] = useState(false);
-  const [msgModalVisible, setMsgModalVisible] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
 
   // --- GET DATA ---
@@ -102,7 +100,7 @@ export default function CreateEquipmentMaintenanceScreen() {
     setIsLoadingRoom(true);
     setIsLoadingCategories(true);
     try {
-      // 1. Lấy thông tin phòng
+      // 1. Get Room Info
       const roomRes = await apiClient.get<ManagerLabDetailsResponse>(
         "/api/Managers/lab-details"
       );
@@ -118,10 +116,22 @@ export default function CreateEquipmentMaintenanceScreen() {
         });
       }
 
-      // 2. Lấy danh sách loại thiết bị
-      const catRes = await apiClient.get("/api/EquipmentCategories");
-      const categoriesList = Array.isArray(catRes.data) ? catRes.data : [];
-      setCategories(categoriesList);
+      // 2. Get Categories (🟢 ĐÃ SỬA LOGIC API)
+      const catRes = await apiClient.get("/api/EquipmentCategories", {
+        params: {
+          PageNumber: 1,
+          PageSize: 10,
+        },
+      });
+
+      const catBody = catRes.data;
+      // Logic tìm items: ưu tiên lớp ngoài -> lớp trong -> check mảng trực tiếp
+      let categoriesList = catBody?.items || catBody?.data?.items;
+      if (!categoriesList && Array.isArray(catBody)) {
+        categoriesList = catBody;
+      }
+
+      setCategories(Array.isArray(categoriesList) ? categoriesList : []);
     } catch (error) {
       console.error(error);
       Alert.alert("Lỗi", "Không thể tải thông tin ban đầu.");
@@ -140,10 +150,23 @@ export default function CreateEquipmentMaintenanceScreen() {
 
     try {
       const url = `/api/EquipmentCategories/${categoryId}/equipments`;
-      const res = await apiClient.get(url);
-      const allEquipments: SpecificEquipment[] = Array.isArray(res.data)
-        ? res.data
-        : [];
+      // Thêm params PageSize để đảm bảo lấy hết thiết bị
+      const res = await apiClient.get(url, {
+        params: { PageNumber: 1, PageSize: 100 },
+      });
+
+      // 🟢 ĐÃ SỬA LOGIC API CHO THIẾT BỊ
+      const resBody = res.data;
+      let allEquipments: SpecificEquipment[] = [];
+
+      // Logic tìm items linh hoạt
+      if (resBody?.items && Array.isArray(resBody.items)) {
+        allEquipments = resBody.items;
+      } else if (resBody?.data?.items && Array.isArray(resBody.data.items)) {
+        allEquipments = resBody.data.items;
+      } else if (Array.isArray(resBody)) {
+        allEquipments = resBody;
+      }
 
       // Lọc bỏ thiết bị đang bảo trì
       const availableEquipments = allEquipments.filter(
@@ -165,8 +188,10 @@ export default function CreateEquipmentMaintenanceScreen() {
     setSelectedItems((prev) => {
       const exists = prev.find((item) => item.id === id);
       if (exists) {
+        // Nếu đã có -> Xóa
         return prev.filter((item) => item.id !== id);
       } else {
+        // Nếu chưa có -> Thêm vào kèm categoryId hiện tại
         return [...prev, { id, categoryId: selectedCategoryId }];
       }
     });
@@ -174,17 +199,16 @@ export default function CreateEquipmentMaintenanceScreen() {
 
   // --- SUBMIT ---
   const handleSubmit = async () => {
-    // Validate: Phải có phòng + có chọn thiết bị + có nhập mô tả
-    if (!roomInfo?.id || selectedItems.length === 0 || !description.trim()) {
+    if (!roomInfo?.id || selectedItems.length === 0 || !description.trim())
       return;
-    }
 
     setIsSubmitting(true);
     const countBeforeSubmit = selectedItems.length;
 
     try {
-      // 1. Chuẩn bị payload
+      // 1. Lấy danh sách ID để gửi API
       const equipmentIdsToSubmit = selectedItems.map((item) => item.id);
+
       const payload = {
         equipmentIds: equipmentIdsToSubmit,
         startTime: startDate.toISOString(),
@@ -192,31 +216,36 @@ export default function CreateEquipmentMaintenanceScreen() {
         description: description.trim(),
       };
 
-      // 2. Gọi API
+      // 2. Gọi API tạo lịch bảo trì
       await apiClient.post("/api/EquipmentMaintainSchedule", payload);
 
-      // --- XỬ LÝ SAU KHI THÀNH CÔNG ---
+      // --- CẬP NHẬT GIAO DIỆN SAU KHI THÀNH CÔNG ---
 
-      // 3. Loại bỏ thiết bị vừa gửi khỏi danh sách đang hiện
+      // 3. Loại bỏ các thiết bị vừa chọn khỏi danh sách đang hiển thị bên dưới
       setSpecificEquipments((prevList) =>
         prevList.filter((eq) => !equipmentIdsToSubmit.includes(eq.id))
       );
 
-      // 4. Cập nhật lại số lượng hiển thị trên Category chip
+      // 4. Trừ số lượng trên thanh Category
       setCategories((prevCats) =>
         prevCats.map((cat) => {
           const countSelectedInThisCat = selectedItems.filter(
             (item) => item.categoryId === cat.id
           ).length;
+
           const newCount = Math.max(
             0,
             cat.equipmentCount - countSelectedInThisCat
           );
-          return { ...cat, equipmentCount: newCount };
+
+          return {
+            ...cat,
+            equipmentCount: newCount,
+          };
         })
       );
 
-      // 5. Reset và hiện Modal thành công
+      // 5. Reset lại các lựa chọn và hiện thông báo
       setSelectedItems([]);
       setSubmittedCount(countBeforeSubmit);
       setSuccessModalVisible(true);
@@ -224,40 +253,40 @@ export default function CreateEquipmentMaintenanceScreen() {
     } catch (error: any) {
       console.error("❌ Lỗi gửi API:", error);
 
-      // --- XỬ LÝ LỖI CHI TIẾT TỪ BE ---
+      // --- LOGIC BẮT LỖI TỐI ƯU ---
       let errorMsg = "Có lỗi xảy ra khi gửi lịch bảo trì.";
       const responseData = error.response?.data;
+      const status = error.response?.status;
+
+      console.log(`[HTTP Status]: ${status}`);
+      console.log("[Response Data]:", responseData);
 
       if (responseData) {
-        if (responseData.errors) {
-          // Lỗi Validation nhiều dòng
-          const errorObj = responseData.errors;
-          const errorList: string[] = [];
-          Object.keys(errorObj).forEach((key) => {
-            const messages = errorObj[key];
-            if (Array.isArray(messages)) {
-              messages.forEach((msg) => errorList.push(`• ${msg}`));
-            }
-          });
-          if (errorList.length > 0) errorMsg = errorList.join("\n");
-        } else if (responseData.message) {
-          // Lỗi có message cụ thể
+        if (typeof responseData === "object" && responseData.message) {
           errorMsg = responseData.message;
+        } else if (status === 400 && responseData.errors) {
+          const errorData = responseData.errors;
+          const firstKey = Object.keys(errorData)[0];
+          if (firstKey && errorData[firstKey]) {
+            errorMsg = `${firstKey}: ${
+              Array.isArray(errorData[firstKey])
+                ? errorData[firstKey][0]
+                : errorData[firstKey]
+            }`;
+          }
         } else if (typeof responseData === "string") {
-          // Lỗi string
           errorMsg = responseData;
         }
       } else if (error.message) {
         errorMsg = error.message;
       }
 
-      Alert.alert("Không thể tạo lịch", errorMsg);
+      Alert.alert("Thất bại", errorMsg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // --- NAVIGATION HANDLERS ---
   const goToHistory = () => {
     setSuccessModalVisible(false);
     router.push("/(tabs)/home/(manager)/maintenancehistory");
@@ -270,17 +299,15 @@ export default function CreateEquipmentMaintenanceScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* 1. HEADER CỐ ĐỊNH (Nằm ngoài ScrollView) */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <ChevronLeft size={24} color="#0F172A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Bảo trì thiết bị</Text>
-        <View style={{ width: 24 }} />
+        <View>
+          <Text style={styles.headerTitle}>Bảo trì thiết bị</Text>
+          <Text style={styles.headerSub}>Lên lịch bảo trì các thiết bị</Text>
+        </View>
       </View>
 
+      {/* 2. SCROLLVIEW CHỨA NỘI DUNG (Cuộn độc lập bên dưới) */}
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.content}
@@ -308,40 +335,44 @@ export default function CreateEquipmentMaintenanceScreen() {
               showsHorizontalScrollIndicator={false}
               style={styles.horizontalScroll}
             >
-              {categories.map((cat) => {
-                const selectedCountInCat = selectedItems.filter(
-                  (i) => i.categoryId === cat.id
-                ).length;
-                const isSelected = selectedCategoryId === cat.id;
+              {categories.length > 0 ? (
+                categories.map((cat) => {
+                  const selectedCountInCat = selectedItems.filter(
+                    (i) => i.categoryId === cat.id
+                  ).length;
+                  const isSelected = selectedCategoryId === cat.id;
 
-                return (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[
-                      styles.chip,
-                      isSelected && styles.chipActive,
-                      selectedCountInCat > 0 && styles.chipHasSelection,
-                    ]}
-                    onPress={() => handleSelectCategory(cat.id)}
-                  >
-                    <Text
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
                       style={[
-                        styles.chipText,
-                        isSelected && styles.chipTextActive,
-                        selectedCountInCat > 0 && {
-                          fontWeight: "700",
-                          color: "#EA580C",
-                        },
+                        styles.chip,
+                        isSelected && styles.chipActive,
+                        selectedCountInCat > 0 && styles.chipHasSelection,
                       ]}
+                      onPress={() => handleSelectCategory(cat.id)}
                     >
-                      {cat.name}
-                      {selectedCountInCat > 0
-                        ? ` (${selectedCountInCat}/${cat.equipmentCount})`
-                        : ` (${cat.equipmentCount})`}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                      <Text
+                        style={[
+                          styles.chipText,
+                          isSelected && styles.chipTextActive,
+                          selectedCountInCat > 0 && {
+                            fontWeight: "700",
+                            color: "#EA580C",
+                          },
+                        ]}
+                      >
+                        {cat.name}
+                        {selectedCountInCat > 0
+                          ? ` (${selectedCountInCat}/${cat.equipmentCount})`
+                          : ` (${cat.equipmentCount})`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <Text style={styles.emptyText}>Không có loại thiết bị nào</Text>
+              )}
             </ScrollView>
           )}
         </View>
@@ -352,7 +383,7 @@ export default function CreateEquipmentMaintenanceScreen() {
             <View style={styles.sectionHeader}>
               <Monitor size={18} color="#EA580C" />
               <Text style={styles.sectionTitle}>
-                Chọn thiết bị (Tổng: {selectedItems.length})
+                Chọn thiết bị (Đã chọn: {selectedItems.length})
               </Text>
             </View>
 
@@ -362,21 +393,21 @@ export default function CreateEquipmentMaintenanceScreen() {
               <View style={styles.emptyState}>
                 <AlertCircle size={20} color="#64748B" />
                 <Text style={styles.emptyText}>
-                  Không có thiết bị khả dụng.
+                  Không có thiết bị khả dụng hoặc tất cả đã được bảo trì.
                 </Text>
               </View>
             ) : (
               <View style={styles.gridContainer}>
                 {specificEquipments.map((eq) => {
                   const isSelected = selectedItems.some((i) => i.id === eq.id);
-                  // Xử lý màu sắc trạng thái
+
                   let statusColor = "#64748B";
                   let statusText = eq.status || "Khác";
-                  if (["Sẵn sàng", "Available"].includes(eq.status)) {
+                  if (eq.status === "Sẵn sàng" || eq.status === "Available") {
                     statusColor = "#16A34A";
                     statusText = "Sẵn sàng";
                   }
-                  if (["Hỏng", "Broken"].includes(eq.status)) {
+                  if (eq.status === "Hỏng" || eq.status === "Broken") {
                     statusColor = "#DC2626";
                     statusText = "Hỏng";
                   }
@@ -423,7 +454,7 @@ export default function CreateEquipmentMaintenanceScreen() {
           </View>
         )}
 
-        {/* 4. TIME SECTION */}
+        {/* 4. TIME */}
         <MaintenanceTimeSection
           startDate={startDate}
           endDate={endDate}
@@ -431,17 +462,15 @@ export default function CreateEquipmentMaintenanceScreen() {
           onEndDateChange={setEndDate}
         />
 
-        {/* 5. DESCRIPTION SECTION */}
+        {/* 5. DESCRIPTION */}
         <MaintenanceDescriptionSection
           description={description}
           onChangeText={setDescription}
-          onOpenTemplate={() => setMsgModalVisible(true)}
         />
 
         {/* 6. SUBMIT BUTTON */}
         <MaintenanceSubmitButton
           onPress={handleSubmit}
-          // 🔥 ĐIỀU KIỆN DISABLED MỚI: Check thêm description
           disabled={
             isSubmitting || selectedItems.length === 0 || !description.trim()
           }
@@ -450,17 +479,7 @@ export default function CreateEquipmentMaintenanceScreen() {
         />
       </ScrollView>
 
-      {/* MODAL: CHỌN TIN NHẮN */}
-      <SecurityMessagesModal
-        visible={msgModalVisible}
-        onClose={() => setMsgModalVisible(false)}
-        onSelectMessage={(content) => {
-          setDescription(content);
-          setMsgModalVisible(false);
-        }}
-      />
-
-      {/* MODAL: THÀNH CÔNG */}
+      {/* 🔥 MODAL THÀNH CÔNG */}
       <SuccessMaintenanceModal
         visible={successModalVisible}
         onClose={handleSuccessClose}
@@ -475,13 +494,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   header: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     padding: 16,
     backgroundColor: "#FFF7ED",
+    zIndex: 10,
   },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
-  backButton: { padding: 4 },
+  headerTitle: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
+  headerSub: { fontSize: 14, color: "#64748B", marginTop: 4 },
   content: { padding: 16, paddingBottom: 100 },
 
   section: {

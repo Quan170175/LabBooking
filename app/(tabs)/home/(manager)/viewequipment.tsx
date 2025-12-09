@@ -21,7 +21,7 @@ import {
   Filter,
 } from "lucide-react-native";
 
-// 🟢 Import API Client
+// 🟢 Đảm bảo đường dẫn import này đúng với project của bạn
 import apiClient from "../../../../utils/api";
 
 // --- TYPES ---
@@ -61,6 +61,7 @@ const getStatusConfig = (status: string) => {
       };
     case "Broken":
     case "Hỏng":
+    case "Hu nang":
       return {
         label: "Hỏng",
         color: "#DC2626",
@@ -88,19 +89,46 @@ export default function ViewEquipmentStatusScreen() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // --- API: GET CATEGORIES ---
   // --- API: GET CATEGORIES ---
   const fetchCategories = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      const response = await apiClient.get("/api/EquipmentCategories");
-      // Xử lý data (tuỳ vào interceptor của bạn đã bóc vỏ chưa)
-      const data = response.data?.data || response.data || [];
-      if (Array.isArray(data)) {
-        setCategories(data);
+      const response = await apiClient.get("/api/EquipmentCategories", {
+        params: {
+          PageNumber: 1,
+          PageSize: 10,
+        },
+      });
+
+      const responseBody = response.data;
+
+      let items = responseBody?.items;
+      if (!items && responseBody?.data?.items) {
+        items = responseBody.data.items;
       }
-    } catch (error) {
+
+      // 3. Đảm bảo luôn là mảng
+      if (Array.isArray(items)) {
+        setCategories(items);
+      } else {
+        setCategories([]);
+        console.warn("Không tìm thấy danh sách items hợp lệ");
+      }
+    } catch (error: any) {
+      // Xử lý lỗi (Giữ nguyên)
+      let errorMessage = "Lỗi hệ thống không xác định.";
+      if (error.response) {
+        errorMessage =
+          error.response.data?.message || `Lỗi: ${error.response.status}`;
+      } else if (error.request) {
+        errorMessage = "Không có phản hồi từ máy chủ.";
+      }
       console.error("Lỗi lấy danh mục:", error);
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -115,19 +143,36 @@ export default function ViewEquipmentStatusScreen() {
   const handleSelectCategory = async (category: EquipmentCategory) => {
     setSelectedCategory(category);
     setIsLoading(true);
+    setError(null);
+    setEquipments([]);
+
     try {
       const response = await apiClient.get(
         `/api/EquipmentCategories/${category.id}/equipments`
       );
-      // Xử lý data
-      const data = response.data?.data || response.data || [];
-      if (Array.isArray(data)) {
-        setEquipments(data);
-      } else {
-        setEquipments([]);
+
+      // 🟢 FIX: Logic lấy dữ liệu linh hoạt cho API con
+      // API con có thể trả về mảng trực tiếp HOẶC cấu trúc phân trang giống cha
+      const responseData = response.data?.data || response.data;
+
+      let items = [];
+      if (Array.isArray(responseData)) {
+        // Trường hợp trả về mảng trực tiếp
+        items = responseData;
+      } else if (responseData?.items && Array.isArray(responseData.items)) {
+        // Trường hợp trả về object phân trang { items: [...] }
+        items = responseData.items;
       }
-    } catch (error) {
+
+      setEquipments(items);
+    } catch (error: any) {
+      let errorMessage = "Lỗi tải thiết bị.";
+      if (error.response) {
+        errorMessage =
+          error.response.data?.message || `Lỗi ${error.response.status}`;
+      }
       console.error("Lỗi lấy thiết bị:", error);
+      setError(errorMessage);
       setEquipments([]);
     } finally {
       setIsLoading(false);
@@ -137,19 +182,21 @@ export default function ViewEquipmentStatusScreen() {
   const handleBackToCategories = () => {
     setSelectedCategory(null);
     setEquipments([]);
+    setError(null);
   };
 
   const onRefresh = () => {
     setIsRefreshing(true);
+    setError(null);
     if (selectedCategory) {
       handleSelectCategory(selectedCategory);
-      setIsRefreshing(false);
+      setIsRefreshing(false); // Tắt refresh nhanh cho view con
     } else {
       fetchCategories();
     }
   };
 
-  // --- RENDER CATEGORY ITEM ---
+  // --- RENDER ITEMS ---
   const renderCategoryItem = ({ item }: { item: EquipmentCategory }) => (
     <TouchableOpacity
       style={styles.categoryCard}
@@ -161,18 +208,15 @@ export default function ViewEquipmentStatusScreen() {
       <View style={{ flex: 1 }}>
         <Text style={styles.catName}>{item.name}</Text>
         <Text style={styles.catCount}>
-          {item.equipmentCount !== undefined ? item.equipmentCount : "N/A"}{" "}
-          thiết bị
+          {item.equipmentCount !== undefined ? item.equipmentCount : 0} thiết bị
         </Text>
       </View>
       <ChevronRight size={20} color="#CBD5E1" />
     </TouchableOpacity>
   );
 
-  // --- RENDER EQUIPMENT ITEM ---
   const renderEquipmentItem = ({ item }: { item: SpecificEquipment }) => {
     const statusConf = getStatusConfig(item.status);
-
     return (
       <View style={styles.eqCard}>
         <View style={styles.eqHeader}>
@@ -191,6 +235,9 @@ export default function ViewEquipmentStatusScreen() {
           <Text style={styles.eqLocation}>📍 Tại: {item.labRoomName}</Text>
         )}
 
+        {/* Hiển thị ID để debug nếu cần, có thể xóa dòng dưới */}
+        {/* <Text style={{fontSize: 10, color: '#ccc'}}>{item.id}</Text> */}
+
         {item.description && (
           <Text style={styles.eqDesc} numberOfLines={2}>
             {item.description}
@@ -201,11 +248,9 @@ export default function ViewEquipmentStatusScreen() {
   };
 
   return (
-    // 🟢 SỬA BACKGROUND MÀU KEM
     <SafeAreaView style={styles.container}>
-      {/* 🟢 HEADER MỚI: CỐ ĐỊNH, KHÔNG NÚT BACK */}
+      {/* HEADER */}
       <View style={styles.header}>
-        {/* Nếu đang xem chi tiết danh mục, hiện nút Back nhỏ nội bộ */}
         {selectedCategory ? (
           <View style={styles.subHeaderNav}>
             <TouchableOpacity
@@ -214,13 +259,14 @@ export default function ViewEquipmentStatusScreen() {
             >
               <ChevronLeft size={24} color="#0F172A" />
             </TouchableOpacity>
-            <View>
-              <Text style={styles.headerTitle}>{selectedCategory.name}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {selectedCategory.name}
+              </Text>
               <Text style={styles.headerSub}>Danh sách thiết bị chi tiết</Text>
             </View>
           </View>
         ) : (
-          // Header chính (Trang chủ thiết bị)
           <>
             <Text style={styles.headerTitle}>Tình trạng thiết bị</Text>
             <Text style={styles.headerSub}>
@@ -237,6 +283,13 @@ export default function ViewEquipmentStatusScreen() {
         </View>
       ) : (
         <>
+          {error && (
+            <View style={styles.errorContainer}>
+              <XCircle size={20} color="#DC2626" />
+              <Text style={styles.errorText}>Lỗi: {error}</Text>
+            </View>
+          )}
+
           {/* VIEW 1: CATEGORIES LIST */}
           {!selectedCategory && (
             <FlatList
@@ -251,7 +304,13 @@ export default function ViewEquipmentStatusScreen() {
                   colors={["#EA580C"]}
                 />
               }
-              // Bỏ ListHeader cũ vì đã có Header xịn ở trên
+              ListEmptyComponent={
+                !isLoading && !error ? (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyText}>Không có danh mục nào.</Text>
+                  </View>
+                ) : null
+              }
             />
           )}
 
@@ -270,12 +329,14 @@ export default function ViewEquipmentStatusScreen() {
                 />
               }
               ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Monitor size={48} color="#E2E8F0" />
-                  <Text style={styles.emptyText}>
-                    Chưa có thiết bị nào trong danh mục này.
-                  </Text>
-                </View>
+                !error ? (
+                  <View style={styles.emptyState}>
+                    <Monitor size={48} color="#E2E8F0" />
+                    <Text style={styles.emptyText}>
+                      Chưa có thiết bị nào trong danh mục này.
+                    </Text>
+                  </View>
+                ) : null
               }
             />
           )}
@@ -286,16 +347,31 @@ export default function ViewEquipmentStatusScreen() {
 }
 
 const styles = StyleSheet.create({
-  // 🟢 Update background
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  // 🟢 Update Header Styles
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  errorText: {
+    flex: 1,
+    color: "#DC2626",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+
   header: {
     padding: 16,
     backgroundColor: "#FFF7ED",
-    // borderBottomWidth: 1,
-    // borderBottomColor: "#E2E8F0",
   },
   headerTitle: {
     fontSize: 24,
@@ -308,32 +384,30 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // Header con khi vào chi tiết danh mục
   subHeaderNav: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
   internalBackBtn: {
-    padding: 4,
+    padding: 8,
     backgroundColor: "white",
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
 
   listContent: { padding: 16, paddingBottom: 40 },
 
-  // CATEGORY CARD
   categoryCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "white",
     padding: 16,
     marginBottom: 12,
-    borderRadius: 16, // Bo góc lớn hơn
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#F1F5F9", // Viền nhạt hơn
+    borderColor: "#F1F5F9",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
@@ -352,7 +426,6 @@ const styles = StyleSheet.create({
   catName: { fontSize: 16, fontWeight: "700", color: "#0F172A" },
   catCount: { fontSize: 13, color: "#64748B", marginTop: 2 },
 
-  // EQUIPMENT CARD
   eqCard: {
     backgroundColor: "white",
     padding: 16,

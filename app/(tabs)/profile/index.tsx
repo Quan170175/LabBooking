@@ -18,13 +18,13 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
 import ConfirmationModal from "../../../components/common/ConfirmationModal";
 
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as SecureStore from "expo-secure-store";
 
-// 🟢 1. IMPORT API CLIENT
 import apiClient from "../../../utils/api";
 
 type Setting = {
@@ -60,11 +60,11 @@ const settings: Setting[] = [
   },
 ];
 
-// 🟢 2. ĐỊNH NGHĨA TYPE DỰA TRÊN API
 interface UserProfile {
   id: string;
   email: string;
   userName: string;
+  avatarUrl: string | null;
   roles: string[];
 }
 
@@ -73,33 +73,31 @@ export default function Profile() {
 
   const [isLogoutModalOpen, setLogoutModalOpen] = useState(false);
 
-  // 🟢 3. STATE CHO USER
-  const [userName, setUserName] = useState("Người dùng"); // Mặc định
+  // 🟢 3. STATE CHO USER VÀ AVATAR
+  const [userName, setUserName] = useState("Người dùng");
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
   useEffect(() => {
-    // Cấu hình Google Sign-in
     try {
       GoogleSignin.configure({
-        webClientId:
-          "317167237519-3bn2trq7crhc9sm57a9f695crc9idj8e.apps.googleusercontent.com",
-        iosClientId:
-          "317167237519-9e80jt1rdcqkdbane352msd5gfnpti95.apps.googleusercontent.com",
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
         scopes: ["profile", "email"],
       });
     } catch (error) {
       console.error("Lỗi khi cấu hình Google Sign-In ở Profile:", error);
     }
 
-    // 🟢 4. GỌI API LẤY TÊN NGƯỜI DÙNG
     const fetchProfileName = async () => {
       try {
         const response = await apiClient.get<UserProfile>("/api/Auth/profile");
-        if (response.data && response.data.userName) {
-          setUserName(response.data.userName);
+        if (response.data) {
+          // 🟢 4. SET DỮ LIỆU TỪ API
+          if (response.data.userName) setUserName(response.data.userName);
+          if (response.data.avatarUrl) setUserAvatar(response.data.avatarUrl);
         }
       } catch (error) {
-        console.log("Không thể tải tên người dùng:", error);
-        // Không cần Alert lỗi ở đây để tránh làm phiền người dùng ở màn hình chính
+        console.log("Không thể tải thông tin người dùng:", error);
       }
     };
 
@@ -155,18 +153,28 @@ export default function Profile() {
       >
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            {/* Lấy chữ cái đầu của tên làm avatar fallback */}
-            <Text style={styles.avatarFallback}>
-              {userName.charAt(0).toUpperCase()}
-            </Text>
+            {/* 🟢 5. LOGIC HIỂN THỊ ẢNH HOẶC CHỮ CÁI ĐẦU */}
+            {userAvatar ? (
+              <Image
+                source={{ uri: userAvatar }}
+                style={styles.avatarImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text style={styles.avatarFallback}>
+                {userName.charAt(0).toUpperCase()}
+              </Text>
+            )}
           </View>
-          <View>
-            {/* 🟢 5. HIỂN THỊ TÊN TỪ API */}
-            <Text style={styles.profileName}>{userName}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.profileName} numberOfLines={1}>
+              {userName}
+            </Text>
           </View>
         </View>
       </LinearGradient>
 
+      {/* ... Phần còn lại giữ nguyên ... */}
       <View style={styles.alertCard}>
         <View style={styles.alertIconContainer}>
           <AlertCircle size={20} color="#EA580C" />
@@ -267,6 +275,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 5,
+    overflow: "hidden", // Để ảnh không bị tràn ra ngoài border radius
+  },
+  // 🟢 6. STYLE MỚI CHO ẢNH
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
   avatarFallback: {
     color: "#EA580C",

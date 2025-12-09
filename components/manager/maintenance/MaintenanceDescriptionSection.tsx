@@ -1,23 +1,16 @@
 import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-} from "react-native";
-import { FileText, MessageSquarePlus } from "lucide-react-native";
+import { View, Text, StyleSheet, TextInput } from "react-native";
+import { FileText } from "lucide-react-native";
 
 interface DescriptionProps {
   description: string;
   onChangeText: (text: string) => void;
-  onOpenTemplate: () => void;
+  // 🔥 Đã xóa prop onOpenTemplate
 }
 
 export default function MaintenanceDescriptionSection({
   description,
   onChangeText,
-  onOpenTemplate,
 }: DescriptionProps) {
   return (
     <View style={styles.section}>
@@ -35,9 +28,7 @@ export default function MaintenanceDescriptionSection({
           value={description}
           onChangeText={onChangeText}
         />
-        <TouchableOpacity style={styles.miniFab} onPress={onOpenTemplate}>
-          <MessageSquarePlus size={20} color="#EA580C" />
-        </TouchableOpacity>
+        {/* 🔥 Đã xóa nút bấm icon tin nhắn ở đây */}
       </View>
     </View>
   );
@@ -72,24 +63,5 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 15,
     textAlignVertical: "top",
-    paddingBottom: 40,
-  },
-  miniFab: {
-    position: "absolute",
-    bottom: 8,
-    right: 8,
-    backgroundColor: "white",
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
 });
