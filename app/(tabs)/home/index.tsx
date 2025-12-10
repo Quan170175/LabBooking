@@ -10,8 +10,8 @@ import {
   LayoutDashboard,
   Monitor,
   Wrench,
-  DoorOpen, // 🟢 Mới: Icon mở cửa
-  History, // 🟢 Mới: Icon lịch sử
+  DoorOpen,
+  History,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Alert, // 🟢 1. Đã thêm Alert vào đây
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { jwtDecode } from "jwt-decode";
@@ -30,7 +31,6 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import FeatureTile from "../../../components/home/FeatureTile";
 import { registerPushTokenOnServer } from "../../../services/apiserver";
 import { registerForPushNotificationsAsync } from "../../../services/notificationService";
-// import "../../../assets/images/flms.png"; // Comment lại dòng này nếu gây lỗi import ảnh, hoặc đảm bảo đường dẫn đúng
 
 // 1. ĐỊNH NGHĨA ROLES
 const ROLES = {
@@ -40,7 +40,7 @@ const ROLES = {
   SECURITYGUARD: "SecurityGuard",
 };
 
-// 2. CẤU HÌNH MENU THEO SECTIONS (Phân loại)
+// 2. CẤU HÌNH MENU THEO SECTIONS
 const APP_SECTIONS = [
   {
     id: "booking",
@@ -68,13 +68,6 @@ const APP_SECTIONS = [
         icon: ClipboardList,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
       },
-      // {
-      //   to: "/home/timetable",
-      //   title: "Thời khóa biểu",
-      //   description: "Lịch toàn trường",
-      //   icon: CalendarDays,
-      //   allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      // },
       {
         to: "/(tabs)/home/(manager)/viewequipment",
         title: "Xem thiết bị",
@@ -139,7 +132,7 @@ const APP_SECTIONS = [
     description: "Tài liệu hướng dẫn và trợ giúp",
     items: [
       {
-        to: "/home/resources",
+        to: "/home/resources", // 🟢 Item này sẽ bị chặn khi bấm
         title: "Tài liệu lab",
         description: "Hướng dẫn & SOP",
         icon: BookOpen,
@@ -321,11 +314,28 @@ export default function Home() {
             </View>
 
             <View style={styles.grid}>
-              {validItems.map((item) => (
-                <View key={item.to} style={styles.gridItem}>
-                  <FeatureTile {...item} />
-                </View>
-              ))}
+              {validItems.map((item) => {
+                // 🟢 2. Logic kiểm tra nếu là "Tài liệu lab"
+                const isUnderConstruction = item.to === "/home/resources";
+
+                return (
+                  <View key={item.to} style={styles.gridItem}>
+                    <FeatureTile
+                      {...item}
+                      // 🟢 3. Truyền hàm onPress để chặn điều hướng nếu cần
+                      onPress={
+                        isUnderConstruction
+                          ? () =>
+                              Alert.alert(
+                                "Thông báo",
+                                "Chức năng đang phát triển"
+                              )
+                          : undefined
+                      }
+                    />
+                  </View>
+                );
+              })}
             </View>
           </Animated.View>
         );
@@ -340,7 +350,7 @@ export default function Home() {
 const styles = StyleSheet.create({
   root: {
     padding: 16,
-    paddingTop: 20, // Tăng padding top chút
+    paddingTop: 20,
     paddingBottom: 40,
     backgroundColor: "#fff7ed",
     flexGrow: 1,
@@ -349,7 +359,7 @@ const styles = StyleSheet.create({
   // Hero Styles
   hero: {
     borderRadius: 24,
-    backgroundColor: "#f97316", // Màu cam chủ đạo
+    backgroundColor: "#f97316",
     marginBottom: 24,
     shadowColor: "#f97316",
     shadowOffset: { width: 0, height: 8 },
@@ -405,7 +415,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 99, // Pill shape
+    borderRadius: 99,
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
@@ -444,9 +454,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    rowGap: 12, // Khoảng cách dòng
+    rowGap: 12,
   },
   gridItem: {
-    width: "48%", // 2 cột
+    width: "48%",
   },
 });
