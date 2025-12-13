@@ -29,6 +29,22 @@ export default function HomeStackLayout() {
         name="doorrequest"
         options={{ header: () => <AppHeader /> }}
       />
+      <Stack.Screen
+        name="request-change"
+        options={{ header: () => <AppHeader /> }}
+      />
+      <Stack.Screen
+        name="testuploadfile"
+        options={{ header: () => <AppHeader /> }}
+      />
+      <Stack.Screen
+        name="my-qrcode"
+        options={{ header: () => <AppHeader /> }}
+      />
+      <Stack.Screen
+        name="change-request-history"
+        options={{ header: () => <AppHeader /> }}
+      />
 
       <Stack.Screen
         name="(manager)/approvals"
@@ -54,6 +70,18 @@ export default function HomeStackLayout() {
         name="(manager)/viewequipment"
         options={{ header: () => <AppHeader /> }}
       />
+      <Stack.Screen
+        name="(manager)/change-request-info"
+        options={{ header: () => <AppHeader /> }}
+      />
+      <Stack.Screen
+        name="(manager)/my-lab"
+        options={{ header: () => <AppHeader /> }}
+      />
+      <Stack.Screen
+        name="(manager)/appovals-history"
+        options={{ header: () => <AppHeader /> }}
+      />
 
       <Stack.Screen
         name="(security)/door-requests"
@@ -65,6 +93,14 @@ export default function HomeStackLayout() {
       />
       <Stack.Screen
         name="(security)/create-incident"
+        options={{ header: () => <AppHeader /> }}
+      />
+      <Stack.Screen
+        name="(security)/scanner"
+        options={{ header: () => <AppHeader /> }}
+      />
+      <Stack.Screen
+        name="(security)/today-schedule"
         options={{ header: () => <AppHeader /> }}
       />
     </Stack>
