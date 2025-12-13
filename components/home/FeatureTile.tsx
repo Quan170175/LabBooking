@@ -1,4 +1,4 @@
-import { Link } from "expo-router";
+import { useRouter } from "expo-router"; // 🟢 1. Dùng useRouter thay vì Link
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -7,6 +7,7 @@ interface FeatureTileProps {
   title: string;
   description?: string;
   icon: React.ComponentType<{ size?: number; color?: string }>;
+  onPress?: () => void; // 🟢 2. Thêm prop onPress (không bắt buộc)
 }
 
 export default function FeatureTile({
@@ -14,22 +15,39 @@ export default function FeatureTile({
   title,
   description,
   icon: Icon,
+  onPress, // 🟢 3. Nhận prop onPress
 }: FeatureTileProps) {
-  return (
-    <Link href={to as any} asChild>
-      <TouchableOpacity activeOpacity={0.85} style={styles.card}>
-        <View style={styles.iconBox}>
-          <Icon size={24} color="#EA580C" />
-        </View>
+  const router = useRouter(); // 🟢 4. Khởi tạo router
 
-        <View>
-          <Text style={styles.title}>{title}</Text>
-          {description ? (
-            <Text style={styles.description}>{description}</Text>
-          ) : null}
-        </View>
-      </TouchableOpacity>
-    </Link>
+  // 🟢 5. Hàm xử lý logic khi bấm
+  const handlePress = () => {
+    if (onPress) {
+      // Nếu có hàm onPress được truyền vào (VD: Alert), thì chạy nó
+      onPress();
+    } else {
+      // Nếu không, thực hiện chuyển trang bình thường
+      router.push(to as any);
+    }
+  };
+
+  return (
+    // 🔴 Đã xóa thẻ <Link href={...} asChild> bao quanh
+    <TouchableOpacity
+      activeOpacity={0.85}
+      style={styles.card}
+      onPress={handlePress} // 🟢 Gắn hàm xử lý vào đây
+    >
+      <View style={styles.iconBox}>
+        <Icon size={24} color="#EA580C" />
+      </View>
+
+      <View>
+        <Text style={styles.title}>{title}</Text>
+        {description ? (
+          <Text style={styles.description}>{description}</Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
   );
 }
 
