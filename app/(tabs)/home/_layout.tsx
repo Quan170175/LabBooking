@@ -30,10 +30,6 @@ export default function HomeStackLayout() {
         options={{ header: () => <AppHeader /> }}
       />
       <Stack.Screen
-        name="request-change"
-        options={{ header: () => <AppHeader /> }}
-      />
-      <Stack.Screen
         name="testuploadfile"
         options={{ header: () => <AppHeader /> }}
       />
@@ -68,10 +64,6 @@ export default function HomeStackLayout() {
       />
       <Stack.Screen
         name="(manager)/viewequipment"
-        options={{ header: () => <AppHeader /> }}
-      />
-      <Stack.Screen
-        name="(manager)/change-request-info"
         options={{ header: () => <AppHeader /> }}
       />
       <Stack.Screen
