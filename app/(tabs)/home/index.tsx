@@ -13,6 +13,10 @@ import {
   DoorOpen,
   History,
   HomeIcon,
+  Mail,
+  QrCode,
+  ScanLine,
+  ClipboardCheck,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -77,38 +81,10 @@ const APP_SECTIONS = [
         allowedRoles: [ROLES.MANAGER],
       },
       {
-        to: "/home/request-change",
-        title: "Đổi lịch",
-        description: "Đổi lịch của phòng lab",
-        icon: CalendarCheck2,
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      },
-      {
-        to: "/(tabs)/home/(manager)/change-request-info",
-        title: " Xem đổi lịch",
-        description: "Xem Đổi lịch của học sinh, sinh viên",
-        icon: CalendarCheck2,
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      },
-      {
         to: "/home/testuploadfile",
-        title: " testupload",
-        description: "testupload",
-        icon: CalendarCheck2,
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      },
-      {
-        to: "/home/my-qrcode",
-        title: " generator",
-        description: "generator",
-        icon: CalendarCheck2,
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      },
-      {
-        to: "/(tabs)/home/scanner",
-        title: "scanner",
-        description: "scanner",
-        icon: CalendarCheck2,
+        title: "Gửi thông báo",
+        description: "Soạn và gửi email thông báo cho các thành viên",
+        icon: Mail,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
       },
       {
@@ -189,7 +165,7 @@ const APP_SECTIONS = [
     description: "Tài liệu hướng dẫn và trợ giúp",
     items: [
       {
-        to: "/home/resources", // 🟢 Item này sẽ bị chặn khi bấm
+        to: "/home/resources",
         title: "Tài liệu lab",
         description: "Hướng dẫn & SOP",
         icon: BookOpen,
@@ -207,6 +183,13 @@ const APP_SECTIONS = [
         title: "Yêu cầu mở cửa",
         description: "Gửi yêu cầu mở cửa",
         icon: DoorOpen,
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
+      },
+      {
+        to: "/home/my-qrcode",
+        title: "Mã QR cá nhân",
+        description: "Dùng để check-in hoặc xác thực khi vào",
+        icon: QrCode,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
       },
     ],
@@ -239,9 +222,16 @@ const APP_SECTIONS = [
       },
       {
         to: "/(tabs)/home/today-schedule",
-        title: "Check In/Out",
-        description: "Check In/Out",
-        icon: ShieldCheck,
+        title: "Bàn giao phòng",
+        description: "Kiểm tra thiết bị và bàn giao phòng giữa các ca",
+        icon: ClipboardCheck,
+        allowedRoles: [ROLES.SECURITYGUARD],
+      },
+      {
+        to: "/(tabs)/home/scanner",
+        title: "Quét xác thực",
+        description: "Quét mã để kiểm tra quyền vào phòng",
+        icon: ScanLine,
         allowedRoles: [ROLES.SECURITYGUARD],
       },
     ],

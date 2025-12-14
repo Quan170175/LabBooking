@@ -10,18 +10,15 @@ import {
   TouchableOpacity,
   StatusBar,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, Stack } from "expo-router";
 import {
   MapPin,
   Users,
-  Monitor,
   Info,
   Edit,
-  GraduationCap, // Icon cho Dạy học
-  FlaskConical, // Icon cho Dự án/Nghiên cứu
+  GraduationCap,
+  FlaskConical,
   CheckCircle,
-  AlertTriangle,
-  ChevronRight,
   Server,
 } from "lucide-react-native";
 
@@ -55,23 +52,24 @@ export default function MyLabInfoScreen() {
 
   // --- MOCK API ---
   const fetchLabDetails = useCallback(async () => {
-    // Giả lập gọi API
     return new Promise<LabDetail>((resolve) => {
       setTimeout(() => {
         resolve({
           id: "lab-a101",
           name: "Lab A101 - IoT & Embedded System",
-          location: "Tòa nhà B, Tầng 3, Phòng 305",
+          // Test text cực dài để đảm bảo layout không vỡ
+          location:
+            "Tòa nhà Innovation, Tầng 3, Phòng 305 - Khu Công Nghệ Cao Hòa Lạc",
           capacity: 45,
           status: "Active",
-          labType: "Project", // 🔥 Thử đổi thành 'Teaching' để xem icon khác
+          labType: "Project",
           managerName: "Nguyễn Văn Quản Lý",
           description:
             "Phòng thí nghiệm chuyên sâu về các hệ thống nhúng và IoT. Được trang bị các kit phát triển mới nhất.",
           equipments: [
             {
               id: "eq1",
-              name: "Máy chiếu Sony 4K",
+              name: "Máy chiếu Sony 4K HDR",
               code: "PROJ-01",
               status: "Good",
             },
@@ -91,7 +89,7 @@ export default function MyLabInfoScreen() {
               id: "eq4",
               name: "3D Printer Creality",
               code: "3DP-02",
-              status: "Good",
+              status: "Broken",
             },
           ],
         });
@@ -122,49 +120,29 @@ export default function MyLabInfoScreen() {
 
   // --- RENDER HELPERS ---
 
-  // Render Badge Loại phòng
   const renderTypeBadge = (type: LabType) => {
-    if (type === "Teaching") {
-      return (
-        <View style={[styles.badge, { backgroundColor: "#DBEAFE" }]}>
-          <GraduationCap size={14} color="#2563EB" />
-          <Text style={[styles.badgeText, { color: "#2563EB" }]}>
-            Phòng Dạy Học
-          </Text>
-        </View>
-      );
-    }
+    const isTeaching = type === "Teaching";
+    const bgColor = isTeaching ? "#DBEAFE" : "#F3E8FF";
+    const textColor = isTeaching ? "#2563EB" : "#9333EA";
+    const Icon = isTeaching ? GraduationCap : FlaskConical;
+    const label = isTeaching ? "Phòng Dạy Học" : "Phòng Dự Án";
+
     return (
-      <View style={[styles.badge, { backgroundColor: "#F3E8FF" }]}>
-        <FlaskConical size={14} color="#9333EA" />
-        <Text style={[styles.badgeText, { color: "#9333EA" }]}>
-          Phòng Dự Án
-        </Text>
+      <View style={[styles.badge, { backgroundColor: bgColor }]}>
+        <Icon size={14} color={textColor} />
+        <Text style={[styles.badgeText, { color: textColor }]}>{label}</Text>
       </View>
     );
   };
 
-  // Render Trạng thái thiết bị
   const renderEqStatus = (status: string) => {
     switch (status) {
       case "Good":
-        return (
-          <Text style={{ color: "#16A34A", fontSize: 12, fontWeight: "600" }}>
-            Hoạt động
-          </Text>
-        );
+        return <Text style={styles.statusGood}>Hoạt động</Text>;
       case "Maintenance":
-        return (
-          <Text style={{ color: "#D97706", fontSize: 12, fontWeight: "600" }}>
-            Bảo trì
-          </Text>
-        );
+        return <Text style={styles.statusMaintenance}>Bảo trì</Text>;
       default:
-        return (
-          <Text style={{ color: "#DC2626", fontSize: 12, fontWeight: "600" }}>
-            Hỏng
-          </Text>
-        );
+        return <Text style={styles.statusBroken}>Hỏng</Text>;
     }
   };
 
@@ -180,9 +158,9 @@ export default function MyLabInfoScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF7ED" />
 
-      {/* Header */}
+      {/* Header Custom */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Thông tin Phòng Lab</Text>
         <Text style={styles.headerSub}>Quản lý thông tin và thiết bị</Text>
@@ -190,6 +168,7 @@ export default function MyLabInfoScreen() {
 
       <ScrollView
         contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -198,60 +177,63 @@ export default function MyLabInfoScreen() {
           />
         }
       >
-        {/* --- CARD CHÍNH: THÔNG TIN PHÒNG --- */}
+        {/* --- CARD CHÍNH --- */}
         <View style={styles.mainCard}>
           <View style={styles.cardHeader}>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, marginRight: 10 }}>
               <Text style={styles.labName}>{lab.name}</Text>
               <Text style={styles.managerName}>Quản lý: {lab.managerName}</Text>
             </View>
-            {/* Nút chỉnh sửa (Mock) */}
             <TouchableOpacity style={styles.editBtn}>
-              <Edit size={18} color="#64748B" />
+              <Edit size={20} color="#64748B" />
             </TouchableOpacity>
           </View>
 
           <View style={styles.divider} />
 
-          {/* Grid thông tin */}
-          <View style={styles.infoGrid}>
+          {/* --- DANH SÁCH THÔNG TIN (MỖI CÁI 1 HÀNG) --- */}
+          <View style={styles.infoList}>
+            {/* 1. Vị trí */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
-                <MapPin size={18} color="#EA580C" />
+                <MapPin size={20} color="#EA580C" />
               </View>
-              <View>
+              <View style={styles.infoContent}>
                 <Text style={styles.label}>Vị trí</Text>
                 <Text style={styles.value}>{lab.location}</Text>
               </View>
             </View>
 
+            {/* 2. Sức chứa */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
-                <Users size={18} color="#EA580C" />
+                <Users size={20} color="#EA580C" />
               </View>
-              <View>
+              <View style={styles.infoContent}>
                 <Text style={styles.label}>Sức chứa</Text>
                 <Text style={styles.value}>{lab.capacity} người</Text>
               </View>
             </View>
 
+            {/* 3. Loại phòng */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
-                <Info size={18} color="#EA580C" />
+                <Info size={20} color="#EA580C" />
               </View>
-              <View>
+              <View style={styles.infoContent}>
                 <Text style={styles.label}>Loại phòng</Text>
-                <View style={{ alignItems: "flex-start", marginTop: 4 }}>
+                <View style={{ marginTop: 4, alignSelf: "flex-start" }}>
                   {renderTypeBadge(lab.labType)}
                 </View>
               </View>
             </View>
 
+            {/* 4. Trạng thái */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
-                <CheckCircle size={18} color="#EA580C" />
+                <CheckCircle size={20} color="#EA580C" />
               </View>
-              <View>
+              <View style={styles.infoContent}>
                 <Text style={styles.label}>Trạng thái</Text>
                 <Text
                   style={[
@@ -267,6 +249,7 @@ export default function MyLabInfoScreen() {
             </View>
           </View>
 
+          {/* Mô tả */}
           <View style={styles.descBox}>
             <Text style={styles.label}>Mô tả:</Text>
             <Text style={styles.descText}>{lab.description}</Text>
@@ -288,22 +271,18 @@ export default function MyLabInfoScreen() {
         </View>
 
         {lab.equipments.map((eq) => (
-          <TouchableOpacity
-            key={eq.id}
-            style={styles.eqCard}
-            activeOpacity={0.7}
-          >
+          <View key={eq.id} style={styles.eqCard}>
             <View style={styles.eqIcon}>
-              <Server size={20} color="#475569" />
+              <Server size={22} color="#475569" />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.eqName}>{eq.name}</Text>
+            <View style={styles.eqInfo}>
+              <Text style={styles.eqName} numberOfLines={1}>
+                {eq.name}
+              </Text>
               <Text style={styles.eqCode}>{eq.code}</Text>
             </View>
-            <View style={{ alignItems: "flex-end" }}>
-              {renderEqStatus(eq.status)}
-            </View>
-          </TouchableOpacity>
+            <View style={styles.eqStatusBox}>{renderEqStatus(eq.status)}</View>
+          </View>
         ))}
 
         <View style={{ height: 40 }} />
@@ -316,23 +295,28 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  header: { padding: 16, backgroundColor: "#FFF7ED" },
+  header: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: "#FFF7ED",
+  },
   headerTitle: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
   headerSub: { fontSize: 14, color: "#64748B", marginTop: 4 },
 
-  content: { padding: 16 },
+  content: { paddingHorizontal: 16 },
 
-  // Main Card Styles
+  // --- MAIN CARD ---
   mainCard: {
     backgroundColor: "white",
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: "#F1F5F9",
+    shadowColor: "#64748B",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 3,
     marginBottom: 24,
   },
   cardHeader: {
@@ -344,28 +328,45 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#0F172A",
+    lineHeight: 26,
     marginBottom: 4,
   },
   managerName: { fontSize: 13, color: "#64748B" },
-  editBtn: { padding: 8, backgroundColor: "#F1F5F9", borderRadius: 8 },
-
+  editBtn: {
+    padding: 8,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
   divider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 16 },
 
-  infoGrid: { flexDirection: "row", flexWrap: "wrap", rowGap: 20 },
-  infoRow: { width: "50%", flexDirection: "row", gap: 10, paddingRight: 8 },
+  // --- INFO LIST (MỖI CÁI 1 HÀNG) ---
+  infoList: {
+    gap: 16, // Khoảng cách giữa các hàng
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start", // Căn theo cạnh trên để icon không bị lệch nếu text dài
+  },
   iconBox: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: 10,
     backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 12,
   },
-
+  infoContent: {
+    flex: 1, // Để text tự xuống dòng
+    justifyContent: "center",
+    paddingVertical: 2, // Căn chỉnh nhẹ với icon
+  },
   label: { fontSize: 12, color: "#64748B", marginBottom: 2 },
-  value: { fontSize: 14, fontWeight: "600", color: "#334155" },
+  value: { fontSize: 14, fontWeight: "600", color: "#334155", lineHeight: 20 },
 
-  // Badge Styles
+  // --- BADGE ---
   badge: {
     flexDirection: "row",
     alignItems: "center",
@@ -373,19 +374,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     gap: 6,
-    alignSelf: "flex-start",
   },
   badgeText: { fontSize: 12, fontWeight: "600" },
 
+  // --- DESCRIPTION ---
   descBox: {
-    marginTop: 16,
+    marginTop: 24,
     padding: 12,
     backgroundColor: "#F8FAFC",
     borderRadius: 8,
   },
   descText: { fontSize: 13, color: "#475569", lineHeight: 20, marginTop: 4 },
 
-  // Equipment Section
+  // --- EQUIPMENT LIST ---
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -404,16 +405,32 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    gap: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 1,
   },
   eqIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 12,
   },
-  eqName: { fontSize: 14, fontWeight: "600", color: "#334155" },
+  eqInfo: { flex: 1 },
+  eqName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#334155",
+    marginBottom: 2,
+  },
   eqCode: { fontSize: 12, color: "#94A3B8" },
+  eqStatusBox: { alignItems: "flex-end", minWidth: 70 },
+
+  statusGood: { color: "#16A34A", fontSize: 12, fontWeight: "600" },
+  statusMaintenance: { color: "#D97706", fontSize: 12, fontWeight: "600" },
+  statusBroken: { color: "#DC2626", fontSize: 12, fontWeight: "600" },
 });
