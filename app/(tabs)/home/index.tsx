@@ -94,6 +94,13 @@ const APP_SECTIONS = [
         icon: CalendarCheck2,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
       },
+      {
+        to: "/(tabs)/home/TestCalendarScreen",
+        title: "Thông báo lịch",
+        description: "Xem Thông báo lịch",
+        icon: CalendarCheck2,
+        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
+      },
     ],
   },
   {
