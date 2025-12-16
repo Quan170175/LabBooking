@@ -60,7 +60,8 @@
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "react-native-add-calendar-event"
     ],
     "experiments": {
       "typedRoutes": true,
