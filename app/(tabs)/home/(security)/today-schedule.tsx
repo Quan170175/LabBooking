@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,107 +13,70 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
+  Keyboard,
+  Switch,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import {
   MapPin,
-  Clock,
-  User,
-  CheckCircle,
-  LogOut,
-  LogIn,
   X,
   ClipboardList,
   AlertTriangle,
+  ChevronRight,
+  LogIn,
+  LogOut,
   ChevronDown,
   Check,
 } from "lucide-react-native";
 
-// --- TYPES ---
-type SlotStatus = "Pending" | "CheckedIn" | "CheckedOut";
+import apiClient from "../../../../utils/api";
 
-interface BookingSlot {
+// --- 1. TYPES (GIỮ NGUYÊN ĐỂ KHÔNG BỊ LỖI TS) ---
+interface SlotDefinition {
   id: string;
-  timeRange: string;
-  slotName: string;
-  bookerName: string;
-  status: SlotStatus;
-}
-
-interface LabSchedule {
-  id: string;
-  labName: string;
-  location: string;
-  slots: BookingSlot[];
+  startTime: string;
+  endTime: string;
+  slotIndex: number;
+  label: string;
 }
 
 interface Equipment {
   id: string;
-  name: string;
+  equipmentName?: string;
+  name?: string;
   quantity: number;
-  status: "Good" | "Broken";
 }
 
-// --- MOCK DATA ---
-const MOCK_TODAY_SCHEDULE: LabSchedule[] = [
-  {
-    id: "lab-01",
-    labName: "Lab A101 - IoT System",
-    location: "Tòa A, Tầng 1",
-    slots: [
-      {
-        id: "slot-01",
-        slotName: "Slot 1",
-        timeRange: "07:00 - 09:15",
-        bookerName: "Nguyễn Văn A (GV)",
-        status: "CheckedIn",
-      },
-      {
-        id: "slot-02",
-        slotName: "Slot 2",
-        timeRange: "09:30 - 11:45",
-        bookerName: "Trần Thị B (SV)",
-        status: "Pending",
-      },
-    ],
-  },
-  {
-    id: "lab-02",
-    labName: "Lab B202 - AI Research",
-    location: "Tòa B, Tầng 2",
-    slots: [
-      {
-        id: "slot-03",
-        slotName: "Slot 3",
-        timeRange: "12:30 - 14:45",
-        bookerName: "Lê Văn C (CLB)",
-        status: "Pending",
-      },
-    ],
-  },
-  {
-    id: "lab-03",
-    labName: "Lab C305 - Network",
-    location: "Tòa C, Tầng 3",
-    slots: [
-      {
-        id: "slot-04",
-        slotName: "Slot 4",
-        timeRange: "15:00 - 17:15",
-        bookerName: "Phạm Văn D",
-        status: "Pending",
-      },
-    ],
-  },
-];
+interface LabRoomApiResponse {
+  id: string;
+  labName: string;
+  location: string;
+  maximumLimit: number;
+  equipments: Equipment[];
+}
 
-const MOCK_EQUIPMENT: Equipment[] = [
-  { id: "eq-1", name: "Máy tính Dell Optiplex", quantity: 30, status: "Good" },
-  { id: "eq-2", name: "Máy chiếu Panasonic", quantity: 1, status: "Good" },
-  { id: "eq-3", name: "Điều hòa Daikin", quantity: 2, status: "Good" },
-];
+interface BookingSlotUI extends SlotDefinition {
+  status: "Pending" | "CheckedIn" | "CheckedOut" | "Empty";
+  bookerName?: string;
+}
 
-// --- COMPONENT: BOTTOM SHEET DROPDOWN ---
+interface LabScheduleUI extends LabRoomApiResponse {
+  uiSlots: BookingSlotUI[];
+}
+
+// --- UTILS ---
+const formatDateForApi = (date: Date) => {
+  return date.toISOString().split("T")[0];
+};
+
+const formatTimeDisplay = (timeString: string) => {
+  if (!timeString) return "";
+  return timeString.split(":").slice(0, 2).join(":");
+};
+
+// --- COMPONENT: DROPDOWN CHỌN PHÒNG (MỚI THÊM) ---
 const BottomSheetSelect = ({
   label,
   data,
@@ -121,77 +84,88 @@ const BottomSheetSelect = ({
   onSelect,
 }: {
   label: string;
-  data: string[];
-  value: string;
-  onSelect: (val: string) => void;
+  data: LabRoomApiResponse[];
+  value: string | null;
+  onSelect: (val: string | null) => void;
 }) => {
   const [visible, setVisible] = useState(false);
 
-  return (
-    <View style={styles.dropdownContainer}>
-      <Text style={styles.dropdownLabel}>{label}</Text>
+  const selectedItem = data.find((item) => item.id === value);
+  const displayValue = selectedItem ? selectedItem.labName : "Tất cả các phòng";
 
-      {/* Nút kích hoạt */}
+  return (
+    <View style={styles.dropdownWrapper}>
+      <Text style={styles.dropdownLabel}>{label}</Text>
       <TouchableOpacity
         style={styles.dropdownTrigger}
         onPress={() => setVisible(true)}
       >
-        <Text style={styles.dropdownValue} numberOfLines={1}>
-          {value === "All" ? "Tất cả" : value}
+        <Text style={[styles.dropdownValue, !value && { color: "#64748B" }]}>
+          {displayValue}
         </Text>
-        <ChevronDown size={16} color="#64748B" />
+        <ChevronDown size={20} color="#64748B" />
       </TouchableOpacity>
 
-      {/* Modal Bottom Sheet */}
       <Modal visible={visible} transparent animationType="slide">
         <TouchableWithoutFeedback onPress={() => setVisible(false)}>
           <View style={styles.sheetOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.sheetContent}>
-                {/* Header của Sheet */}
-                <View style={styles.sheetHeader}>
-                  <Text style={styles.sheetTitle}>Chọn {label}</Text>
-                  <TouchableOpacity
-                    onPress={() => setVisible(false)}
-                    style={styles.closeBtn}
-                  >
-                    <X size={20} color="#64748B" />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Danh sách lựa chọn */}
-                <ScrollView
-                  style={{ maxHeight: 300 }}
-                  showsVerticalScrollIndicator={false}
+            <View style={styles.sheetContent}>
+              <View style={styles.sheetHeaderDropdown}>
+                <Text style={styles.sheetTitle}>Chọn phòng</Text>
+                <TouchableOpacity onPress={() => setVisible(false)}>
+                  <X size={24} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 400 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.sheetItem,
+                    value === null && styles.sheetItemActive,
+                  ]}
+                  onPress={() => {
+                    onSelect(null);
+                    setVisible(false);
+                  }}
                 >
-                  {data.map((item) => (
+                  <Text
+                    style={[
+                      styles.sheetItemText,
+                      value === null && styles.sheetItemTextActive,
+                    ]}
+                  >
+                    Tất cả các phòng
+                  </Text>
+                  {value === null && <Check size={18} color="#EA580C" />}
+                </TouchableOpacity>
+
+                {data.map((item) => {
+                  const isActive = value === item.id;
+                  return (
                     <TouchableOpacity
-                      key={item}
+                      key={item.id}
                       style={[
                         styles.sheetItem,
-                        value === item && styles.sheetItemActive,
+                        isActive && styles.sheetItemActive,
                       ]}
                       onPress={() => {
-                        onSelect(item);
+                        onSelect(item.id);
                         setVisible(false);
                       }}
                     >
                       <Text
                         style={[
                           styles.sheetItemText,
-                          value === item && styles.sheetItemTextActive,
+                          isActive && styles.sheetItemTextActive,
                         ]}
                       >
-                        {item === "All" ? "Tất cả" : item}
+                        {item.labName}
                       </Text>
-                      {value === item && <Check size={18} color="#EA580C" />}
+                      {isActive && <Check size={18} color="#EA580C" />}
                     </TouchableOpacity>
-                  ))}
-                  {/* Khoảng trống dưới cùng để không bị sát mép màn hình */}
-                  <View style={{ height: 20 }} />
-                </ScrollView>
-              </View>
-            </TouchableWithoutFeedback>
+                  );
+                })}
+              </ScrollView>
+            </View>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
@@ -199,231 +173,193 @@ const BottomSheetSelect = ({
   );
 };
 
+// --- MAIN SCREEN ---
 export default function SecurityTodayScheduleScreen() {
-  const [schedule, setSchedule] = useState<LabSchedule[]>(MOCK_TODAY_SCHEDULE);
+  const router = useRouter();
 
-  // Filter State
-  const [selectedLab, setSelectedLab] = useState<string>("All");
-  const [selectedSlot, setSelectedSlot] = useState<string>("All");
+  // --- STATE ---
+  const [labs, setLabs] = useState<LabScheduleUI[]>([]);
+  const [labOptions, setLabOptions] = useState<LabRoomApiResponse[]>([]); // List cho dropdown
+  const [slotsDefinition, setSlotsDefinition] = useState<SlotDefinition[]>([]);
 
-  // Check-in/Check-out Modal State
+  // Filter & Pagination
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
+  // State Filter (Dropdown)
+  const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
+
+  // Modal Check-in/out State (GIỮ NGUYÊN LOGIC CŨ)
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedSlotData, setSelectedSlotData] = useState<BookingSlot | null>(
-    null
-  );
-  const [selectedLabNameData, setSelectedLabNameData] = useState("");
+  const [currentLab, setCurrentLab] = useState<LabScheduleUI | null>(null);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [actionType, setActionType] = useState<"CheckIn" | "CheckOut">(
     "CheckIn"
   );
   const [note, setNote] = useState("");
+  const [isPassed, setIsPassed] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- LOGIC ---
-  const labNames = useMemo(
-    () => ["All", ...Array.from(new Set(schedule.map((s) => s.labName)))],
-    [schedule]
-  );
-  const slotNames = useMemo(() => {
-    const slots = new Set<string>();
-    schedule.forEach((lab) => lab.slots.forEach((s) => slots.add(s.slotName)));
-    return ["All", ...Array.from(slots).sort()];
-  }, [schedule]);
+  // --- 1. INIT DATA (Slots & Lab Options) ---
+  useEffect(() => {
+    const initData = async () => {
+      try {
+        // Lấy danh sách Slot
+        const slotRes = await apiClient.get<SlotDefinition[]>("/api/Slot");
+        const slotsData = slotRes.data || [];
+        setSlotsDefinition(slotsData.sort((a, b) => a.slotIndex - b.slotIndex));
 
-  const filteredSchedule = useMemo(() => {
-    return schedule
-      .map((lab) => ({
+        // Lấy danh sách Full Labs cho Dropdown (PageSize lớn để lấy hết)
+        const allLabsRes = await apiClient.get("/api/LabRooms", {
+          params: { PageSize: 10, PageNumber: 1 },
+        });
+        setLabOptions(allLabsRes.data.items || []);
+      } catch (error) {
+        console.error("Init Error:", error);
+      }
+    };
+    initData();
+  }, []);
+
+  // --- 2. FETCH LABS LIST (CÓ LOGIC SEARCH PHRASE) ---
+  const fetchLabs = async (pageToLoad: number, shouldRefresh = false) => {
+    try {
+      if (shouldRefresh) setIsLoading(true);
+
+      const today = formatDateForApi(new Date());
+      const labParams: any = {
+        PageSize: 10,
+        PageNumber: pageToLoad,
+        FilterDate: today,
+      };
+
+      // --- LOGIC MỚI: Dùng Dropdown ID -> Map ra Tên phòng -> Gửi SearchPhrase ---
+      if (selectedLabId) {
+        const selectedLab = labOptions.find((l) => l.id === selectedLabId);
+        if (selectedLab) {
+          labParams.SearchPhrase = selectedLab.labName;
+        }
+      }
+
+      console.log(`Fetch Labs (Page ${pageToLoad}) Params:`, labParams);
+
+      const labRes = await apiClient.get("/api/LabRooms", {
+        params: labParams,
+      });
+      const labItems: LabRoomApiResponse[] = labRes.data.items || [];
+
+      // Map Slots vào Labs (Logic cũ của bạn)
+      const labsWithUi: LabScheduleUI[] = labItems.map((lab) => ({
         ...lab,
-        slots: lab.slots.filter(
-          (slot) => selectedSlot === "All" || slot.slotName === selectedSlot
-        ),
-      }))
-      .filter(
-        (lab) =>
-          (selectedLab === "All" || lab.labName === selectedLab) &&
-          lab.slots.length > 0
-      );
-  }, [schedule, selectedLab, selectedSlot]);
+        uiSlots: slotsDefinition.map((s) => ({
+          ...s,
+          status: "Pending", // Mặc định pending vì chưa có API get status thật
+          bookerName: "...",
+        })),
+      }));
 
-  // --- HANDLERS ---
-  const handleOpenModal = (
-    labName: string,
-    slot: BookingSlot,
-    type: "CheckIn" | "CheckOut"
-  ) => {
-    setSelectedLabNameData(labName);
-    setSelectedSlotData(slot);
-    setActionType(type);
+      if (shouldRefresh) {
+        setLabs(labsWithUi);
+      } else {
+        setLabs((prev) => [...prev, ...labsWithUi]);
+      }
+
+      setHasMore(labItems.length >= 10);
+    } catch (error) {
+      console.error("Fetch Error:", error);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  // --- 3. RELOAD KHI ĐỔI DROPDOWN ---
+  useEffect(() => {
+    if (slotsDefinition.length > 0) {
+      setPage(1);
+      fetchLabs(1, true);
+    }
+  }, [selectedLabId, slotsDefinition]);
+
+  // --- HANDLERS (GIỮ NGUYÊN LOGIC CŨ CỦA BẠN) ---
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setPage(1);
+    fetchLabs(1, true);
+  };
+
+  const handleLoadMore = () => {
+    if (!isLoadingMore && hasMore && !isLoading && !isRefreshing) {
+      setIsLoadingMore(true);
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchLabs(nextPage, false);
+    }
+  };
+
+  const handleOpenModal = (lab: LabScheduleUI) => {
+    setCurrentLab(lab);
+    if (lab.uiSlots.length > 0) setSelectedSlotId(lab.uiSlots[0].id);
+    setActionType("CheckIn");
     setNote("");
+    setIsPassed(true);
     setModalVisible(true);
   };
 
-  const handleSubmit = () => {
-    if (!selectedSlotData) return;
-    const newStatus = actionType === "CheckIn" ? "CheckedIn" : "CheckedOut";
-    setSchedule((prev) =>
-      prev.map((lab) => ({
-        ...lab,
-        slots: lab.slots.map((s) =>
-          s.id === selectedSlotData.id ? { ...s, status: newStatus } : s
-        ),
-      }))
-    );
-    Alert.alert(
-      "Thành công",
-      `Đã ${actionType === "CheckIn" ? "bàn giao" : "nhận lại"} phòng!`
-    );
-    setModalVisible(false);
+  const handleSubmit = async () => {
+    if (!currentLab || !selectedSlotId) return;
+
+    if (!isPassed && (!note || note.trim() === "")) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập ghi chú sự cố.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        labRoomId: currentLab.id,
+        slotId: selectedSlotId,
+        type: actionType,
+        isPassed: isPassed,
+        note: note,
+      };
+
+      const response = await apiClient.post("/api/RoomChecks", payload);
+
+      if (isPassed) {
+        Alert.alert("Thành công", `Đã ${actionType} thành công!`);
+        setModalVisible(false);
+      } else {
+        setModalVisible(false);
+        const realCheckId = response.data?.id || response.data;
+        Alert.alert("Cảnh báo", "Phát hiện sự cố. Tạo báo cáo ngay?", [
+          { text: "Để sau", style: "cancel" },
+          {
+            text: "Đồng ý",
+            onPress: () =>
+              router.push({
+                pathname: "/(tabs)/home/(security)/create-incident",
+                params: {
+                  preSelectedRoomId: currentLab.id,
+                  linkedCheckId: realCheckId,
+                  isFromCheckRoom: "true",
+                },
+              }),
+          },
+        ]);
+      }
+    } catch (error: any) {
+      let msg = "Lỗi hệ thống";
+      if (error.response?.data?.message) msg = error.response.data.message;
+      Alert.alert("Lỗi", msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-
-  // --- RENDER CARD ---
-  const renderLabCard = ({ item }: { item: LabSchedule }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.labInfo}>
-          <Text style={styles.labName}>{item.labName}</Text>
-          <View style={styles.locationRow}>
-            <MapPin size={12} color="#64748B" />
-            <Text style={styles.locationText}>{item.location}</Text>
-          </View>
-        </View>
-      </View>
-      <View style={styles.divider} />
-      <View style={styles.slotList}>
-        {item.slots.map((slot) => {
-          const isCheckedIn = slot.status === "CheckedIn";
-          const isCheckedOut = slot.status === "CheckedOut";
-          return (
-            <View style={styles.slotContainer} key={slot.id}>
-              <View style={styles.slotInfo}>
-                <View style={styles.slotRow}>
-                  <Clock size={14} color="#64748B" />
-                  <Text style={styles.timeText}>
-                    {slot.slotName} ({slot.timeRange})
-                  </Text>
-                </View>
-                <View style={styles.slotRow}>
-                  <User size={14} color="#64748B" />
-                  <Text style={styles.bookerText}>{slot.bookerName}</Text>
-                </View>
-              </View>
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.btn,
-                    styles.btnCheckIn,
-                    (isCheckedIn || isCheckedOut) && styles.btnDisabled,
-                  ]}
-                  onPress={() => handleOpenModal(item.labName, slot, "CheckIn")}
-                  disabled={isCheckedIn || isCheckedOut}
-                >
-                  <LogIn
-                    size={16}
-                    color={isCheckedIn || isCheckedOut ? "#94A3B8" : "#16A34A"}
-                  />
-                  <Text
-                    style={[
-                      styles.btnText,
-                      (isCheckedIn || isCheckedOut) && styles.textDisabled,
-                    ]}
-                  >
-                    Check In
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.btn,
-                    styles.btnCheckOut,
-                    (!isCheckedIn || isCheckedOut) && styles.btnDisabled,
-                  ]}
-                  onPress={() =>
-                    handleOpenModal(item.labName, slot, "CheckOut")
-                  }
-                  disabled={!isCheckedIn || isCheckedOut}
-                >
-                  <LogOut
-                    size={16}
-                    color={!isCheckedIn || isCheckedOut ? "#94A3B8" : "#EA580C"}
-                  />
-                  <Text
-                    style={[
-                      styles.btnText,
-                      (!isCheckedIn || isCheckedOut) && styles.textDisabled,
-                    ]}
-                  >
-                    Check Out
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              {isCheckedOut && (
-                <View style={styles.statusBadge}>
-                  <CheckCircle size={12} color="#16A34A" />
-                  <Text style={styles.statusText}>Đã hoàn tất</Text>
-                </View>
-              )}
-            </View>
-          );
-        })}
-      </View>
-    </View>
-  );
-
-  // --- RENDER ACTION MODAL (Check Form) ---
-  const renderCheckModal = () => (
-    <Modal visible={modalVisible} transparent animationType="slide">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.actionModalOverlay}
-      >
-        <View style={styles.actionModalContent}>
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>
-              {actionType === "CheckIn" ? "Bàn giao phòng" : "Nhận lại phòng"}
-            </Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <X size={24} color="#64748B" />
-            </TouchableOpacity>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.modalSubtitle}>
-              {selectedLabNameData} - {selectedSlotData?.timeRange}
-            </Text>
-            <View style={styles.sectionHeader}>
-              <ClipboardList size={16} color="#EA580C" />
-              <Text style={styles.sectionTitle}>Danh sách thiết bị</Text>
-            </View>
-            <View style={styles.equipmentList}>
-              <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled>
-                {MOCK_EQUIPMENT.map((eq) => (
-                  <View key={eq.id} style={styles.eqItem}>
-                    <Text style={styles.eqName}>{eq.name}</Text>
-                    <Text style={styles.eqQty}>SL: {eq.quantity}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-            <View style={[styles.sectionHeader, { marginTop: 16 }]}>
-              <AlertTriangle size={16} color="#EA580C" />
-              <Text style={styles.sectionTitle}>Ghi chú / Báo cáo sự cố</Text>
-            </View>
-            <TextInput
-              style={styles.inputArea}
-              placeholder="Nhập ghi chú..."
-              placeholderTextColor="#94A3B8"
-              multiline
-              numberOfLines={3}
-              value={note}
-              onChangeText={setNote}
-            />
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={handleSubmit}
-            >
-              <Text style={styles.confirmButtonText}>Xác nhận</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -436,41 +372,289 @@ export default function SecurityTodayScheduleScreen() {
       />
 
       <View style={styles.headerContainer}>
-        <Text style={styles.dateText}>Thứ 7, 15/12/2025</Text>
+        <Text style={styles.dateText}>Lịch trình hôm nay</Text>
         <Text style={styles.subText}>
-          Danh sách các phòng có lịch hoạt động
+          {new Date().toLocaleDateString("vi-VN")}
         </Text>
       </View>
 
-      {/* --- BOTTOM SHEET FILTERS --- */}
+      {/* --- DROPDOWN (MỚI) --- */}
       <View style={styles.filterContainer}>
         <BottomSheetSelect
-          label="Phòng Lab"
-          data={labNames}
-          value={selectedLab}
-          onSelect={setSelectedLab}
-        />
-        <BottomSheetSelect
-          label="Slot (Ca)"
-          data={slotNames}
-          value={selectedSlot}
-          onSelect={setSelectedSlot}
+          label="Lọc theo phòng"
+          data={labOptions}
+          value={selectedLabId}
+          onSelect={setSelectedLabId}
         />
       </View>
 
-      <FlatList
-        data={filteredSchedule}
-        keyExtractor={(item) => item.id}
-        renderItem={renderLabCard}
-        contentContainerStyle={styles.listContent}
-        ListFooterComponent={<View style={{ height: 40 }} />}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Không tìm thấy lịch phù hợp.</Text>
-          </View>
-        }
-      />
-      {renderCheckModal()}
+      {/* --- LIST PHÒNG (GIỮ NGUYÊN LOGIC CŨ) --- */}
+      {isLoading && page === 1 ? (
+        <ActivityIndicator
+          size="large"
+          color="#EA580C"
+          style={{ marginTop: 40 }}
+        />
+      ) : (
+        <FlatList
+          data={labs}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.simpleCard}
+              onPress={() => handleOpenModal(item)}
+            >
+              <View style={styles.cardLeft}>
+                <View style={styles.iconBox}>
+                  <MapPin size={20} color="#EA580C" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.simpleLabName} numberOfLines={1}>
+                    {item.labName}
+                  </Text>
+                  <Text style={styles.simpleLocation} numberOfLines={1}>
+                    {item.location}
+                  </Text>
+                  <Text style={styles.slotCountText}>
+                    Sức chứa: {item.maximumLimit}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.cardRight}>
+                <View style={styles.actionBadge}>
+                  <Text style={styles.actionBadgeText}>Kiểm tra</Text>
+                  <ChevronRight size={14} color="#EA580C" />
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>
+                {selectedLabId
+                  ? "Không tìm thấy phòng này."
+                  : "Không có lịch trình."}
+              </Text>
+            </View>
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={["#EA580C"]}
+            />
+          }
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <ActivityIndicator size="small" color="#EA580C" />
+            ) : null
+          }
+        />
+      )}
+
+      {/* --- MODAL XỬ LÝ (GIỮ NGUYÊN LOGIC CŨ) --- */}
+      <Modal visible={modalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.actionModalOverlay}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={{ flex: 1, justifyContent: "flex-end" }}>
+              <View style={styles.actionModalContent}>
+                <View style={styles.sheetHeader}>
+                  <View>
+                    <Text style={styles.sheetTitle}>Kiểm tra phòng</Text>
+                    <Text style={styles.modalSubHeader}>
+                      {currentLab?.labName}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setModalVisible(false)}>
+                    <X size={24} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 20 }}
+                >
+                  {/* Slot Selector */}
+                  <Text style={styles.sectionLabel}>1. Chọn Ca Hoạt Động:</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.slotSelectorContainer}
+                  >
+                    {currentLab?.uiSlots?.map((slot) => {
+                      const isSelected = slot.id === selectedSlotId;
+                      return (
+                        <TouchableOpacity
+                          key={slot.id}
+                          style={[
+                            styles.slotChip,
+                            isSelected && styles.slotChipActive,
+                          ]}
+                          onPress={() => setSelectedSlotId(slot.id)}
+                        >
+                          <Text
+                            style={[
+                              styles.slotChipTime,
+                              isSelected && styles.textWhite,
+                            ]}
+                          >
+                            {slot.label}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.slotChipRange,
+                              isSelected && styles.textWhite,
+                            ]}
+                          >
+                            {formatTimeDisplay(slot.startTime)} -{" "}
+                            {formatTimeDisplay(slot.endTime)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {/* Actions */}
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={styles.sectionLabel}>2. Hành động:</Text>
+                    <View style={styles.actionToggleContainer}>
+                      <TouchableOpacity
+                        style={[
+                          styles.actionBtn,
+                          actionType === "CheckIn" && styles.actionBtnIn,
+                        ]}
+                        onPress={() => setActionType("CheckIn")}
+                      >
+                        <LogIn
+                          size={20}
+                          color={actionType === "CheckIn" ? "white" : "#64748B"}
+                        />
+                        <Text
+                          style={[
+                            styles.actionBtnText,
+                            actionType === "CheckIn" && styles.textWhite,
+                          ]}
+                        >
+                          Check In
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.actionBtn,
+                          actionType === "CheckOut" && styles.actionBtnOut,
+                        ]}
+                        onPress={() => setActionType("CheckOut")}
+                      >
+                        <LogOut
+                          size={20}
+                          color={
+                            actionType === "CheckOut" ? "white" : "#64748B"
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.actionBtnText,
+                            actionType === "CheckOut" && styles.textWhite,
+                          ]}
+                        >
+                          Check Out
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Thiết bị */}
+                  <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+                    <ClipboardList size={16} color="#EA580C" />
+                    <Text style={styles.sectionTitle}>Danh sách thiết bị</Text>
+                  </View>
+                  <View style={styles.equipmentList}>
+                    {currentLab?.equipments?.length ? (
+                      currentLab.equipments.map((eq) => (
+                        <View key={eq.id} style={styles.eqItem}>
+                          <Text style={styles.eqName}>
+                            {eq.equipmentName || eq.name}
+                          </Text>
+                          <Text style={styles.eqQty}>
+                            SL: {eq.quantity || 1}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text
+                        style={{
+                          fontStyle: "italic",
+                          color: "#94A3B8",
+                          textAlign: "center",
+                          padding: 10,
+                        }}
+                      >
+                        Chưa có thông tin thiết bị
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Tình trạng */}
+                  <View style={styles.checkStatusContainer}>
+                    <View style={styles.switchRow}>
+                      <Text
+                        style={[
+                          styles.modalStatusText,
+                          !isPassed && styles.statusTextBad,
+                        ]}
+                      >
+                        {isPassed ? "Tình trạng ổn định" : "Có hư hỏng / Sự cố"}
+                      </Text>
+                      <Switch
+                        trackColor={{ false: "#EF4444", true: "#22C55E" }}
+                        thumbColor={"#FFFFFF"}
+                        onValueChange={setIsPassed}
+                        value={isPassed}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Ghi chú */}
+                  <View style={[styles.sectionHeader, { marginTop: 16 }]}>
+                    <AlertTriangle size={16} color="#EA580C" />
+                    <Text style={styles.sectionTitle}>Ghi chú</Text>
+                  </View>
+                  <TextInput
+                    style={styles.inputArea}
+                    placeholder="Nhập ghi chú..."
+                    multiline
+                    numberOfLines={3}
+                    value={note}
+                    onChangeText={setNote}
+                  />
+
+                  {/* Submit */}
+                  <TouchableOpacity
+                    style={[
+                      styles.confirmButton,
+                      isSubmitting && styles.confirmButtonDisabled,
+                    ]}
+                    onPress={handleSubmit}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <Text style={styles.confirmButtonText}>Xác nhận</Text>
+                    )}
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -481,15 +665,9 @@ const styles = StyleSheet.create({
   dateText: { fontSize: 20, fontWeight: "bold", color: "#0F172A" },
   subText: { fontSize: 14, color: "#64748B", marginTop: 4 },
 
-  // --- FILTER & DROPDOWN STYLES ---
-  filterContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 16,
-    zIndex: 10,
-  },
-  dropdownContainer: { flex: 1 },
+  // Styles cho Filter Dropdown
+  filterContainer: { paddingHorizontal: 20, marginBottom: 16, zIndex: 10 },
+  dropdownWrapper: {},
   dropdownLabel: {
     fontSize: 12,
     color: "#64748B",
@@ -503,17 +681,17 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 12, // Tăng nhẹ để bấm dễ hơn
+    paddingVertical: 12,
   },
-  dropdownValue: { fontSize: 14, color: "#1E293B", fontWeight: "500", flex: 1 },
+  dropdownValue: { fontSize: 14, color: "#1E293B", fontWeight: "500" },
 
-  // --- BOTTOM SHEET STYLES ---
+  // Dropdown Modal
   sheetOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)", // Nền tối
-    justifyContent: "flex-end", // Đẩy nội dung xuống đáy
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
   },
   sheetContent: {
     backgroundColor: "white",
@@ -521,21 +699,19 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 16,
-    maxHeight: "60%", // Chiều cao tối đa của sheet
-    paddingBottom: 30, // Chừa chỗ cho thanh home indicator của iPhone
+    paddingBottom: 30,
+    maxHeight: "60%",
   },
-  sheetHeader: {
+  sheetHeaderDropdown: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
-    paddingBottom: 12,
   },
   sheetTitle: { fontSize: 18, fontWeight: "bold", color: "#0F172A" },
-  closeBtn: { padding: 4 },
-
   sheetItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -554,94 +730,113 @@ const styles = StyleSheet.create({
   sheetItemText: { fontSize: 16, color: "#334155" },
   sheetItemTextActive: { color: "#EA580C", fontWeight: "600" },
 
-  // --- LIST & CARD (Giữ nguyên) ---
+  // List Styles
   listContent: { paddingHorizontal: 20, paddingBottom: 20 },
-  card: {
+  simpleCard: {
     backgroundColor: "white",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  cardHeader: {
+    marginBottom: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  labInfo: { flex: 1 },
-  labName: { fontSize: 16, fontWeight: "700", color: "#1E293B" },
-  locationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 4,
-  },
-  locationText: { fontSize: 12, color: "#64748B" },
-  divider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 12 },
-  slotList: { gap: 12 },
-  slotContainer: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 8,
-    padding: 12,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 1,
   },
-  slotInfo: { marginBottom: 10 },
-  slotRow: {
+  cardLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
+    gap: 12,
+    flex: 1,
+    paddingRight: 8,
   },
-  timeText: { fontSize: 14, fontWeight: "600", color: "#334155" },
-  bookerText: { fontSize: 13, color: "#64748B" },
-  actionButtons: { flexDirection: "row", gap: 8 },
-  btn: {
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#FFF7ED",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  simpleLabName: { fontSize: 15, fontWeight: "700", color: "#1E293B" },
+  simpleLocation: { fontSize: 13, color: "#64748B" },
+  slotCountText: { fontSize: 12, color: "#94A3B8", marginTop: 2 },
+  cardRight: {},
+  actionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF7ED",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+  },
+  actionBadgeText: {
+    fontSize: 12,
+    color: "#EA580C",
+    fontWeight: "600",
+    marginRight: 2,
+  },
+
+  // Modal Action Styles
+  actionModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  actionModalContent: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    maxHeight: "90%",
+    paddingBottom: 30,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalSubHeader: { fontSize: 14, color: "#64748B", marginTop: 2 },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#334155",
+    marginBottom: 8,
+  },
+  slotSelectorContainer: { flexDirection: "row", marginBottom: 4 },
+  slotChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    minWidth: 100,
+  },
+  slotChipActive: { backgroundColor: "#EA580C", borderColor: "#EA580C" },
+  slotChipTime: { fontSize: 13, fontWeight: "700", color: "#334155" },
+  slotChipRange: { fontSize: 11, color: "#64748B", marginTop: 2 },
+  textWhite: { color: "white" },
+  actionToggleContainer: { flexDirection: "row", gap: 10 },
+  actionBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 8,
-    borderRadius: 6,
-    gap: 6,
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
     borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
   },
-  btnCheckIn: { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" },
-  btnCheckOut: { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" },
-  btnDisabled: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
-  btnText: { fontSize: 12, fontWeight: "600", color: "#0F172A" },
-  textDisabled: { color: "#94A3B8" },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 8,
-    justifyContent: "flex-end",
-  },
-  statusText: { fontSize: 12, color: "#16A34A", fontWeight: "500" },
-  emptyState: { alignItems: "center", marginTop: 40 },
-  emptyText: { color: "#94A3B8" },
-
-  // --- ACTION MODAL STYLES (Check-in Form) ---
-  actionModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  actionModalContent: {
-    backgroundColor: "white",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    height: "70%",
-  },
-  modalSubtitle: { fontSize: 14, color: "#64748B", marginBottom: 20 },
+  actionBtnIn: { backgroundColor: "#16A34A", borderColor: "#16A34A" },
+  actionBtnOut: { backgroundColor: "#EA580C", borderColor: "#EA580C" },
+  actionBtnText: { fontSize: 14, fontWeight: "600", color: "#475569" },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -677,12 +872,30 @@ const styles = StyleSheet.create({
     color: "#0F172A",
   },
   confirmButton: {
-    backgroundColor: "#EA580C",
+    backgroundColor: "#0F172A",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
-    marginTop: "auto",
     marginBottom: 20,
+    marginTop: 24,
   },
+  confirmButtonDisabled: { backgroundColor: "#94A3B8" },
   confirmButtonText: { color: "white", fontWeight: "bold", fontSize: 16 },
+  checkStatusContainer: {
+    marginTop: 16,
+    backgroundColor: "#F8FAFC",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  modalStatusText: { fontSize: 15, fontWeight: "700", color: "#16A34A" },
+  statusTextBad: { color: "#DC2626" },
+  emptyState: { alignItems: "center", marginTop: 40 },
+  emptyText: { color: "#94A3B8" },
 });

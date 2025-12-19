@@ -17,6 +17,7 @@ import {
   QrCode,
   ScanLine,
   ClipboardCheck,
+  MessageCircle, // 🟢 Đã import icon Chat
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -27,7 +28,7 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
-  Alert, // 🟢 1. Đã thêm Alert vào đây
+  Alert,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { jwtDecode } from "jwt-decode";
@@ -136,6 +137,13 @@ const APP_SECTIONS = [
         icon: HomeIcon,
         allowedRoles: [ROLES.MANAGER],
       },
+      {
+        to: "/(tabs)/home/(manager)/manage-door-requests",
+        title: "Duyệt mở cửa",
+        description: "Duyệt yêu cầu mở cửa",
+        icon: DoorOpen,
+        allowedRoles: [ROLES.MANAGER],
+      },
     ],
   },
   {
@@ -206,13 +214,13 @@ const APP_SECTIONS = [
     title: "Khu vực An ninh",
     description: "Chức năng dành riêng cho Bảo vệ",
     items: [
-      {
-        to: "/(tabs)/home/door-requests",
-        title: "Yêu cầu mở cửa",
-        description: "Xử lý yêu cầu ra vào",
-        icon: DoorOpen,
-        allowedRoles: [ROLES.SECURITYGUARD],
-      },
+      // {
+      //   to: "/(tabs)/home/door-requests",
+      //   title: "Yêu cầu mở cửa",
+      //   description: "Xử lý yêu cầu ra vào",
+      //   icon: DoorOpen,
+      //   allowedRoles: [ROLES.SECURITYGUARD],
+      // },
       {
         to: "/(tabs)/home/incident-history",
         title: "Lịch sử sự cố",
@@ -238,6 +246,13 @@ const APP_SECTIONS = [
         to: "/(tabs)/home/scanner",
         title: "Quét xác thực",
         description: "Quét mã để kiểm tra quyền vào phòng",
+        icon: ScanLine,
+        allowedRoles: [ROLES.SECURITYGUARD],
+      },
+      {
+        to: "/(tabs)/home/today-schedule-history",
+        title: "Lịch sử bàn giao",
+        description: "Xem lịch sử bàn giao phòng",
         icon: ScanLine,
         allowedRoles: [ROLES.SECURITYGUARD],
       },
@@ -308,111 +323,161 @@ export default function Home() {
     );
   }
 
+  // 🟢 ĐÃ SỬA: Bọc ScrollView trong containerWrapper để chứa nút Chat
   return (
-    <ScrollView
-      contentContainerStyle={styles.root}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* --- HERO SECTION (ANIMATED) --- */}
-      <Animated.View
-        entering={FadeInDown.duration(800).springify()}
-        style={styles.hero}
+    <View style={styles.containerWrapper}>
+      <ScrollView
+        contentContainerStyle={styles.root}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.heroContent}>
-          <View style={styles.heroHeaderRow}>
-            <View style={styles.heroIcon}>
-              <Image
-                source={require("../../../assets/images/flms.png")}
-                style={styles.heroImage}
-              />
+        {/* --- HERO SECTION (ANIMATED) --- */}
+        <Animated.View
+          entering={FadeInDown.duration(800).springify()}
+          style={styles.hero}
+        >
+          <View style={styles.heroContent}>
+            <View style={styles.heroHeaderRow}>
+              <View style={styles.heroIcon}>
+                <Image
+                  source={require("../../../assets/images/flms.png")}
+                  style={styles.heroImage}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.greetingText}>{getGreeting()},</Text>
+                <Text style={styles.userNameText} numberOfLines={1}>
+                  {userName.split("@")[0]}
+                </Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.greetingText}>{getGreeting()},</Text>
-              <Text style={styles.userNameText} numberOfLines={1}>
-                {userName.split("@")[0]}
-              </Text>
-            </View>
+
+            <Text style={styles.heroDesc}>
+              {userRole === ROLES.MANAGER || userRole === ROLES.SECURITYGUARD
+                ? "Hệ thống đang hoạt động ổn định. Kiểm tra các yêu cầu cần duyệt bên dưới."
+                : "Đặt phòng thực hành, theo dõi lịch và cập nhật thông báo ngay trên điện thoại."}
+            </Text>
+
+            {/* Nút CTA chỉ hiện khi KHÔNG PHẢI là Manager VÀ KHÔNG PHẢI là Security */}
+            {userRole !== ROLES.MANAGER && userRole !== ROLES.SECURITYGUARD && (
+              <TouchableOpacity
+                style={styles.cta}
+                onPress={() => router.push("/book/choose-type" as any)}
+              >
+                <CalendarCheck2 size={18} color="#ea580c" strokeWidth={2.5} />
+                <Text style={styles.ctaText}>Đặt Lab Ngay</Text>
+              </TouchableOpacity>
+            )}
           </View>
+        </Animated.View>
 
-          <Text style={styles.heroDesc}>
-            {userRole === ROLES.MANAGER || userRole === ROLES.SECURITYGUARD
-              ? "Hệ thống đang hoạt động ổn định. Kiểm tra các yêu cầu cần duyệt bên dưới."
-              : "Đặt phòng thực hành, theo dõi lịch và cập nhật thông báo ngay trên điện thoại."}
-          </Text>
+        {/* --- SECTIONS LOOP --- */}
+        {APP_SECTIONS.map((section, sectionIndex) => {
+          // Lọc các items trong section dựa trên Role
+          const validItems = section.items.filter((item) =>
+            userRole ? item.allowedRoles.includes(userRole) : false
+          );
 
-          {/* Nút CTA chỉ hiện khi KHÔNG PHẢI là Manager VÀ KHÔNG PHẢI là Security */}
-          {userRole !== ROLES.MANAGER && userRole !== ROLES.SECURITYGUARD && (
-            <TouchableOpacity
-              style={styles.cta}
-              onPress={() => router.push("/book/choose-type" as any)}
+          // Nếu section không có item nào phù hợp với Role thì ẩn đi
+          if (validItems.length === 0) return null;
+
+          return (
+            <Animated.View
+              key={section.id}
+              entering={FadeInUp.delay(sectionIndex * 200).duration(600)}
+              style={styles.sectionContainer}
             >
-              <CalendarCheck2 size={18} color="#ea580c" strokeWidth={2.5} />
-              <Text style={styles.ctaText}>Đặt Lab Ngay</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </Animated.View>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{section.title}</Text>
+              </View>
 
-      {/* --- SECTIONS LOOP --- */}
-      {APP_SECTIONS.map((section, sectionIndex) => {
-        // Lọc các items trong section dựa trên Role
-        const validItems = section.items.filter((item) =>
-          userRole ? item.allowedRoles.includes(userRole) : false
-        );
+              <View style={styles.grid}>
+                {validItems.map((item) => {
+                  const isUnderConstruction = item.to === "/home/resources";
 
-        // Nếu section không có item nào phù hợp với Role thì ẩn đi
-        if (validItems.length === 0) return null;
+                  return (
+                    <View key={item.to} style={styles.gridItem}>
+                      <FeatureTile
+                        {...item}
+                        onPress={
+                          isUnderConstruction
+                            ? () =>
+                                Alert.alert(
+                                  "Thông báo",
+                                  "Chức năng đang phát triển"
+                                )
+                            : undefined
+                        }
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+            </Animated.View>
+          );
+        })}
 
-        return (
-          <Animated.View
-            key={section.id}
-            entering={FadeInUp.delay(sectionIndex * 200).duration(600)}
-            style={styles.sectionContainer}
-          >
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-              {/* <Text style={styles.sectionDesc}>{section.description}</Text> */}
-            </View>
+        {/* 🟢 Padding bottom để không bị nút Chat che nội dung cuối */}
+        <View style={{ height: 90 }} />
+      </ScrollView>
 
-            <View style={styles.grid}>
-              {validItems.map((item) => {
-                // 🟢 2. Logic kiểm tra nếu là "Tài liệu lab"
-                const isUnderConstruction = item.to === "/home/resources";
-
-                return (
-                  <View key={item.to} style={styles.gridItem}>
-                    <FeatureTile
-                      {...item}
-                      // 🟢 3. Truyền hàm onPress để chặn điều hướng nếu cần
-                      onPress={
-                        isUnderConstruction
-                          ? () =>
-                              Alert.alert(
-                                "Thông báo",
-                                "Chức năng đang phát triển"
-                              )
-                          : undefined
-                      }
-                    />
-                  </View>
-                );
-              })}
-            </View>
-          </Animated.View>
-        );
-      })}
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+      {/* 🟢 NÚT CHAT (Floating Action Button) */}
+      <TouchableOpacity
+        style={styles.chatButton}
+        onPress={() => router.push("/(tabs)/home/chat")}
+        activeOpacity={0.8}
+      >
+        <View style={styles.onlineDot} />
+        <MessageCircle size={30} color="white" fill="white" />
+      </TouchableOpacity>
+    </View>
   );
 }
 
 // STYLES
 const styles = StyleSheet.create({
+  // 🟢 Style mới cho wrapper
+  containerWrapper: {
+    flex: 1,
+    backgroundColor: "#fff7ed",
+    position: "relative",
+  },
+
+  // 🟢 Style mới cho nút chat
+  chatButton: {
+    position: "absolute",
+    bottom: 100,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#2563EB",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 999,
+  },
+  onlineDot: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#22c55e",
+    borderWidth: 1.5,
+    borderColor: "#2563EB",
+    zIndex: 1000,
+  },
+
   root: {
     padding: 16,
     paddingTop: 20,
     paddingBottom: 40,
+    // Background đã chuyển ra containerWrapper, nhưng để đây cũng không sao
     backgroundColor: "#fff7ed",
     flexGrow: 1,
   },

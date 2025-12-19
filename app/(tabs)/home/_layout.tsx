@@ -1,5 +1,3 @@
-// app/(tabs)/home/_layout.tsx
-
 import { Stack } from "expo-router";
 import React from "react";
 import { useNotificationObservers } from "@/services/notificationService";
@@ -74,11 +72,15 @@ export default function HomeStackLayout() {
         name="(manager)/appovals-history"
         options={{ header: () => <AppHeader /> }}
       />
-
       <Stack.Screen
-        name="(security)/door-requests"
+        name="(manager)/manage-door-requests"
         options={{ header: () => <AppHeader /> }}
       />
+
+      {/* <Stack.Screen
+        name="(security)/door-requests"
+        options={{ header: () => <AppHeader /> }}
+      /> */}
       <Stack.Screen
         name="(security)/incident-history"
         options={{ header: () => <AppHeader /> }}
@@ -94,6 +96,19 @@ export default function HomeStackLayout() {
       <Stack.Screen
         name="(security)/today-schedule"
         options={{ header: () => <AppHeader /> }}
+      />
+      <Stack.Screen
+        name="(security)/today-schedule-history"
+        options={{ header: () => <AppHeader /> }}
+      />
+
+      {/* 👇 ĐÃ THÊM: Cấu hình Chat dạng Modal */}
+      <Stack.Screen
+        name="chat"
+        options={{
+          presentation: "modal",
+          headerShown: false,
+        }}
       />
     </Stack>
   );
