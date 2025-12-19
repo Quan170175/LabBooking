@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,21 +10,43 @@ import {
   TouchableOpacity,
   StatusBar,
 } from "react-native";
-import { useRouter, Stack } from "expo-router";
-import {
-  MapPin,
-  Users,
-  Info,
-  Edit,
-  GraduationCap,
-  FlaskConical,
-  CheckCircle,
-  Server,
-} from "lucide-react-native";
+import { useRouter } from "expo-router";
+import { MapPin, Users, CheckCircle, Server } from "lucide-react-native";
 
-// --- TYPES ---
-type LabType = "Teaching" | "Project";
+import apiClient from "../../../../utils/api";
 
+interface APIEquipmentItem {
+  id: string;
+  equipmentName: string;
+  category: string;
+  description: string | null;
+  status: string;
+  isAvailable: boolean;
+}
+
+interface APIEquipmentGroup {
+  categoryName: string;
+  totalCount: number;
+  items: APIEquipmentItem[];
+}
+
+interface APILab {
+  id: string;
+  labName: string;
+  location: string;
+  maximumLimit: number;
+  status: string; // Ví dụ: "Active", "Inactive" hoặc tiếng Việt
+  equipmentGroups: APIEquipmentGroup[];
+}
+
+interface ManagerData {
+  id: string;
+  userName: string;
+  email: string;
+  managedLabs: APILab[];
+}
+
+// 2. Interface cho dữ liệu hiển thị lên màn hình (UI)
 interface Equipment {
   id: string;
   name: string;
@@ -38,8 +60,6 @@ interface LabDetail {
   location: string;
   capacity: number;
   status: "Active" | "Inactive";
-  labType: LabType;
-  description: string;
   managerName: string;
   equipments: Equipment[];
 }
@@ -50,52 +70,87 @@ export default function MyLabInfoScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // --- MOCK API ---
-  const fetchLabDetails = useCallback(async () => {
-    return new Promise<LabDetail>((resolve) => {
-      setTimeout(() => {
-        resolve({
-          id: "lab-a101",
-          name: "Lab A101 - IoT & Embedded System",
-          // Test text cực dài để đảm bảo layout không vỡ
-          location:
-            "Tòa nhà Innovation, Tầng 3, Phòng 305 - Khu Công Nghệ Cao Hòa Lạc",
-          capacity: 45,
-          status: "Active",
-          labType: "Project",
-          managerName: "Nguyễn Văn Quản Lý",
-          description:
-            "Phòng thí nghiệm chuyên sâu về các hệ thống nhúng và IoT. Được trang bị các kit phát triển mới nhất.",
-          equipments: [
-            {
-              id: "eq1",
-              name: "Máy chiếu Sony 4K HDR",
-              code: "PROJ-01",
-              status: "Good",
-            },
-            {
-              id: "eq2",
-              name: "Oscilloscope Tektronix",
-              code: "OSC-05",
-              status: "Maintenance",
-            },
-            {
-              id: "eq3",
-              name: "PC Workstation Dell",
-              code: "PC-12",
-              status: "Good",
-            },
-            {
-              id: "eq4",
-              name: "3D Printer Creality",
-              code: "3DP-02",
-              status: "Broken",
-            },
-          ],
-        });
-      }, 1000);
-    });
-  }, []);
+  // Helper: Chuyển đổi trạng thái thiết bị sang màu sắc/text UI
+  const mapEquipmentStatus = (
+    status: string
+  ): "Good" | "Maintenance" | "Broken" => {
+    const s = (status || "").toLowerCase();
+    // Logic map tùy theo text backend trả về
+    if (
+      s.includes("sẵn sàng") ||
+      s.includes("tốt") ||
+      s === "available" ||
+      s === "good"
+    )
+      return "Good";
+    if (s.includes("bảo trì") || s.includes("sửa chữa") || s === "maintenance")
+      return "Maintenance";
+    return "Broken";
+  };
+
+  // Helper: Chuyển đổi trạng thái phòng Lab
+  const mapLabStatus = (status: string): "Active" | "Inactive" => {
+    // Nếu backend trả về true/false hoặc string, cần log ra xem để map cho chuẩn
+    // Ở đây mình giả định status trả về chuỗi
+    return status === "Active" ||
+      status === "Đang hoạt động" ||
+      status === "true"
+      ? "Active"
+      : "Inactive";
+  };
+
+  // --- HÀM GỌI API ---
+  const fetchLabDetails = async (): Promise<LabDetail | null> => {
+    try {
+      // Gọi API lấy thông tin Manager và Lab
+      const response = await apiClient.get<ManagerData>(
+        "/api/Managers/lab-details"
+      );
+
+      // Vì apiClient đã "bóc vỏ" (response interceptor), nên response.data chính là ManagerData
+      const managerData = response.data;
+
+      // Kiểm tra xem Manager này có quản lý Lab nào không
+      if (
+        managerData &&
+        managerData.managedLabs &&
+        managerData.managedLabs.length > 0
+      ) {
+        // Lấy phòng Lab đầu tiên trong danh sách quản lý
+        const apiLab = managerData.managedLabs[0];
+
+        // Làm phẳng danh sách thiết bị từ các Group
+        const flatEquipments: Equipment[] = [];
+        if (apiLab.equipmentGroups) {
+          apiLab.equipmentGroups.forEach((group) => {
+            group.items.forEach((item) => {
+              flatEquipments.push({
+                id: item.id,
+                name: item.equipmentName,
+                code: item.category || group.categoryName, // Dùng category làm mã hoặc tên nhóm
+                status: mapEquipmentStatus(item.status),
+              });
+            });
+          });
+        }
+
+        // Map dữ liệu API sang dữ liệu UI
+        return {
+          id: apiLab.id,
+          name: apiLab.labName,
+          location: apiLab.location,
+          capacity: apiLab.maximumLimit,
+          status: mapLabStatus(apiLab.status),
+          managerName: managerData.userName,
+          equipments: flatEquipments,
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error("Lỗi khi tải thông tin Lab:", error);
+      return null;
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -118,22 +173,7 @@ export default function MyLabInfoScreen() {
     loadData();
   };
 
-  // --- RENDER HELPERS ---
-
-  const renderTypeBadge = (type: LabType) => {
-    const isTeaching = type === "Teaching";
-    const bgColor = isTeaching ? "#DBEAFE" : "#F3E8FF";
-    const textColor = isTeaching ? "#2563EB" : "#9333EA";
-    const Icon = isTeaching ? GraduationCap : FlaskConical;
-    const label = isTeaching ? "Phòng Dạy Học" : "Phòng Dự Án";
-
-    return (
-      <View style={[styles.badge, { backgroundColor: bgColor }]}>
-        <Icon size={14} color={textColor} />
-        <Text style={[styles.badgeText, { color: textColor }]}>{label}</Text>
-      </View>
-    );
-  };
+  // --- RENDER UI COMPONENTS ---
 
   const renderEqStatus = (status: string) => {
     switch (status) {
@@ -154,13 +194,35 @@ export default function MyLabInfoScreen() {
     );
   }
 
-  if (!lab) return null;
+  // Trường hợp không có dữ liệu hoặc không quản lý Lab nào
+  if (!lab) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]}>
+        <Text
+          style={{
+            color: "#64748B",
+            marginBottom: 10,
+            textAlign: "center",
+            paddingHorizontal: 20,
+          }}
+        >
+          Không tìm thấy thông tin phòng Lab.{"\n"}Hoặc bạn chưa được phân công
+          quản lý.
+        </Text>
+        <TouchableOpacity onPress={onRefresh}>
+          <Text style={{ color: "#EA580C", fontWeight: "600", marginTop: 10 }}>
+            Tải lại
+          </Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF7ED" />
 
-      {/* Header Custom */}
+      {/* Header Trang */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Thông tin Phòng Lab</Text>
         <Text style={styles.headerSub}>Quản lý thông tin và thiết bị</Text>
@@ -177,23 +239,20 @@ export default function MyLabInfoScreen() {
           />
         }
       >
-        {/* --- CARD CHÍNH --- */}
+        {/* Main Card: Thông tin chung */}
         <View style={styles.mainCard}>
           <View style={styles.cardHeader}>
-            <View style={{ flex: 1, marginRight: 10 }}>
+            <View style={{ flex: 1 }}>
               <Text style={styles.labName}>{lab.name}</Text>
               <Text style={styles.managerName}>Quản lý: {lab.managerName}</Text>
             </View>
-            <TouchableOpacity style={styles.editBtn}>
-              <Edit size={20} color="#64748B" />
-            </TouchableOpacity>
+            {/* ❌ Đã xóa nút Edit (cây bút) ở đây */}
           </View>
 
           <View style={styles.divider} />
 
-          {/* --- DANH SÁCH THÔNG TIN (MỖI CÁI 1 HÀNG) --- */}
           <View style={styles.infoList}>
-            {/* 1. Vị trí */}
+            {/* Vị trí */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
                 <MapPin size={20} color="#EA580C" />
@@ -204,7 +263,7 @@ export default function MyLabInfoScreen() {
               </View>
             </View>
 
-            {/* 2. Sức chứa */}
+            {/* Sức chứa */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
                 <Users size={20} color="#EA580C" />
@@ -215,20 +274,7 @@ export default function MyLabInfoScreen() {
               </View>
             </View>
 
-            {/* 3. Loại phòng */}
-            <View style={styles.infoRow}>
-              <View style={styles.iconBox}>
-                <Info size={20} color="#EA580C" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.label}>Loại phòng</Text>
-                <View style={{ marginTop: 4, alignSelf: "flex-start" }}>
-                  {renderTypeBadge(lab.labType)}
-                </View>
-              </View>
-            </View>
-
-            {/* 4. Trạng thái */}
+            {/* Trạng thái */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
                 <CheckCircle size={20} color="#EA580C" />
@@ -248,15 +294,9 @@ export default function MyLabInfoScreen() {
               </View>
             </View>
           </View>
-
-          {/* Mô tả */}
-          <View style={styles.descBox}>
-            <Text style={styles.label}>Mô tả:</Text>
-            <Text style={styles.descText}>{lab.description}</Text>
-          </View>
         </View>
 
-        {/* --- DANH SÁCH THIẾT BỊ --- */}
+        {/* Equipment List Header */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
             Danh sách thiết bị ({lab.equipments.length})
@@ -270,20 +310,33 @@ export default function MyLabInfoScreen() {
           </TouchableOpacity>
         </View>
 
-        {lab.equipments.map((eq) => (
-          <View key={eq.id} style={styles.eqCard}>
-            <View style={styles.eqIcon}>
-              <Server size={22} color="#475569" />
+        {/* Render danh sách thiết bị (hiện tối đa vài cái demo hoặc list flat) */}
+        {lab.equipments.length === 0 ? (
+          <Text
+            style={{ textAlign: "center", color: "#94A3B8", marginTop: 10 }}
+          >
+            Chưa có thiết bị nào
+          </Text>
+        ) : (
+          lab.equipments.map((eq) => (
+            <View key={eq.id} style={styles.eqCard}>
+              <View style={styles.eqIcon}>
+                <Server size={22} color="#475569" />
+              </View>
+              <View style={styles.eqInfo}>
+                <Text style={styles.eqName} numberOfLines={1}>
+                  {eq.name}
+                </Text>
+                <Text style={styles.eqCode} numberOfLines={1}>
+                  {eq.code}
+                </Text>
+              </View>
+              <View style={styles.eqStatusBox}>
+                {renderEqStatus(eq.status)}
+              </View>
             </View>
-            <View style={styles.eqInfo}>
-              <Text style={styles.eqName} numberOfLines={1}>
-                {eq.name}
-              </Text>
-              <Text style={styles.eqCode}>{eq.code}</Text>
-            </View>
-            <View style={styles.eqStatusBox}>{renderEqStatus(eq.status)}</View>
-          </View>
-        ))}
+          ))
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -294,7 +347,6 @@ export default function MyLabInfoScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-
   header: {
     paddingHorizontal: 20,
     paddingVertical: 16,
@@ -302,10 +354,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
   headerSub: { fontSize: 14, color: "#64748B", marginTop: 4 },
-
   content: { paddingHorizontal: 16 },
 
-  // --- MAIN CARD ---
+  // Main Card Styles
   mainCard: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -332,23 +383,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   managerName: { fontSize: 13, color: "#64748B" },
-  editBtn: {
-    padding: 8,
-    backgroundColor: "#F8FAFC",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
   divider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 16 },
 
-  // --- INFO LIST (MỖI CÁI 1 HÀNG) ---
-  infoList: {
-    gap: 16, // Khoảng cách giữa các hàng
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "flex-start", // Căn theo cạnh trên để icon không bị lệch nếu text dài
-  },
+  // Info Rows
+  infoList: { gap: 16 },
+  infoRow: { flexDirection: "row", alignItems: "flex-start" },
   iconBox: {
     width: 40,
     height: 40,
@@ -358,35 +397,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-  infoContent: {
-    flex: 1, // Để text tự xuống dòng
-    justifyContent: "center",
-    paddingVertical: 2, // Căn chỉnh nhẹ với icon
-  },
+  infoContent: { flex: 1, justifyContent: "center", paddingVertical: 2 },
   label: { fontSize: 12, color: "#64748B", marginBottom: 2 },
   value: { fontSize: 14, fontWeight: "600", color: "#334155", lineHeight: 20 },
 
-  // --- BADGE ---
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    gap: 6,
-  },
-  badgeText: { fontSize: 12, fontWeight: "600" },
-
-  // --- DESCRIPTION ---
-  descBox: {
-    marginTop: 24,
-    padding: 12,
-    backgroundColor: "#F8FAFC",
-    borderRadius: 8,
-  },
-  descText: { fontSize: 13, color: "#475569", lineHeight: 20, marginTop: 4 },
-
-  // --- EQUIPMENT LIST ---
+  // Equipment Section
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -396,6 +411,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: "700", color: "#0F172A" },
   seeAll: { fontSize: 13, color: "#EA580C", fontWeight: "600" },
 
+  // Equipment Card
   eqCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -429,7 +445,6 @@ const styles = StyleSheet.create({
   },
   eqCode: { fontSize: 12, color: "#94A3B8" },
   eqStatusBox: { alignItems: "flex-end", minWidth: 70 },
-
   statusGood: { color: "#16A34A", fontSize: 12, fontWeight: "600" },
   statusMaintenance: { color: "#D97706", fontSize: 12, fontWeight: "600" },
   statusBroken: { color: "#DC2626", fontSize: 12, fontWeight: "600" },

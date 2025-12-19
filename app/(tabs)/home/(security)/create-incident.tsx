@@ -1,5 +1,3 @@
-// CreateIncidentScreen.tsx
-
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -14,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import {
   ChevronLeft,
   MapPin,
@@ -36,8 +34,7 @@ import SuccessIncidentModal from "../../../../components/common/SuccessModal";
 // --- TYPES ---
 interface Equipment {
   id: string;
-  equipmentName: string;
-  status?: string;
+  equipmentName: string; // Hoặc 'name' tùy API của bạn
 }
 
 interface Room {
@@ -48,10 +45,6 @@ interface Room {
 
 interface PagedResponse<T> {
   items: T[];
-  totalPages: number;
-  totalItemsCount: number;
-  itemsFrom: number;
-  itemsTo: number;
 }
 
 // --- CONFIG ---
@@ -89,10 +82,8 @@ const INCIDENT_TYPES = [
   },
 ];
 
-// Giá trị hiển thị tiếng Việt
 const IMPORTANCE_LEVELS = ["Thấp", "Vừa", "Cao"];
 
-// HÀM MỚI: CHUYỂN ĐỔI TIẾNG VIỆT SANG GIÁ TRỊ API MONG MUỐN
 const mapImportanceToApi = (level: string): string => {
   switch (level) {
     case "Cao":
@@ -102,7 +93,6 @@ const mapImportanceToApi = (level: string): string => {
     case "Thấp":
       return "Low";
     default:
-      // Giá trị mặc định an toàn nếu có lỗi
       return "Low";
   }
 };
@@ -110,6 +100,7 @@ const mapImportanceToApi = (level: string): string => {
 // --- MAIN COMPONENT ---
 export default function CreateIncidentScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams(); // Nhận params từ màn hình Check
 
   // --- STATE ---
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -117,40 +108,38 @@ export default function CreateIncidentScreen() {
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string>("Other");
-  const [importance, setImportance] = useState<string>("Thấp"); // Giá trị hiển thị tiếng Việt
+  const [importance, setImportance] = useState<string>("Thấp");
   const [description, setDescription] = useState("");
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
 
-  // STATE CHO THIẾT BỊ
+  // Equipment logic
   const [equipments, setEquipments] = useState<Equipment[]>([]);
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>(
     []
   );
 
-  // --- EFFECT 1: LẤY DANH SÁCH PHÒNG ---
+  // 🔥 QUAN TRỌNG: Lưu ID của lần check vừa rồi
+  const [linkedCheckId, setLinkedCheckId] = useState<string | null>(null);
+
+  // --- 1. LẤY DANH SÁCH PHÒNG ---
   useEffect(() => {
     const fetchRooms = async () => {
       setIsLoadingRooms(true);
       try {
         const response = await apiClient.get<PagedResponse<Room>>(
           "/api/LabRooms",
-          {
-            params: { PageNumber: 1, PageSize: 10 },
-          }
+          { params: { PageNumber: 1, PageSize: 10 } }
         );
-
         const resData = response.data;
         if (resData && Array.isArray(resData.items)) {
           setRooms(resData.items);
         } else if (Array.isArray(resData)) {
           setRooms(resData as any);
-        } else {
-          setRooms([]);
         }
-      } catch (error: any) {
-        console.error("❌ Lỗi lấy danh sách phòng:", error);
-        Alert.alert("Lỗi", "Không thể tải danh sách phòng.");
+      } catch (error) {
+        console.error("Lỗi lấy phòng:", error);
       } finally {
         setIsLoadingRooms(false);
       }
@@ -158,142 +147,108 @@ export default function CreateIncidentScreen() {
     fetchRooms();
   }, []);
 
-  // --- EFFECT 2: LẤY THIẾT BỊ TỪ LOCAL ---
+  // --- 2. XỬ LÝ DỮ LIỆU TỪ MÀN HÌNH CHECK GỬI SANG ---
+  useEffect(() => {
+    // Nếu có ID phòng được gửi sang, tự động chọn luôn
+    if (params.preSelectedRoomId) {
+      const roomId = Array.isArray(params.preSelectedRoomId)
+        ? params.preSelectedRoomId[0]
+        : params.preSelectedRoomId;
+      setSelectedRoomId(roomId);
+    }
+
+    // Nếu có ID Check Room, lưu lại để lát gửi kèm
+    if (params.linkedCheckId) {
+      const checkId = Array.isArray(params.linkedCheckId)
+        ? params.linkedCheckId[0]
+        : params.linkedCheckId;
+      setLinkedCheckId(checkId);
+      console.log("🔗 Linked with Check ID:", checkId);
+    }
+
+    // Nếu đến từ màn hình check, mặc định chọn loại Hỏng thiết bị
+    if (params.isFromCheckRoom === "true") {
+      setSelectedType("EquipmentFailure");
+      if (!description) {
+        setDescription("Sự cố được phát hiện trong quá trình kiểm tra phòng.");
+      }
+    }
+  }, [params]);
+
+  // --- 3. LOGIC LOAD THIẾT BỊ KHI CHỌN PHÒNG ---
   useEffect(() => {
     if (selectedRoomId) {
       const room = rooms.find((r) => r.id === selectedRoomId);
-      if (room && room.equipments) {
-        setEquipments(room.equipments);
-      } else {
-        setEquipments([]);
-      }
-      // Reset danh sách chọn khi đổi phòng
+      setEquipments(room?.equipments || []);
       setSelectedEquipmentIds([]);
     } else {
       setEquipments([]);
-      setSelectedEquipmentIds([]);
     }
   }, [selectedRoomId, rooms]);
 
-  // HÀM TOGGLE: Thêm/Bớt thiết bị khỏi mảng
   const toggleEquipment = (id: string) => {
-    setSelectedEquipmentIds((prev) => {
-      if (prev.includes(id)) {
-        return prev.filter((item) => item !== id);
-      } else {
-        return [...prev, id];
-      }
-    });
+    setSelectedEquipmentIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
   };
 
-  // --- VALIDATION ---
-  const isValid =
-    selectedRoomId !== null &&
-    description.trim().length > 0 &&
-    (selectedType !== "EquipmentFailure" || selectedEquipmentIds.length > 0);
+  // Validation đơn giản
+  const isValid = selectedRoomId !== null && description.trim().length > 0;
 
-  // --- SUBMIT ---
+  // --- 4. GỬI API (QUAN TRỌNG NHẤT - ĐÃ SỬA LỖI) ---
   const handleSubmit = async () => {
     if (!isValid) return;
     setIsSubmitting(true);
 
-    const apiImportanceLevel = mapImportanceToApi(importance);
-
     try {
-      let payload: any = {
+      // Đảm bảo ID là string, tránh trường hợp là mảng
+      const safeCheckId = Array.isArray(linkedCheckId)
+        ? linkedCheckId[0]
+        : linkedCheckId;
+
+      // Chuẩn bị payload
+      const payload: any = {
         labRoomId: selectedRoomId,
         type: selectedType,
-        importanceLevel: apiImportanceLevel,
+        importanceLevel: mapImportanceToApi(importance),
         description: description,
+
+        // 🔥 FIX LỖI Ở ĐÂY: Dùng đúng key backend yêu cầu (thường là fromRoomCheckId)
+        fromRoomCheckId: safeCheckId || null,
       };
 
+      // Nếu có chọn thiết bị cụ thể thì gửi kèm
       if (
         selectedType === "EquipmentFailure" &&
         selectedEquipmentIds.length > 0
       ) {
-        // 🔥 GỬI MỘT REQUEST DUY NHẤT VỚI DANH SÁCH ID
-        payload.equipmentIds = selectedEquipmentIds; // Thêm mảng IDs vào payload
-        console.log("Submitting multiple equipment failure incident:", payload);
-      } else {
-        // Gửi 1 request duy nhất (cho các loại sự cố khác)
-        // Trong trường hợp này, API có thể yêu cầu equipmentId là null hoặc không có.
-        // Giả sử API tự xử lý nếu không có equipmentIds.
-        console.log("Submitting single incident:", payload);
+        payload.equipmentIds = selectedEquipmentIds;
       }
 
-      // 2. Gọi API tạo Incident
+      console.log("📤 Submitting Incident Payload:", payload);
+
+      // Gọi API tạo sự cố
       await apiClient.post("/api/Incidents", payload);
 
       setIsSuccessModalVisible(true);
     } catch (error: any) {
-      console.error("❌ Lỗi gửi API:", error);
+      console.error("❌ Error Create Incident:", error);
 
-      // LOGIC BẮT LỖI TỪ BE (ĐÃ CẬP NHẬT)
-      let errorMsg = "Có lỗi xảy ra khi gửi báo cáo.";
-      const responseData = error.response?.data;
-      const status = error.response?.status;
+      // Hiển thị lỗi chi tiết hơn nếu có
+      const serverError =
+        error.response?.data?.errors?.FromRoomCheckId?.[0] ||
+        error.response?.data?.message ||
+        "Có lỗi xảy ra khi tạo sự cố.";
 
-      console.log(`[HTTP Status]: ${status}`);
-      console.log("[Response Data]:", responseData);
-
-      if (responseData) {
-        // 1. Trường hợp lỗi Validation (errors object)
-        if (responseData.errors) {
-          const errorObj = responseData.errors;
-          const errorList: string[] = [];
-
-          // Duyệt qua từng key lỗi (ví dụ: 'Description', 'LabRoomId'...)
-          Object.keys(errorObj).forEach((key) => {
-            const messages = errorObj[key];
-            if (Array.isArray(messages)) {
-              messages.forEach((msg) => errorList.push(`• ${msg}`));
-            }
-          });
-
-          if (errorList.length > 0) {
-            // Hiển thị tối đa 5 lỗi
-            errorMsg = errorList.slice(0, 5).join("\n");
-            if (errorList.length > 5) {
-              errorMsg += "\n(Và nhiều lỗi khác...)";
-            }
-          }
-        }
-        // 2. Trường hợp có message cụ thể
-        else if (responseData.message) {
-          errorMsg = responseData.message;
-        }
-        // 3. Trường hợp trả về string trực tiếp
-        else if (typeof responseData === "string") {
-          errorMsg = responseData;
-        }
-      } else if (error.message) {
-        // Lỗi network hoặc client side
-        errorMsg = error.message;
-      }
-
-      Alert.alert("Thất bại", errorMsg);
+      Alert.alert("Thất bại", serverError);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // 🟢 HÀM MỚI: Xử lý khi bấm nút "Xem lịch sử"
-  const handleViewHistory = () => {
-    setIsSuccessModalVisible(false);
-    // Giả sử đường dẫn đến trang lịch sử là "/incident-history"
-    router.replace("/(tabs)/home/(security)/incident-history");
-  };
-
-  // 🟢 HÀM CŨ ĐÃ SỬA: Chỉ đóng modal, reset form và trở về trang trước
   const handleSuccessModalClose = () => {
     setIsSuccessModalVisible(false);
-    // Xóa form và trở về trang trước
-    setSelectedRoomId(null);
-    setSelectedType("Other");
-    setImportance("Thấp");
-    setDescription("");
-    setSelectedEquipmentIds([]);
-    router.back();
+    router.replace("/(tabs)/home/(security)/incident-history");
   };
 
   return (
@@ -302,6 +257,7 @@ export default function CreateIncidentScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.container}
       >
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => router.back()}
@@ -309,7 +265,7 @@ export default function CreateIncidentScreen() {
           >
             <ChevronLeft size={24} color="#0F172A" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Tạo báo cáo sự cố</Text>
+          <Text style={styles.headerTitle}>Báo cáo sự cố</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -317,21 +273,24 @@ export default function CreateIncidentScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          {/* 1. CHỌN PHÒNG */}
+          {/* Thông báo liên kết (nếu có) */}
+          {linkedCheckId && (
+            <View style={styles.linkAlert}>
+              <CheckCircle2 size={16} color="#15803d" />
+              <Text style={styles.linkAlertText}>
+                Đang tạo báo cáo cho phiên kiểm tra vừa thực hiện.
+              </Text>
+            </View>
+          )}
+
+          {/* Chọn Phòng */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <MapPin size={18} color="#EA580C" />
               <Text style={styles.sectionTitle}>Vị trí / Phòng</Text>
             </View>
-
             {isLoadingRooms ? (
-              <ActivityIndicator
-                size="small"
-                color="#EA580C"
-                style={{ padding: 10 }}
-              />
-            ) : rooms.length === 0 ? (
-              <Text style={styles.hintText}>Không tìm thấy phòng nào.</Text>
+              <ActivityIndicator size="small" color="#EA580C" />
             ) : (
               <ScrollView
                 horizontal
@@ -345,6 +304,7 @@ export default function CreateIncidentScreen() {
                       styles.chip,
                       selectedRoomId === room.id && styles.chipActive,
                     ]}
+                    // Nếu từ Check sang thì cho phép sửa phòng hay không tuỳ bạn (ở đây mình cho phép sửa)
                     onPress={() => setSelectedRoomId(room.id)}
                   >
                     <Text
@@ -355,13 +315,20 @@ export default function CreateIncidentScreen() {
                     >
                       {room.labName}
                     </Text>
+                    {selectedRoomId === room.id && (
+                      <Check
+                        size={14}
+                        color="#EA580C"
+                        style={{ marginLeft: 4 }}
+                      />
+                    )}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
             )}
           </View>
 
-          {/* 2. LOẠI SỰ CỐ */}
+          {/* Loại sự cố */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <AlertTriangle size={18} color="#EA580C" />
@@ -375,11 +342,7 @@ export default function CreateIncidentScreen() {
                     styles.typeCard,
                     selectedType === type.id && styles.typeCardActive,
                   ]}
-                  onPress={() => {
-                    setSelectedType(type.id);
-                    if (type.id !== "EquipmentFailure")
-                      setSelectedEquipmentIds([]);
-                  }}
+                  onPress={() => setSelectedType(type.id)}
                 >
                   {type.icon}
                   <Text
@@ -395,60 +358,50 @@ export default function CreateIncidentScreen() {
             </View>
           </View>
 
-          {/* 3. CHỌN THIẾT BỊ (MULTI-SELECT) */}
+          {/* Chọn thiết bị (Optional) */}
           {selectedType === "EquipmentFailure" && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Monitor size={18} color="#EA580C" />
                 <Text style={styles.sectionTitle}>
-                  Chọn thiết bị lỗi ({selectedEquipmentIds.length})
+                  Chọn thiết bị lỗi (Nếu có)
                 </Text>
               </View>
-
-              {!selectedRoomId ? (
-                <Text style={styles.hintText}>Vui lòng chọn phòng trước.</Text>
-              ) : equipments.length === 0 ? (
-                <Text style={styles.hintText}>
-                  Không có thiết bị nào trong phòng này.
-                </Text>
+              {equipments.length === 0 ? (
+                <Text style={styles.hintText}>Không có dữ liệu thiết bị.</Text>
               ) : (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   style={styles.horizontalScroll}
                 >
-                  {equipments.map((eq) => {
-                    const isSelected = selectedEquipmentIds.includes(eq.id);
-                    return (
-                      <TouchableOpacity
-                        key={eq.id}
-                        style={[styles.chip, isSelected && styles.chipActive]}
-                        onPress={() => toggleEquipment(eq.id)}
+                  {equipments.map((eq) => (
+                    <TouchableOpacity
+                      key={eq.id}
+                      style={[
+                        styles.chip,
+                        selectedEquipmentIds.includes(eq.id) &&
+                          styles.chipActive,
+                      ]}
+                      onPress={() => toggleEquipment(eq.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          selectedEquipmentIds.includes(eq.id) &&
+                            styles.chipTextActive,
+                        ]}
                       >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            isSelected && styles.chipTextActive,
-                          ]}
-                        >
-                          {eq.equipmentName}
-                        </Text>
-                        {isSelected && (
-                          <CheckCircle2
-                            size={14}
-                            color="#EA580C"
-                            style={{ marginLeft: 4 }}
-                          />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                        {eq.equipmentName}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </ScrollView>
               )}
             </View>
           )}
 
-          {/* 4. MỨC ĐỘ */}
+          {/* Mức độ */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <ShieldAlert size={18} color="#EA580C" />
@@ -456,38 +409,31 @@ export default function CreateIncidentScreen() {
             </View>
             <View style={styles.levelContainer}>
               {IMPORTANCE_LEVELS.map((level) => {
-                let color = "#475569";
-                if (level === "Cao") color = "#DC2626";
-                if (level === "Vừa") color = "#D97706";
-                const isActive = importance === level;
+                let color =
+                  level === "Cao"
+                    ? "#DC2626"
+                    : level === "Vừa"
+                    ? "#D97706"
+                    : "#475569";
                 return (
                   <TouchableOpacity
                     key={level}
                     style={[
                       styles.levelButton,
-                      isActive && {
+                      importance === level && {
                         borderColor: color,
-                        backgroundColor: isActive ? `${color}15` : "white",
+                        backgroundColor: `${color}15`,
                       },
                     ]}
                     onPress={() => setImportance(level)}
                   >
-                    <View
-                      style={[
-                        styles.radioCircle,
-                        isActive && { borderColor: color },
-                      ]}
-                    >
-                      {isActive && (
-                        <View
-                          style={[styles.radioDot, { backgroundColor: color }]}
-                        />
-                      )}
-                    </View>
                     <Text
                       style={[
                         styles.levelText,
-                        isActive && { color: color, fontWeight: "700" },
+                        importance === level && {
+                          color: color,
+                          fontWeight: "700",
+                        },
                       ]}
                     >
                       {level}
@@ -498,7 +444,7 @@ export default function CreateIncidentScreen() {
             </View>
           </View>
 
-          {/* 5. MÔ TẢ */}
+          {/* Mô tả */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <FileText size={18} color="#EA580C" />
@@ -506,7 +452,7 @@ export default function CreateIncidentScreen() {
             </View>
             <TextInput
               style={styles.textArea}
-              placeholder="Vui lòng mô tả chi tiết sự cố..."
+              placeholder="Mô tả thêm về sự cố..."
               multiline
               numberOfLines={4}
               textAlignVertical="top"
@@ -515,7 +461,7 @@ export default function CreateIncidentScreen() {
             />
           </View>
 
-          {/* SUBMIT BUTTON */}
+          {/* Submit Button */}
           <TouchableOpacity
             disabled={isSubmitting || !isValid}
             style={[
@@ -527,26 +473,18 @@ export default function CreateIncidentScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="white" />
             ) : (
-              <>
-                <Check size={20} color={isValid ? "white" : "#94A3B8"} />
-                <Text
-                  style={[
-                    styles.submitButtonText,
-                    !isValid && { color: "#94A3B8" },
-                  ]}
-                >
-                  Gửi báo cáo
-                </Text>
-              </>
+              <Text style={styles.submitButtonText}>Gửi báo cáo</Text>
             )}
           </TouchableOpacity>
         </ScrollView>
 
-        {/* 🟢 MODAL COMPONENT RIÊNG */}
         <SuccessIncidentModal
           visible={isSuccessModalVisible}
           onClose={handleSuccessModalClose}
-          onViewHistory={handleViewHistory}
+          onViewHistory={() => {
+            setIsSuccessModalVisible(false);
+            router.replace("/(tabs)/home/(security)/incident-history");
+          }}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -566,6 +504,20 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
   backButton: { padding: 4 },
   content: { padding: 16, paddingBottom: 100 },
+
+  // Style cho alert link check
+  linkAlert: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#DCFCE7",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+  },
+  linkAlertText: { fontSize: 13, color: "#166534", fontWeight: "500", flex: 1 },
 
   section: {
     marginBottom: 20,
@@ -587,7 +539,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: { fontSize: 15, fontWeight: "700", color: "#334155" },
-
   horizontalScroll: { flexDirection: "row" },
   chip: {
     paddingVertical: 8,
@@ -603,7 +554,6 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#FFF7ED", borderColor: "#EA580C" },
   chipText: { fontSize: 14, color: "#64748B" },
   chipTextActive: { color: "#EA580C", fontWeight: "600" },
-
   hintText: {
     fontSize: 14,
     color: "#94A3B8",
@@ -611,7 +561,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
   },
-
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   typeCard: {
     width: "30%",
@@ -627,31 +576,17 @@ const styles = StyleSheet.create({
   typeCardActive: { borderColor: "#EA580C", backgroundColor: "#FFF7ED" },
   typeText: { fontSize: 12, color: "#64748B", textAlign: "center" },
   typeTextActive: { color: "#EA580C", fontWeight: "600" },
-
   levelContainer: { flexDirection: "row", gap: 12 },
   levelButton: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    gap: 8,
   },
-  radioCircle: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: "#CBD5E1",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  radioDot: { width: 10, height: 10, borderRadius: 5 },
   levelText: { fontSize: 14, color: "#64748B" },
-
   textArea: {
     borderWidth: 1,
     borderColor: "#E2E8F0",
@@ -662,15 +597,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     color: "#1E293B",
   },
-
   submitButton: {
     backgroundColor: "#EA580C",
     paddingVertical: 16,
     borderRadius: 14,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
     shadowColor: "#EA580C",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 // Đảm bảo đường dẫn này đúng với cấu trúc dự án của bạn
 import BookingButton from "../booking/BookingButton";
@@ -13,9 +13,6 @@ type ConfirmationModalProps = {
   onConfirm: () => void;
 };
 
-// Đặt thời gian đếm ngược ban đầu (giây)
-const INITIAL_COUNTDOWN = 3;
-
 export default function ConfirmationModal({
   visible,
   title,
@@ -25,32 +22,6 @@ export default function ConfirmationModal({
   onClose,
   onConfirm,
 }: ConfirmationModalProps) {
-  const [countdown, setCountdown] = useState(INITIAL_COUNTDOWN);
-
-  useEffect(() => {
-    if (visible) {
-      // Reset về 3 mỗi khi mở modal
-      setCountdown(INITIAL_COUNTDOWN);
-
-      const interval = setInterval(() => {
-        setCountdown((prevCount) => {
-          if (prevCount <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prevCount - 1; // Giảm 1
-        });
-      }, 1000); // 1 giây
-
-      // Dọn dẹp interval khi modal đóng
-      return () => clearInterval(interval);
-    }
-  }, [visible]);
-
-  const isCountingDown = countdown > 0;
-  // Đảm bảo label là string (ví dụ: "3") để BookingButton render
-  const buttonLabel = isCountingDown ? `${countdown}` : confirmText;
-
   return (
     <Modal
       transparent
@@ -70,11 +41,11 @@ export default function ConfirmationModal({
               style={styles.button}
             />
             <BookingButton
-              label={buttonLabel} // Hiển thị số đếm ngược
+              label={confirmText} // Hiển thị text trực tiếp
               variant="primary"
               onPress={onConfirm}
-              disabled={isCountingDown} // Vô hiệu hóa khi đếm
-              isLoading={false} // Tắt spinner
+              disabled={false} // Luôn cho phép bấm
+              isLoading={false}
               style={styles.button}
             />
           </View>
@@ -84,7 +55,7 @@ export default function ConfirmationModal({
   );
 }
 
-// Styles của ConfirmationModal
+// Styles giữ nguyên
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
