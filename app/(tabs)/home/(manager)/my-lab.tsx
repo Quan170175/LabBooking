@@ -35,7 +35,7 @@ interface APILab {
   labName: string;
   location: string;
   maximumLimit: number;
-  status: string; // Ví dụ: "Active", "Inactive" hoặc tiếng Việt
+  status: string;
   equipmentGroups: APIEquipmentGroup[];
 }
 
@@ -46,7 +46,6 @@ interface ManagerData {
   managedLabs: APILab[];
 }
 
-// 2. Interface cho dữ liệu hiển thị lên màn hình (UI)
 interface Equipment {
   id: string;
   name: string;
@@ -70,12 +69,10 @@ export default function MyLabInfoScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Helper: Chuyển đổi trạng thái thiết bị sang màu sắc/text UI
   const mapEquipmentStatus = (
     status: string
   ): "Good" | "Maintenance" | "Broken" => {
     const s = (status || "").toLowerCase();
-    // Logic map tùy theo text backend trả về
     if (
       s.includes("sẵn sàng") ||
       s.includes("tốt") ||
@@ -90,8 +87,6 @@ export default function MyLabInfoScreen() {
 
   // Helper: Chuyển đổi trạng thái phòng Lab
   const mapLabStatus = (status: string): "Active" | "Inactive" => {
-    // Nếu backend trả về true/false hoặc string, cần log ra xem để map cho chuẩn
-    // Ở đây mình giả định status trả về chuỗi
     return status === "Active" ||
       status === "Đang hoạt động" ||
       status === "true"
@@ -102,24 +97,19 @@ export default function MyLabInfoScreen() {
   // --- HÀM GỌI API ---
   const fetchLabDetails = async (): Promise<LabDetail | null> => {
     try {
-      // Gọi API lấy thông tin Manager và Lab
       const response = await apiClient.get<ManagerData>(
         "/api/Managers/lab-details"
       );
 
-      // Vì apiClient đã "bóc vỏ" (response interceptor), nên response.data chính là ManagerData
       const managerData = response.data;
 
-      // Kiểm tra xem Manager này có quản lý Lab nào không
       if (
         managerData &&
         managerData.managedLabs &&
         managerData.managedLabs.length > 0
       ) {
-        // Lấy phòng Lab đầu tiên trong danh sách quản lý
         const apiLab = managerData.managedLabs[0];
 
-        // Làm phẳng danh sách thiết bị từ các Group
         const flatEquipments: Equipment[] = [];
         if (apiLab.equipmentGroups) {
           apiLab.equipmentGroups.forEach((group) => {
@@ -127,14 +117,13 @@ export default function MyLabInfoScreen() {
               flatEquipments.push({
                 id: item.id,
                 name: item.equipmentName,
-                code: item.category || group.categoryName, // Dùng category làm mã hoặc tên nhóm
+                code: item.category || group.categoryName,
                 status: mapEquipmentStatus(item.status),
               });
             });
           });
         }
 
-        // Map dữ liệu API sang dữ liệu UI
         return {
           id: apiLab.id,
           name: apiLab.labName,
@@ -173,8 +162,6 @@ export default function MyLabInfoScreen() {
     loadData();
   };
 
-  // --- RENDER UI COMPONENTS ---
-
   const renderEqStatus = (status: string) => {
     switch (status) {
       case "Good":
@@ -194,7 +181,6 @@ export default function MyLabInfoScreen() {
     );
   }
 
-  // Trường hợp không có dữ liệu hoặc không quản lý Lab nào
   if (!lab) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
@@ -222,7 +208,6 @@ export default function MyLabInfoScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF7ED" />
 
-      {/* Header Trang */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Thông tin Phòng Lab</Text>
         <Text style={styles.headerSub}>Quản lý thông tin và thiết bị</Text>
@@ -239,20 +224,17 @@ export default function MyLabInfoScreen() {
           />
         }
       >
-        {/* Main Card: Thông tin chung */}
         <View style={styles.mainCard}>
           <View style={styles.cardHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.labName}>{lab.name}</Text>
               <Text style={styles.managerName}>Quản lý: {lab.managerName}</Text>
             </View>
-            {/* ❌ Đã xóa nút Edit (cây bút) ở đây */}
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.infoList}>
-            {/* Vị trí */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
                 <MapPin size={20} color="#EA580C" />
@@ -263,7 +245,6 @@ export default function MyLabInfoScreen() {
               </View>
             </View>
 
-            {/* Sức chứa */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
                 <Users size={20} color="#EA580C" />
@@ -274,7 +255,6 @@ export default function MyLabInfoScreen() {
               </View>
             </View>
 
-            {/* Trạng thái */}
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
                 <CheckCircle size={20} color="#EA580C" />
@@ -296,21 +276,19 @@ export default function MyLabInfoScreen() {
           </View>
         </View>
 
-        {/* Equipment List Header */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
             Danh sách thiết bị ({lab.equipments.length})
           </Text>
           <TouchableOpacity
             onPress={() =>
-              router.push("/(tabs)/home/(manager)/viewequipment" as any)
+              router.push("/(tabs)/home/(manager)/view-equipment" as any)
             }
           >
             <Text style={styles.seeAll}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Render danh sách thiết bị (hiện tối đa vài cái demo hoặc list flat) */}
         {lab.equipments.length === 0 ? (
           <Text
             style={{ textAlign: "center", color: "#94A3B8", marginTop: 10 }}
@@ -356,7 +334,6 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 14, color: "#64748B", marginTop: 4 },
   content: { paddingHorizontal: 16 },
 
-  // Main Card Styles
   mainCard: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -385,7 +362,6 @@ const styles = StyleSheet.create({
   managerName: { fontSize: 13, color: "#64748B" },
   divider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 16 },
 
-  // Info Rows
   infoList: { gap: 16 },
   infoRow: { flexDirection: "row", alignItems: "flex-start" },
   iconBox: {
@@ -401,7 +377,6 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, color: "#64748B", marginBottom: 2 },
   value: { fontSize: 14, fontWeight: "600", color: "#334155", lineHeight: 20 },
 
-  // Equipment Section
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -411,7 +386,6 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: "700", color: "#0F172A" },
   seeAll: { fontSize: 13, color: "#EA580C", fontWeight: "600" },
 
-  // Equipment Card
   eqCard: {
     flexDirection: "row",
     alignItems: "center",

@@ -20,17 +20,12 @@ import {
   CheckCircle,
 } from "lucide-react-native";
 
-// 🟢 Import Component Lọc Chung
 import IncidentFilterBar, {
   FilterOption,
 } from "../../../../components/common/IncidentFilterBar";
-
-// 🟢 Import API Client
 import apiClient from "../../../../utils/api";
 
-// --- 1. TYPES ---
 export type IncidentType = string;
-// Cập nhật Type để phù hợp với hiển thị tiếng Việt nếu API vẫn trả về tiếng Anh
 export type LevelOfImportance = "Low" | "Medium" | "High" | string;
 
 export interface Incident {
@@ -82,7 +77,6 @@ const getTypeConfig = (type: IncidentType) => {
   }
 };
 
-// 🔥 ĐÃ CẬP NHẬT: Hàm lấy màu và nhãn tiếng Việt
 const getImportanceConfig = (level: LevelOfImportance) => {
   let label = level;
   switch (level) {
@@ -117,14 +111,13 @@ export default function IncidentHistoryScreen() {
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterImportance, setFilterImportance] = useState("All"); // Vẫn dùng tiếng Anh cho giá trị API
 
-  // 🟢 STATE CHO LAB ROOM
+  // STATE CHO LAB ROOM
   const [labOptions, setLabOptions] = useState<FilterOption[]>([]);
   const [selectedLabId, setSelectedLabId] = useState("All");
 
-  // 🟢 1. FETCH LAB ROOMS (DEBUG VERSION)
+  // 1. FETCH LAB ROOMS
   useEffect(() => {
     const fetchLabs = async () => {
-      // (Giữ nguyên logic fetch Labs)
       const apiParams = {
         PageNumber: 1,
         PageSize: 10,
@@ -157,7 +150,7 @@ export default function IncidentHistoryScreen() {
     fetchLabs();
   }, []);
 
-  // --- 2. FETCH INCIDENTS (Chạy khi filter thay đổi) ---
+  // --- 2. FETCH INCIDENTS  ---
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -172,13 +165,11 @@ export default function IncidentHistoryScreen() {
         IsDescending: true,
       };
 
-      // Filter Logic
       if (filterStatus === "Resolved") params.IsResolved = true;
       else if (filterStatus === "Pending") params.IsResolved = false;
 
       if (filterImportance !== "All") params.Importance = filterImportance;
 
-      // 🟢 Thêm Filter LabId
       if (selectedLabId !== "All") {
         params.LabRoomId = selectedLabId;
       }
@@ -210,7 +201,7 @@ export default function IncidentHistoryScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedDate, filterStatus, filterImportance, selectedLabId]); // Thêm selectedLabId vào dependency
+  }, [selectedDate, filterStatus, filterImportance, selectedLabId]);
 
   useEffect(() => {
     fetchData();
@@ -219,7 +210,6 @@ export default function IncidentHistoryScreen() {
   // --- RENDER ITEM ---
   const renderItem = ({ item }: { item: Incident }) => {
     const typeConf = getTypeConfig(item.type);
-    // 🔥 SỬ DỤNG HÀM MỚI ĐÃ CHUYỂN SANG TIẾNG VIỆT
     const impConf = getImportanceConfig(item.importanceLevel);
 
     return (
@@ -229,7 +219,6 @@ export default function IncidentHistoryScreen() {
             {typeConf.icon}
             <Text style={styles.typeText}>{typeConf.label}</Text>
           </View>
-          {/* 🔥 HIỂN THỊ LABEL TIẾNG VIỆT TỪ impConf.label */}
           <View style={[styles.impBadge, { backgroundColor: impConf.bg }]}>
             <Text style={[styles.impText, { color: impConf.text }]}>
               {impConf.label}
@@ -274,7 +263,6 @@ export default function IncidentHistoryScreen() {
         <Text style={styles.headerSub}>Quản lý sự cố và bảo trì</Text>
       </View>
 
-      {/* 🟢 FILTER SECTION (Truyền thêm Lab Props) */}
       <IncidentFilterBar
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
@@ -331,7 +319,6 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: "center", marginTop: 40, gap: 12 },
   emptyText: { color: "#94A3B8", fontSize: 14 },
 
-  // Card Styles
   card: {
     backgroundColor: "white",
     borderRadius: 12,

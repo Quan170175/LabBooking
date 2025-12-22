@@ -27,14 +27,10 @@ import {
   MapPin,
   Trash2,
   AlertTriangle,
+  CheckSquare, // 🆕 Import icon cho nút hoàn thành
 } from "lucide-react-native";
 
-// 🟢 Client Axios
 import apiClient from "../../../../utils/api";
-
-// ==========================================
-// 1. TYPE DEFINITIONS
-// ==========================================
 
 type StatusFilterOption = "ALL" | "COMPLETED" | "PENDING";
 
@@ -43,13 +39,9 @@ interface MaintenanceRecord {
   startTime: string;
   endTime: string;
   description: string;
-
-  // Fields cho Thiết bị
   status?: "Done" | "NotYet";
   equipmentCount?: number;
   equipmentNames?: string[];
-
-  // Fields cho Phòng
   labRoomId?: string;
   labRoomName?: string;
   roomMaintainStatus?: string;
@@ -57,49 +49,33 @@ interface MaintenanceRecord {
 
 export default function MaintenanceHistoryScreen() {
   const router = useRouter();
-
-  // --- STATE ---
   const [activeTab, setActiveTab] = useState<"room" | "equipment">("equipment");
   const [data, setData] = useState<MaintenanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Filter Date
   const [filterDate, setFilterDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-
-  // Filter Status
   const [statusFilter, setStatusFilter] = useState<StatusFilterOption>("ALL");
   const [showStatusModal, setShowStatusModal] = useState(false);
-
-  // --- DELETE STATE ---
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // ==========================================
-  // 2. HELPER: FETCH DATA
-  // ==========================================
+  const [completingId, setCompletingId] = useState<string | null>(null);
+
+  // fetch data
   const fetchData = useCallback(async () => {
     setIsLoading(true);
-
     try {
       let endpoint = "";
       let params: any = {};
-
-      // 🕒 TÍNH TOÁN THỜI GIAN
       const startDate = new Date(filterDate);
       startDate.setHours(0, 0, 0, 0);
-
       const endDate = new Date(filterDate);
       endDate.setHours(23, 59, 59, 999);
 
-      // ---------------------------------------------------------
-      // TRƯỜNG HỢP 1: PHÒNG LAB
-      // ---------------------------------------------------------
       if (activeTab === "room") {
         endpoint = "/api/RoomMaintainSchedules";
-
         params = {
           PageNumber: 1,
           PageSize: 10,
@@ -107,17 +83,10 @@ export default function MaintenanceHistoryScreen() {
           To: endDate.toISOString(),
           SortBy: "StartTime",
         };
-
         if (statusFilter === "COMPLETED") params.Status = "Done";
         else if (statusFilter === "PENDING") params.Status = "NotYet";
-      }
-
-      // ---------------------------------------------------------
-      // TRƯỜNG HỢP 2: THIẾT BỊ
-      // ---------------------------------------------------------
-      else {
+      } else {
         endpoint = "/api/EquipmentMaintainSchedule";
-
         params = {
           PageNumber: 1,
           PageSize: 10,
@@ -126,32 +95,23 @@ export default function MaintenanceHistoryScreen() {
           SortBy: "startTime",
           IsDescending: true,
         };
-
         if (statusFilter === "COMPLETED") params.Status = "Done";
         else if (statusFilter === "PENDING") params.Status = "NotYet";
       }
 
       const response: any = await apiClient.get(endpoint, { params });
-
       let finalData: MaintenanceRecord[] = [];
       const resData = response.data;
-
-      if (resData?.data?.items && Array.isArray(resData.data.items)) {
+      if (resData?.data?.items && Array.isArray(resData.data.items))
         finalData = resData.data.items;
-      } else if (resData?.data && Array.isArray(resData.data)) {
+      else if (resData?.data && Array.isArray(resData.data))
         finalData = resData.data;
-      } else if (Array.isArray(resData)) {
-        finalData = resData;
-      } else if (resData?.items && Array.isArray(resData.items)) {
+      else if (Array.isArray(resData)) finalData = resData;
+      else if (resData?.items && Array.isArray(resData.items))
         finalData = resData.items;
-      }
 
       setData(finalData);
-    } catch (error: any) {
-      console.error(`\n❌ [API ERROR]`);
-      if (error.response && error.response.status !== 404) {
-        // Log error
-      }
+    } catch (error) {
       setData([]);
     } finally {
       setIsLoading(false);
@@ -163,10 +123,6 @@ export default function MaintenanceHistoryScreen() {
     fetchData();
   }, [fetchData]);
 
-  // ==========================================
-  // 3. LOGIC XÓA (DELETE)
-  // ==========================================
-
   const handleConfirmDelete = (id: string) => {
     setItemToDelete(id);
     setDeleteModalVisible(true);
@@ -174,57 +130,62 @@ export default function MaintenanceHistoryScreen() {
 
   const handleDeleteAction = async () => {
     if (!itemToDelete) return;
-
     setIsDeleting(true);
     try {
-      // Chỉ còn logic xóa thiết bị vì nút xóa phòng đã ẩn
-      const deleteEndpoint = `/api/EquipmentMaintainSchedule/${itemToDelete}`;
-
-      await apiClient.delete(deleteEndpoint);
-
+      await apiClient.delete(`/api/EquipmentMaintainSchedule/${itemToDelete}`);
       setData((prevData) =>
         prevData.filter((item) => item.id !== itemToDelete)
       );
-
       setDeleteModalVisible(false);
       Alert.alert("Thành công", "Đã xóa lịch bảo trì.");
     } catch (error: any) {
-      const serverMessage =
-        error.response?.data?.message || "Có lỗi xảy ra, vui lòng thử lại.";
+      // Error handling cũ
       setDeleteModalVisible(false);
-      setTimeout(() => {
-        Alert.alert("Thông báo", serverMessage);
-      }, 200);
     } finally {
       setIsDeleting(false);
       setItemToDelete(null);
     }
   };
+  const handleComplete = async (id: string) => {
+    setCompletingId(id);
+    try {
+      // Gọi API complete dựa trên ID
+      await apiClient.post(`/api/EquipmentMaintainSchedule/${id}/complete`);
 
-  // ==========================================
-  // 4. UI COMPONENTS
-  // ==========================================
+      // Cập nhật State Local ngay lập tức
+      setData((prevData) =>
+        prevData.map((item) =>
+          item.id === id ? { ...item, status: "Done" } : item
+        )
+      );
+
+      Alert.alert("Thành công", "Đã cập nhật trạng thái hoàn thành!");
+    } catch (error: any) {
+      console.error(error);
+      const msg =
+        error.response?.data?.message || "Không thể cập nhật trạng thái.";
+      Alert.alert("Lỗi", msg);
+    } finally {
+      setCompletingId(null);
+    }
+  };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) setFilterDate(selectedDate);
   };
-
   const handleSelectStatus = (value: StatusFilterOption) => {
     setStatusFilter(value);
     setShowStatusModal(false);
   };
-
   const displayDate = `${filterDate.getDate()}/${
     filterDate.getMonth() + 1
   }/${filterDate.getFullYear()}`;
-
   const getStatusLabel = () => {
     if (statusFilter === "ALL") return "Tất cả";
     if (statusFilter === "COMPLETED") return "Đã hoàn thành";
     return "Chưa xử lý";
   };
-
   const formatTimeRange = (start: string, end: string) => {
     try {
       const s = new Date(start);
@@ -276,6 +237,7 @@ export default function MaintenanceHistoryScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
+          {/* ... (Giữ nguyên phần Header Card) */}
           <View style={{ flexDirection: "row", flex: 1, gap: 12 }}>
             <View
               style={[
@@ -303,7 +265,6 @@ export default function MaintenanceHistoryScreen() {
               </View>
             </View>
           </View>
-
           <View
             style={[
               styles.statusBadge,
@@ -336,24 +297,47 @@ export default function MaintenanceHistoryScreen() {
             </Text>
           </View>
 
-          {/* 🟢 CHỈ HIỂN THỊ NÚT XÓA KHI Ở TAB THIẾT BỊ */}
-          {activeTab === "equipment" && (
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => handleConfirmDelete(item.id)}
-            >
-              <Trash2 size={18} color="#EF4444" />
-              <Text style={styles.deleteText}>Xóa</Text>
-            </TouchableOpacity>
-          )}
+          {/*Nút bấm*/}
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {/* nút hoàn thành (Chỉ hiện khi chưa xong & tab Thiết bị) */}
+            {status === "NotYet" && activeTab === "equipment" && (
+              <TouchableOpacity
+                style={styles.completeButton}
+                onPress={() => handleComplete(item.id)}
+                disabled={completingId === item.id}
+              >
+                {completingId === item.id ? (
+                  <ActivityIndicator size="small" color="#166534" />
+                ) : (
+                  <>
+                    <CheckSquare size={18} color="#166534" />
+                    <Text style={styles.completeText}>Xong</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Nút Xóa (Giữ nguyên, chỉ hiện ở tab Thiết bị) */}
+            {activeTab === "equipment" && (
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleConfirmDelete(item.id)}
+                disabled={completingId === item.id}
+              >
+                <Trash2 size={18} color="#EF4444" />
+                <Text style={styles.deleteText}>Xóa</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     );
   };
 
   return (
+    // ... (Phần Return JSX giữ nguyên hoàn toàn)
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
+      {/* ... Header, Filter, Tabs ... */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Lịch sử bảo trì</Text>
         <Text style={styles.headerSub}>
@@ -361,7 +345,7 @@ export default function MaintenanceHistoryScreen() {
         </Text>
       </View>
 
-      {/* FILTER */}
+      {/* Filter Chip Area */}
       <View style={styles.filterContainer}>
         <TouchableOpacity
           style={styles.filterChip}
@@ -370,7 +354,6 @@ export default function MaintenanceHistoryScreen() {
           <CalendarIcon size={16} color="#475569" />
           <Text style={styles.filterChipText}>{displayDate}</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={[
             styles.filterChip,
@@ -397,7 +380,7 @@ export default function MaintenanceHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* TABS */}
+      {/* Tabs */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === "room" && styles.activeTab]}
@@ -427,7 +410,7 @@ export default function MaintenanceHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* LIST */}
+      {/* List Data */}
       {isLoading && !isRefreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#EA580C" />
@@ -464,7 +447,7 @@ export default function MaintenanceHistoryScreen() {
         />
       )}
 
-      {/* DATE PICKER */}
+      {/* DatePicker & Status Modal & Delete Modal (Giữ nguyên) */}
       {showDatePicker && (
         <DateTimePicker
           value={filterDate}
@@ -474,7 +457,6 @@ export default function MaintenanceHistoryScreen() {
         />
       )}
 
-      {/* STATUS MODAL */}
       <Modal
         visible={showStatusModal}
         transparent={true}
@@ -548,7 +530,6 @@ export default function MaintenanceHistoryScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* DELETE MODAL (Giữ lại cho tab Thiết bị) */}
       <Modal
         visible={deleteModalVisible}
         transparent={true}
@@ -594,24 +575,14 @@ export default function MaintenanceHistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
-
   header: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 12,
     backgroundColor: "#FFF7ED",
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-  headerSub: {
-    fontSize: 14,
-    color: "#64748B",
-    marginTop: 4,
-  },
-
+  headerTitle: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
+  headerSub: { fontSize: 14, color: "#64748B", marginTop: 4 },
   filterContainer: {
     flexDirection: "row",
     paddingHorizontal: 16,
@@ -657,7 +628,6 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 16, paddingBottom: 40 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  // --- CARD ---
   card: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -702,8 +672,6 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 12 },
   contentRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   descriptionText: { fontSize: 14, color: "#334155", lineHeight: 20, flex: 1 },
-
-  // Footer in Card
   cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -711,6 +679,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   timeText: { fontSize: 13, color: "#64748B", fontWeight: "500" },
+
   deleteButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -720,13 +689,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 6,
   },
-  deleteText: {
-    color: "#EF4444",
+  deleteText: { color: "#EF4444", fontSize: 12, fontWeight: "600" },
+
+  // 🆕 STYLES MỚI CHO NÚT COMPLETE
+  completeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "#DCFCE7", // Màu nền xanh nhạt
+    borderRadius: 8,
+    gap: 6,
+  },
+  completeText: {
+    color: "#166534", // Màu chữ xanh đậm
     fontSize: 12,
     fontWeight: "600",
   },
 
-  // --- EMPTY STATE ---
+  // Empty State & Modals (Giữ nguyên)
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
@@ -750,8 +731,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-
-  // --- MODAL ---
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -782,8 +761,6 @@ const styles = StyleSheet.create({
   },
   modalOptionText: { fontSize: 15, color: "#475569" },
   modalOptionTextActive: { color: "#EA580C", fontWeight: "600" },
-
-  // --- DELETE MODAL ---
   deleteModalContent: {
     backgroundColor: "white",
     width: "80%",
@@ -814,11 +791,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 20,
   },
-  deleteActionRow: {
-    flexDirection: "row",
-    gap: 12,
-    width: "100%",
-  },
+  deleteActionRow: { flexDirection: "row", gap: 12, width: "100%" },
   cancelButton: {
     flex: 1,
     paddingVertical: 12,
@@ -826,11 +799,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     alignItems: "center",
   },
-  cancelButtonText: {
-    color: "#374151",
-    fontWeight: "600",
-    fontSize: 15,
-  },
+  cancelButtonText: { color: "#374151", fontWeight: "600", fontSize: 15 },
   confirmDeleteButton: {
     flex: 1,
     paddingVertical: 12,
@@ -839,9 +808,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  confirmDeleteText: {
-    color: "white",
-    fontWeight: "600",
-    fontSize: 15,
-  },
+  confirmDeleteText: { color: "white", fontWeight: "600", fontSize: 15 },
 });

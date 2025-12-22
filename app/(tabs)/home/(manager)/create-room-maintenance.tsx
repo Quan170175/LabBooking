@@ -46,7 +46,6 @@ export default function CreateMaintenanceScreen() {
 
   // Modal State
   const [successModalVisible, setSuccessModalVisible] = useState(false);
-  // const [msgModalVisible, setMsgModalVisible] = useState(false); // (Nếu không dùng có thể bỏ)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -171,7 +170,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 4,
-    marginLeft: -4, // Căn lề trái sát hơn một chút
+    marginLeft: -4,
   },
 
   // Header Section (Giống Support Screen)

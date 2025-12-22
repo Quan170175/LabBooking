@@ -34,7 +34,7 @@ import SuccessIncidentModal from "../../../../components/common/SuccessModal";
 // --- TYPES ---
 interface Equipment {
   id: string;
-  equipmentName: string; // Hoặc 'name' tùy API của bạn
+  equipmentName: string;
 }
 
 interface Room {
@@ -47,7 +47,6 @@ interface PagedResponse<T> {
   items: T[];
 }
 
-// --- CONFIG ---
 const INCIDENT_TYPES = [
   { id: "Fire", label: "Cháy nổ", icon: <Flame size={18} color="#DC2626" /> },
   {
@@ -97,12 +96,12 @@ const mapImportanceToApi = (level: string): string => {
   }
 };
 
-// --- MAIN COMPONENT ---
+// main component
 export default function CreateIncidentScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams(); // Nhận params từ màn hình Check
+  const params = useLocalSearchParams();
 
-  // --- STATE ---
+  // state
   const [rooms, setRooms] = useState<Room[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
 
@@ -110,7 +109,6 @@ export default function CreateIncidentScreen() {
   const [selectedType, setSelectedType] = useState<string>("Other");
   const [importance, setImportance] = useState<string>("Thấp");
   const [description, setDescription] = useState("");
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
 
@@ -120,10 +118,9 @@ export default function CreateIncidentScreen() {
     []
   );
 
-  // 🔥 QUAN TRỌNG: Lưu ID của lần check vừa rồi
   const [linkedCheckId, setLinkedCheckId] = useState<string | null>(null);
 
-  // --- 1. LẤY DANH SÁCH PHÒNG ---
+  // lấy danh sách phòng
   useEffect(() => {
     const fetchRooms = async () => {
       setIsLoadingRooms(true);
@@ -175,7 +172,7 @@ export default function CreateIncidentScreen() {
     }
   }, [params]);
 
-  // --- 3. LOGIC LOAD THIẾT BỊ KHI CHỌN PHÒNG ---
+  // logic load thiết bị
   useEffect(() => {
     if (selectedRoomId) {
       const room = rooms.find((r) => r.id === selectedRoomId);
@@ -192,32 +189,25 @@ export default function CreateIncidentScreen() {
     );
   };
 
-  // Validation đơn giản
   const isValid = selectedRoomId !== null && description.trim().length > 0;
 
-  // --- 4. GỬI API (QUAN TRỌNG NHẤT - ĐÃ SỬA LỖI) ---
   const handleSubmit = async () => {
     if (!isValid) return;
     setIsSubmitting(true);
 
     try {
-      // Đảm bảo ID là string, tránh trường hợp là mảng
       const safeCheckId = Array.isArray(linkedCheckId)
         ? linkedCheckId[0]
         : linkedCheckId;
 
-      // Chuẩn bị payload
       const payload: any = {
         labRoomId: selectedRoomId,
         type: selectedType,
         importanceLevel: mapImportanceToApi(importance),
         description: description,
-
-        // 🔥 FIX LỖI Ở ĐÂY: Dùng đúng key backend yêu cầu (thường là fromRoomCheckId)
         fromRoomCheckId: safeCheckId || null,
       };
 
-      // Nếu có chọn thiết bị cụ thể thì gửi kèm
       if (
         selectedType === "EquipmentFailure" &&
         selectedEquipmentIds.length > 0
@@ -227,14 +217,12 @@ export default function CreateIncidentScreen() {
 
       console.log("📤 Submitting Incident Payload:", payload);
 
-      // Gọi API tạo sự cố
       await apiClient.post("/api/Incidents", payload);
 
       setIsSuccessModalVisible(true);
     } catch (error: any) {
       console.error("❌ Error Create Incident:", error);
 
-      // Hiển thị lỗi chi tiết hơn nếu có
       const serverError =
         error.response?.data?.errors?.FromRoomCheckId?.[0] ||
         error.response?.data?.message ||
@@ -273,7 +261,6 @@ export default function CreateIncidentScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          {/* Thông báo liên kết (nếu có) */}
           {linkedCheckId && (
             <View style={styles.linkAlert}>
               <CheckCircle2 size={16} color="#15803d" />
@@ -304,7 +291,6 @@ export default function CreateIncidentScreen() {
                       styles.chip,
                       selectedRoomId === room.id && styles.chipActive,
                     ]}
-                    // Nếu từ Check sang thì cho phép sửa phòng hay không tuỳ bạn (ở đây mình cho phép sửa)
                     onPress={() => setSelectedRoomId(room.id)}
                   >
                     <Text

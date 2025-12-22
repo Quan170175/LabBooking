@@ -18,17 +18,12 @@ import {
 } from "lucide-react-native";
 
 import apiClient from "../../../../utils/api";
-
-// 🔥 IMPORT MODAL CHUNG (Đảm bảo đường dẫn đúng)
 import SuccessMaintenanceModal from "../../../../components/manager/maintenance/SuccessMaintenanceModal";
-
-// 🔥 Component Chung
 import RoomInfoSection from "../../../../components/manager/maintenance/RoomInfoSection";
 import MaintenanceTimeSection from "../../../../components/manager/maintenance/MaintenanceTimeSection";
 import MaintenanceDescriptionSection from "../../../../components/manager/maintenance/MaintenanceDescriptionSection";
 import MaintenanceSubmitButton from "../../../../components/manager/maintenance/MaintenanceSubmitButton";
 
-// --- TYPES ---
 interface EquipmentCategory {
   id: string;
   name: string;
@@ -155,11 +150,10 @@ export default function CreateEquipmentMaintenanceScreen() {
         params: { PageNumber: 1, PageSize: 100 },
       });
 
-      // 🟢 ĐÃ SỬA LOGIC API CHO THIẾT BỊ
       const resBody = res.data;
       let allEquipments: SpecificEquipment[] = [];
 
-      // Logic tìm items linh hoạt
+      // Logic tìm items
       if (resBody?.items && Array.isArray(resBody.items)) {
         allEquipments = resBody.items;
       } else if (resBody?.data?.items && Array.isArray(resBody.data.items)) {

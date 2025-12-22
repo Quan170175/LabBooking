@@ -17,7 +17,6 @@ import {
   QrCode,
   ScanLine,
   ClipboardCheck,
-  MessageCircle, // 🟢 Đã import icon Chat
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -75,14 +74,14 @@ const APP_SECTIONS = [
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
       },
       {
-        to: "/(tabs)/home/(manager)/viewequipment",
+        to: "/(tabs)/home/(manager)/view-equipment",
         title: "Xem thiết bị",
         description: "Xem tình trạng thiết bị",
         icon: Monitor,
         allowedRoles: [ROLES.MANAGER],
       },
       {
-        to: "/home/testuploadfile",
+        to: "/home/send-email",
         title: "Gửi thông báo",
         description: "Soạn và gửi email thông báo cho các thành viên",
         icon: Mail,
@@ -177,15 +176,8 @@ const APP_SECTIONS = [
   {
     id: "info",
     title: "Tài nguyên & Hỗ trợ",
-    description: "Tài liệu hướng dẫn và trợ giúp",
+    description: "Tài nguyên và trợ giúp",
     items: [
-      {
-        to: "/home/resources",
-        title: "Tài liệu lab",
-        description: "Hướng dẫn & SOP",
-        icon: BookOpen,
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      },
       {
         to: "/home/support",
         title: "Hỗ trợ",
@@ -194,17 +186,10 @@ const APP_SECTIONS = [
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER, ROLES.MANAGER],
       },
       {
-        to: "/home/doorrequest",
+        to: "/home/door-request",
         title: "Yêu cầu mở cửa",
         description: "Gửi yêu cầu mở cửa",
         icon: DoorOpen,
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      },
-      {
-        to: "/home/my-qrcode",
-        title: "Mã QR cá nhân",
-        description: "Dùng để check-in hoặc xác thực khi vào",
-        icon: QrCode,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
       },
     ],
@@ -214,13 +199,6 @@ const APP_SECTIONS = [
     title: "Khu vực An ninh",
     description: "Chức năng dành riêng cho Bảo vệ",
     items: [
-      // {
-      //   to: "/(tabs)/home/door-requests",
-      //   title: "Yêu cầu mở cửa",
-      //   description: "Xử lý yêu cầu ra vào",
-      //   icon: DoorOpen,
-      //   allowedRoles: [ROLES.SECURITYGUARD],
-      // },
       {
         to: "/(tabs)/home/incident-history",
         title: "Lịch sử sự cố",
@@ -254,7 +232,7 @@ const APP_SECTIONS = [
         title: "Lịch sử bàn giao",
         description: "Xem lịch sử bàn giao phòng",
         icon: ScanLine,
-        allowedRoles: [ROLES.SECURITYGUARD],
+        allowedRoles: [ROLES.SECURITYGUARD, ROLES.MANAGER],
       },
     ],
   },
@@ -419,16 +397,6 @@ export default function Home() {
         {/* 🟢 Padding bottom để không bị nút Chat che nội dung cuối */}
         <View style={{ height: 90 }} />
       </ScrollView>
-
-      {/* 🟢 NÚT CHAT (Floating Action Button) */}
-      <TouchableOpacity
-        style={styles.chatButton}
-        onPress={() => router.push("/(tabs)/home/chat")}
-        activeOpacity={0.8}
-      >
-        <View style={styles.onlineDot} />
-        <MessageCircle size={30} color="white" fill="white" />
-      </TouchableOpacity>
     </View>
   );
 }

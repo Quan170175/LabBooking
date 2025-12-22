@@ -23,10 +23,7 @@ import {
   ListFilter,
 } from "lucide-react-native";
 
-// 🟢 Import API Client
 import apiClient from "../../../../utils/api";
-
-// --- 1. TYPES ---
 
 interface PendingRequest {
   requestId: string;
@@ -96,11 +93,9 @@ const getHistoryStatusConfig = (status: string) => {
   }
 };
 
-// --- MAIN SCREEN ---
 export default function SecurityDoorRequestScreen() {
   const router = useRouter();
 
-  // --- STATE ---
   const [activeTab, setActiveTab] = useState<"pending" | "history">("pending");
   const [pendingList, setPendingList] = useState<PendingRequest[]>([]);
   const [historyList, setHistoryList] = useState<HistoryRequest[]>([]);
@@ -109,7 +104,6 @@ export default function SecurityDoorRequestScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  // --- 2. FETCH DATA ---
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -137,7 +131,6 @@ export default function SecurityDoorRequestScreen() {
     fetchData();
   };
 
-  // --- 3. ACTIONS ---
   const handleAccept = async (id: string) => {
     setProcessingId(id);
     try {
@@ -256,9 +249,7 @@ export default function SecurityDoorRequestScreen() {
   };
 
   return (
-    // 🟢 Sửa background màu kem
     <View style={styles.container}>
-      {/* 🟢 Header mới: Tiêu đề + Mô tả, Không nút Back */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Yêu cầu Mở cửa</Text>
         <Text style={styles.headerSub}>Quản lý yêu cầu ra vào phòng Lab</Text>
@@ -360,15 +351,12 @@ export default function SecurityDoorRequestScreen() {
 }
 
 const styles = StyleSheet.create({
-  // 🟢 Update background container
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  // 🟢 Update Header Styles giống IncidentHistory
   header: {
     padding: 16,
     backgroundColor: "#FFF7ED",
-    // Bỏ borderBottom nếu muốn liền mạch, hoặc giữ lại tùy ý
   },
   headerTitle: {
     fontSize: 24,
@@ -381,10 +369,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // Tabs
   tabContainer: {
     flexDirection: "row",
-    backgroundColor: "#FFF7ED", // Cập nhật màu nền Tab cho đồng bộ
+    backgroundColor: "#FFF7ED",
     paddingHorizontal: 16,
     paddingBottom: 0,
     borderBottomWidth: 1,
@@ -420,18 +407,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
   },
 
-  // List
   listContent: { padding: 16, paddingBottom: 40 },
   emptyState: { alignItems: "center", marginTop: 60, gap: 12 },
   emptyText: { color: "#94A3B8", fontSize: 15 },
 
-  // Card
   card: {
     backgroundColor: "white",
-    borderRadius: 16, // Bo góc lớn hơn cho mềm mại
+    borderRadius: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#F1F5F9", // Viền nhạt hơn
+    borderColor: "#F1F5F9",
     shadowColor: "#000",
     shadowOpacity: 0.03,
     shadowOffset: { width: 0, height: 2 },
@@ -446,7 +431,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: 12,
-    backgroundColor: "white", // Để nền trắng cho sạch sẽ
+    backgroundColor: "white",
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
   },
@@ -479,7 +464,6 @@ const styles = StyleSheet.create({
     color: "#B45309",
   },
 
-  // Status Badge (History)
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -490,7 +474,6 @@ const styles = StyleSheet.create({
   },
   statusText: { fontSize: 11, fontWeight: "700" },
 
-  // Card Body
   cardBody: {
     padding: 16,
     gap: 8,
@@ -506,7 +489,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Card Footer (Pending Only)
   cardFooter: {
     padding: 12,
     borderTopWidth: 1,

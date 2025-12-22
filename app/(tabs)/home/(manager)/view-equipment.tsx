@@ -21,7 +21,6 @@ import {
   Filter,
 } from "lucide-react-native";
 
-// 🟢 Đảm bảo đường dẫn import này đúng với project của bạn
 import apiClient from "../../../../utils/api";
 
 // --- TYPES ---
@@ -78,7 +77,7 @@ const getStatusConfig = (status: string) => {
   }
 };
 
-export default function ViewEquipmentStatusScreen() {
+export default function viewequipmentStatusScreen() {
   const router = useRouter();
 
   // --- STATE ---
@@ -91,8 +90,6 @@ export default function ViewEquipmentStatusScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // --- API: GET CATEGORIES ---
-  // --- API: GET CATEGORIES ---
   const fetchCategories = async () => {
     setIsLoading(true);
     setError(null);
@@ -119,7 +116,6 @@ export default function ViewEquipmentStatusScreen() {
         console.warn("Không tìm thấy danh sách items hợp lệ");
       }
     } catch (error: any) {
-      // Xử lý lỗi (Giữ nguyên)
       let errorMessage = "Lỗi hệ thống không xác định.";
       if (error.response) {
         errorMessage =
@@ -139,7 +135,6 @@ export default function ViewEquipmentStatusScreen() {
     fetchCategories();
   }, []);
 
-  // --- API: GET EQUIPMENTS BY CATEGORY ---
   const handleSelectCategory = async (category: EquipmentCategory) => {
     setSelectedCategory(category);
     setIsLoading(true);
@@ -150,17 +145,11 @@ export default function ViewEquipmentStatusScreen() {
       const response = await apiClient.get(
         `/api/EquipmentCategories/${category.id}/equipments`
       );
-
-      // 🟢 FIX: Logic lấy dữ liệu linh hoạt cho API con
-      // API con có thể trả về mảng trực tiếp HOẶC cấu trúc phân trang giống cha
       const responseData = response.data?.data || response.data;
-
       let items = [];
       if (Array.isArray(responseData)) {
-        // Trường hợp trả về mảng trực tiếp
         items = responseData;
       } else if (responseData?.items && Array.isArray(responseData.items)) {
-        // Trường hợp trả về object phân trang { items: [...] }
         items = responseData.items;
       }
 
@@ -190,7 +179,7 @@ export default function ViewEquipmentStatusScreen() {
     setError(null);
     if (selectedCategory) {
       handleSelectCategory(selectedCategory);
-      setIsRefreshing(false); // Tắt refresh nhanh cho view con
+      setIsRefreshing(false);
     } else {
       fetchCategories();
     }
@@ -234,10 +223,6 @@ export default function ViewEquipmentStatusScreen() {
         {item.labRoomName && (
           <Text style={styles.eqLocation}>📍 Tại: {item.labRoomName}</Text>
         )}
-
-        {/* Hiển thị ID để debug nếu cần, có thể xóa dòng dưới */}
-        {/* <Text style={{fontSize: 10, color: '#ccc'}}>{item.id}</Text> */}
-
         {item.description && (
           <Text style={styles.eqDesc} numberOfLines={2}>
             {item.description}
@@ -290,7 +275,7 @@ export default function ViewEquipmentStatusScreen() {
             </View>
           )}
 
-          {/* VIEW 1: CATEGORIES LIST */}
+          {/* View 1: category list*/}
           {!selectedCategory && (
             <FlatList
               data={categories}
@@ -314,7 +299,7 @@ export default function ViewEquipmentStatusScreen() {
             />
           )}
 
-          {/* VIEW 2: EQUIPMENT LIST */}
+          {/* View 2: equipment list */}
           {selectedCategory && (
             <FlatList
               data={equipments}
@@ -473,3 +458,6 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: "center", marginTop: 60, gap: 12 },
   emptyText: { color: "#94A3B8", fontSize: 14 },
 });
+function equipmentStatusScreen() {
+  throw new Error("Function not implemented.");
+}

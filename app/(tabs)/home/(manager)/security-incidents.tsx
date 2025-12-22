@@ -15,6 +15,7 @@ import {
   User,
   X,
   Eye,
+  Trash2,
 } from "lucide-react-native";
 import React, { useEffect, useState, useCallback } from "react";
 import {
@@ -27,15 +28,12 @@ import {
   RefreshControl,
   Modal,
   ScrollView,
+  Alert,
 } from "react-native";
 
-// 🟢 Import Component Lọc Chung
 import IncidentFilterBar from "../../../../components/common/IncidentFilterBar";
-
-// 🟢 Import API Client
 import apiClient from "../../../../utils/api";
 
-// 1. TYPE DEFINITIONS
 export type IncidentType =
   | "Fire"
   | "PowerOutage"
@@ -64,7 +62,6 @@ export type Incident = {
   rawStatus: string;
 };
 
-// 2. CONFIG HELPERS
 const getSeverityConfig = (severity: IncidentSeverity) => {
   switch (severity) {
     case "High":
@@ -138,13 +135,14 @@ const formatTimestamp = (isoString: string) => {
   }
 };
 
-// 3. CARD COMPONENT
 const IncidentCard = ({
   incident,
   onPress,
+  onDelete,
 }: {
   incident: Incident;
   onPress: () => void;
+  onDelete: () => void;
 }) => {
   const severityConfig = getSeverityConfig(incident.levelOfImportance);
   const typeConfig = getIncidentTypeConfig(incident.type);
@@ -158,7 +156,18 @@ const IncidentCard = ({
           {severityConfig.icon}
           <Text style={styles.cardHeaderText}>{severityConfig.label}</Text>
         </View>
-        <Eye size={18} color="rgba(255,255,255,0.8)" />
+
+        {/* Action Buttons */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <TouchableOpacity onPress={onPress}>
+            <Eye size={20} color="rgba(255,255,255,0.9)" />
+          </TouchableOpacity>
+          {!incident.isResolved && (
+            <TouchableOpacity onPress={onDelete}>
+              <Trash2 size={20} color="rgba(255,255,255,0.9)" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <View style={styles.cardBody}>
@@ -212,7 +221,6 @@ const IncidentCard = ({
   );
 };
 
-// 4. MAIN SCREEN
 export default function SecurityIncidentsScreen() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -229,7 +237,7 @@ export default function SecurityIncidentsScreen() {
     null
   );
 
-  // --- API CALL LOGIC ---
+  // --- API: FETCH DATA ---
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -248,8 +256,6 @@ export default function SecurityIncidentsScreen() {
       else if (filterStatus === "Pending") params.IsResolved = false;
       if (filterSeverity !== "All") params.Importance = filterSeverity;
 
-      console.log("👉 [Security API Request]", params);
-
       const response = await apiClient.get("/api/Incidents", { params });
 
       let rawData = [];
@@ -264,11 +270,8 @@ export default function SecurityIncidentsScreen() {
         labRoomId: item.labRoomId || "unknown",
         labRoomName: item.labRoomName || "Chưa xác định",
         reportedById: "system",
-
-        // 🟢 Map dữ liệu người báo cáo từ JSON
         reportedByName: item.reportedByName,
         reportedByPhone: item.reportedByPhone,
-
         equipmentName: item.equipmentName,
         type: item.type,
         description: item.description,
@@ -295,6 +298,65 @@ export default function SecurityIncidentsScreen() {
     fetchData();
   }, [fetchData]);
 
+  const handleDelete = async (id: string) => {
+    console.log("🔍 [Prepare Delete] ID to delete:", id);
+
+    Alert.alert(
+      "Xác nhận xóa",
+      "Bạn có chắc chắn muốn xóa báo cáo này? Hành động này không thể hoàn tác.",
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              console.log(
+                `🚀 [Deleting] Calling API: DELETE /api/Incidents/${id}`
+              );
+
+              // Gọi API Delete
+              const res = await apiClient.delete(`/api/Incidents/${id}`);
+
+              // Log kết quả thành công
+              console.log("✅ [Delete Success] Status:", res.status, res.data);
+
+              // Cập nhật UI
+              setIncidents((prev) => prev.filter((item) => item.id !== id));
+              if (selectedIncident?.id === id) setModalVisible(false);
+
+              Alert.alert("Thành công", "Đã xóa sự cố.");
+            } catch (error: any) {
+              console.error("❌ [Delete FAILED] Error details:");
+              if (error.response) {
+                console.log("   - Status:", error.response.status);
+                console.log(
+                  "   - Data:",
+                  JSON.stringify(error.response.data, null, 2)
+                );
+                console.log("   - Headers:", error.response.headers);
+
+                Alert.alert(
+                  "Lỗi xóa (" + error.response.status + ")",
+                  typeof error.response.data === "string"
+                    ? error.response.data
+                    : "Server trả về lỗi không xác định. Vui lòng xem log."
+                );
+              } else if (error.request) {
+                console.log("   - No response received:", error.request);
+                Alert.alert("Lỗi mạng", "Không thể kết nối đến server.");
+              } else {
+                // Lỗi setup
+                console.log("   - Error Message:", error.message);
+                Alert.alert("Lỗi", error.message);
+              }
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleOpenDetail = (incident: Incident) => {
     setSelectedIncident(incident);
     setModalVisible(true);
@@ -312,7 +374,6 @@ export default function SecurityIncidentsScreen() {
           </Text>
         </View>
 
-        {/* 🟢 COMPONENT LỌC CHUNG */}
         <IncidentFilterBar
           selectedDate={selectedDate}
           onDateChange={setSelectedDate}
@@ -336,6 +397,7 @@ export default function SecurityIncidentsScreen() {
             <IncidentCard
               incident={item}
               onPress={() => handleOpenDetail(item)}
+              onDelete={() => handleDelete(item.id)} // Truyền hàm xóa
             />
           )}
           keyExtractor={(item) => item.id}
@@ -359,7 +421,7 @@ export default function SecurityIncidentsScreen() {
         />
       )}
 
-      {/* MODAL CHI TIẾT */}
+      {/* --- MODAL CHI TIẾT --- */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -380,77 +442,14 @@ export default function SecurityIncidentsScreen() {
 
             {selectedIncident && (
               <ScrollView style={styles.modalBody}>
-                {/* 1. Thông tin chung */}
                 <View style={styles.sectionBox}>
                   <Text style={styles.sectionTitle}>Thông tin chung</Text>
-
                   <View style={styles.rowItem}>
                     <Text style={styles.label}>Phòng:</Text>
-                    <Text style={styles.value} numberOfLines={1}>
+                    <Text style={styles.value}>
                       {selectedIncident.labRoomName}
                     </Text>
                   </View>
-
-                  {selectedIncident.equipmentName && (
-                    <View style={styles.rowItem}>
-                      <Text style={styles.label}>Thiết bị:</Text>
-                      <Text style={styles.value} numberOfLines={1}>
-                        {selectedIncident.equipmentName}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={styles.rowItem}>
-                    <Text style={styles.label}>Loại sự cố:</Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 6,
-                        flex: 1,
-                        justifyContent: "flex-end",
-                      }}
-                    >
-                      {getIncidentTypeConfig(selectedIncident.type).icon}
-                      <Text style={styles.value}>
-                        {getIncidentTypeConfig(selectedIncident.type).label}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.rowItem}>
-                    <Text style={styles.label}>Mức độ:</Text>
-                    <View style={{ flex: 1, alignItems: "flex-end" }}>
-                      <View
-                        style={[
-                          styles.miniBadge,
-                          {
-                            backgroundColor: getSeverityConfig(
-                              selectedIncident.levelOfImportance
-                            ).bgColor,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.miniBadgeText,
-                            {
-                              color: getSeverityConfig(
-                                selectedIncident.levelOfImportance
-                              ).color,
-                            },
-                          ]}
-                        >
-                          {
-                            getSeverityConfig(
-                              selectedIncident.levelOfImportance
-                            ).label
-                          }
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
                   <View style={styles.rowItem}>
                     <Text style={styles.label}>Trạng thái:</Text>
                     <Text
@@ -460,7 +459,6 @@ export default function SecurityIncidentsScreen() {
                           color: selectedIncident.isResolved
                             ? "#15803D"
                             : "#B45309",
-                          fontWeight: "bold",
                         },
                       ]}
                     >
@@ -469,7 +467,6 @@ export default function SecurityIncidentsScreen() {
                   </View>
                 </View>
 
-                {/* 2. Nội dung */}
                 <View style={styles.sectionBox}>
                   <Text style={styles.sectionTitle}>Nội dung báo cáo</Text>
                   <Text style={styles.descriptionText}>
@@ -480,59 +477,40 @@ export default function SecurityIncidentsScreen() {
                   </Text>
                 </View>
 
-                {/* 3. Người báo cáo (Hiển thị Name & Phone) */}
                 <View style={styles.sectionBox}>
                   <Text style={styles.sectionTitle}>Người báo cáo</Text>
-
-                  {/* Họ tên */}
                   <View style={styles.rowItem}>
                     <Text style={styles.label}>Họ tên:</Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 6,
-                        flex: 1,
-                        justifyContent: "flex-end",
-                      }}
-                    >
-                      <User size={14} color="#64748B" />
-                      <Text style={styles.value} numberOfLines={1}>
-                        {/* 🟢 Nếu JSON trả về null thì hiện "Không có tên" */}
-                        {selectedIncident.reportedByName || "Không có tên"}
-                      </Text>
-                    </View>
+                    <Text style={styles.value}>
+                      {selectedIncident.reportedByName || "Không có tên"}
+                    </Text>
                   </View>
-
-                  {/* Số điện thoại */}
                   <View style={styles.rowItem}>
-                    <Text style={styles.label}>Số ĐT:</Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 6,
-                        flex: 1,
-                        justifyContent: "flex-end",
-                      }}
-                    >
-                      <Phone size={14} color="#64748B" />
-                      <Text style={styles.value} numberOfLines={1}>
-                        {/* 🟢 Hiển thị số điện thoại từ JSON */}
-                        {selectedIncident.reportedByPhone || "Không có SĐT"}
-                      </Text>
-                    </View>
+                    <Text style={styles.label}>SĐT:</Text>
+                    <Text style={styles.value}>
+                      {selectedIncident.reportedByPhone || "Không có SĐT"}
+                    </Text>
                   </View>
                 </View>
               </ScrollView>
             )}
 
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.modalButtonText}>Đóng</Text>
-            </TouchableOpacity>
+            <View style={{ gap: 10 }}>
+              {selectedIncident && !selectedIncident.isResolved && (
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: "#DC2626" }]}
+                  onPress={() => handleDelete(selectedIncident.id)}
+                >
+                  <Text style={styles.modalButtonText}>Xóa báo cáo này</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.modalButtonText}>Đóng</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -540,17 +518,13 @@ export default function SecurityIncidentsScreen() {
   );
 }
 
+// --- 5. STYLES ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   fixedHeaderContainer: { backgroundColor: "#FFF7ED", zIndex: 10 },
-  headerTitleArea: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
+  headerTitleArea: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
   subtitle: { fontSize: 14, color: "#64748B", marginTop: 4 },
-
   listContent: { padding: 16, paddingTop: 8, paddingBottom: 100 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: {
@@ -560,7 +534,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  // Card
+  // Card Styles
   card: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -589,7 +563,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   description: { fontSize: 14, color: "#475569", lineHeight: 20 },
-
   cardFooterRow: {
     marginTop: 12,
     borderTopWidth: 1,
@@ -601,10 +574,8 @@ const styles = StyleSheet.create({
   },
   footerLeft: { gap: 6 },
   footerRight: {},
-
   detailItem: { flexDirection: "row", alignItems: "center", gap: 8 },
   detailText: { fontSize: 13, color: "#334155" },
-
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -619,7 +590,7 @@ const styles = StyleSheet.create({
   statusPending: { backgroundColor: "#FFFBEB" },
   statusPendingText: { color: "#B45309" },
 
-  // Modal
+  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -642,7 +613,6 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: "800", color: "#0F172A" },
   closeButton: { padding: 4 },
   modalBody: { marginBottom: 20 },
-
   sectionBox: {
     marginBottom: 20,
     backgroundColor: "#F8FAFC",
@@ -658,7 +628,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textTransform: "uppercase",
   },
-
   rowItem: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -673,7 +642,6 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "right",
   },
-
   descriptionText: { fontSize: 15, color: "#334155", lineHeight: 22 },
   timeText: {
     fontSize: 13,
@@ -681,10 +649,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontStyle: "italic",
   },
-
-  miniBadge: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 6 },
-  miniBadgeText: { fontSize: 12, fontWeight: "600" },
-
   modalButton: {
     backgroundColor: "#EA580C",
     paddingVertical: 14,

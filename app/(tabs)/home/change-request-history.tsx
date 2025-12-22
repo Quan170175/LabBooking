@@ -273,14 +273,13 @@ export default function LecturerChangeRequestsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Cấu hình App Header: Title rỗng để đỡ lặp lại với Header to bên dưới, hoặc bạn có thể để title="Lịch sử" */}
       <Stack.Screen
         options={{
-          title: "", // Để trống vì đã có tiêu đề to bên dưới
-          headerShadowVisible: false, // Xóa gạch chân header để liền mạch với màu nền
+          title: "",
+          headerShadowVisible: false,
           headerStyle: { backgroundColor: "#FFF7ED" },
           headerTintColor: "#000",
-          headerShown: true, // BẮT BUỘC TRUE ĐỂ HIỆN NÚT BACK
+          headerShown: true,
         }}
       />
 
@@ -293,7 +292,7 @@ export default function LecturerChangeRequestsScreen() {
           data={filteredRequests}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          ListHeaderComponent={ListHeader} // Header to nằm ở đây
+          ListHeaderComponent={ListHeader}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -322,7 +321,6 @@ const styles = StyleSheet.create({
   headerContainer: {
     paddingHorizontal: 20,
     paddingBottom: 20,
-    // Không cần paddingTop lớn nữa vì đã có App Header
   },
   headerTitle: {
     fontSize: 28,
