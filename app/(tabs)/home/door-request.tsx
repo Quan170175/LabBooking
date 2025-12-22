@@ -27,11 +27,11 @@ import {
   CheckCircle2,
   XCircle,
   Search,
-  Eye, // [NEW] Icon xem chi tiết
-  User, // [NEW] Icon user
-  Mail, // [NEW] Icon email
-  Phone, // [NEW] Icon phone
-  Building2, // [NEW] Icon phòng lab
+  Eye,
+  User,
+  Mail,
+  Phone,
+  Building2,
 } from "lucide-react-native";
 
 import apiClient from "../../../utils/api";
@@ -59,7 +59,6 @@ interface BookingLookupInfo {
   requesterPhoneNumber: string;
 }
 
-// [NEW] Interface chi tiết yêu cầu lấy từ API /id
 interface DoorRequestDetail {
   id: string;
   bookingCode: string;

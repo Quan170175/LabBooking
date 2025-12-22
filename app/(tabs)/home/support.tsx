@@ -27,14 +27,12 @@ import {
 
 import apiClient from "../../../utils/api";
 
-// --- Types ---
 type FAQItem = {
   id: string | number;
   question: string;
   answer: string;
 };
 
-// Cập nhật Type: Thêm field answer
 type SupportTicket = {
   id: string;
   title: string;
@@ -123,7 +121,6 @@ export default function SupportScreen() {
     ]);
   }
 
-  // 🟢 2. POST Ticket
   async function submitTicket() {
     if (!subject.trim() || !message.trim()) {
       Alert.alert(
@@ -164,23 +161,21 @@ export default function SupportScreen() {
     setExpandedFaqId(expandedFaqId === id ? null : id);
   };
 
-  // Helper render status (Updated Logic)
   const renderStatus = (status: string) => {
-    // Enum logic: Pending | Responded | Ignored
     let label = "Đang chờ";
-    let color = "#D97706"; // Yellow text
-    let bg = "#FEF3C7"; // Yellow bg
+    let color = "#D97706";
+    let bg = "#FEF3C7";
 
     const s = status || "Pending";
 
     if (s === "Responded") {
       label = "Đã phản hồi";
-      color = "#15803d"; // Green text
-      bg = "#dcfce7"; // Green bg
+      color = "#15803d";
+      bg = "#dcfce7";
     } else if (s === "Ignored") {
-      label = "Từ chối"; // <-- Đã sửa text
-      color = "#DC2626"; // Red text (Đỏ đậm hơn chút cho dễ đọc)
-      bg = "#FEE2E2"; // Red bg (Nền đỏ nhạt cảnh báo)
+      label = "Từ chối";
+      color = "#DC2626";
+      bg = "#FEE2E2";
     }
 
     return (
@@ -276,7 +271,6 @@ export default function SupportScreen() {
             <View style={styles.ticketList}>
               {tickets.map((t) => (
                 <View key={t.id} style={styles.ticketItem}>
-                  {/* Ticket Header */}
                   <View style={styles.ticketHeader}>
                     <Text style={styles.ticketSubject} numberOfLines={1}>
                       {t.title}
@@ -318,7 +312,7 @@ export default function SupportScreen() {
                     </View>
                   )}
 
-                  {/* --- KHỐI HIỂN THỊ KHI BỊ TỪ CHỐI (IGNORE) --- */}
+                  {/* --- KHỐI HIỂN THỊ KHI BỊ TỪ CHỐI  --- */}
                   {t.status === "Ignored" && (
                     <View style={styles.ignoredBox}>
                       <Text style={styles.ignoredText}>

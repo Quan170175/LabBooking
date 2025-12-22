@@ -1,3 +1,5 @@
+// (tabs)/SecurityHistoryScreen.tsx
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -15,8 +17,9 @@ import {
   StatusBar,
   Platform,
 } from "react-native";
-import { Stack } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { jwtDecode } from "jwt-decode";
 import {
   Trash2,
   CheckCircle,
@@ -26,11 +29,13 @@ import {
   ChevronDown,
   Check,
   X,
-  Filter, // Icon phễu cho Loại
-  MapPin, // Icon cho Phòng
-  Calendar as CalendarIcon, // Icon cho Ngày
+  Filter,
+  MapPin,
+  Calendar as CalendarIcon,
   Clock,
+  User,
 } from "lucide-react-native";
+
 import apiClient from "../../../../utils/api";
 
 // --- TYPES ---
@@ -63,7 +68,7 @@ const TYPE_OPTIONS: TypeOption[] = [
   { id: "CheckOut", label: "Check Out (Ra)" },
 ];
 
-// --- HELPER: Format Date ---
+// --- HELPER FUNCTIONS ---
 const formatDateTime = (isoString: string) => {
   if (!isoString) return "";
   const date = new Date(isoString);
@@ -83,58 +88,40 @@ const formatDateOnly = (date: Date) => {
     .padStart(2, "0")}/${date.getFullYear()}`;
 };
 
-// --- REUSABLE COMPONENT: COMMON DROPDOWN TRIGGER ---
-// Component này tạo giao diện nút bấm giống hệt nhau cho cả 3 bộ lọc
-const FilterTrigger = ({
-  label,
-  icon,
-  isActive,
-  onPress,
-  onClear,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  isActive: boolean;
-  onPress: () => void;
-  onClear?: () => void;
-}) => {
-  return (
-    <TouchableOpacity
-      style={[styles.dropdownTrigger, isActive && styles.dropdownTriggerActive]}
-      onPress={onPress}
-      activeOpacity={0.7}
+// --- COMPONENTS ---
+const FilterTrigger = ({ label, icon, isActive, onPress, onClear }: any) => (
+  <TouchableOpacity
+    style={[styles.dropdownTrigger, isActive && styles.dropdownTriggerActive]}
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
+    <View
+      style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}
     >
-      <View
-        style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}
+      {icon}
+      <Text
+        numberOfLines={1}
+        style={[styles.dropdownValue, isActive && styles.dropdownValueActive]}
       >
-        {icon}
-        <Text
-          numberOfLines={1}
-          style={[styles.dropdownValue, isActive && styles.dropdownValueActive]}
-        >
-          {label}
-        </Text>
-      </View>
+        {label}
+      </Text>
+    </View>
+    {isActive && onClear ? (
+      <TouchableOpacity
+        onPress={(e) => {
+          e.stopPropagation();
+          onClear();
+        }}
+        style={styles.clearBtnMin}
+      >
+        <X size={14} color="white" />
+      </TouchableOpacity>
+    ) : (
+      <ChevronDown size={18} color={isActive ? "#EA580C" : "#64748B"} />
+    )}
+  </TouchableOpacity>
+);
 
-      {/* Nếu đang active và có hàm clear thì hiện nút X, ngược lại hiện mũi tên */}
-      {isActive && onClear ? (
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation(); // Chặn sự kiện click xuyên qua
-            onClear();
-          }}
-          style={styles.clearBtnMin}
-        >
-          <X size={14} color="white" />
-        </TouchableOpacity>
-      ) : (
-        <ChevronDown size={18} color={isActive ? "#EA580C" : "#64748B"} />
-      )}
-    </TouchableOpacity>
-  );
-};
-
-// --- COMPONENT: SELECTION MODAL (Dùng chung cho Lab và Type) ---
 const SelectionModal = ({
   visible,
   onClose,
@@ -142,112 +129,124 @@ const SelectionModal = ({
   options,
   selectedValue,
   onSelect,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  title: string;
-  options: { id: string; label: string }[]; // Chuẩn hóa dữ liệu đầu vào
-  selectedValue: string | null;
-  onSelect: (val: string | null) => void;
-}) => {
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.sheetOverlay}>
-          <TouchableWithoutFeedback>
-            <View style={styles.sheetContent}>
-              <View style={styles.sheetHeaderDropdown}>
-                <Text style={styles.sheetTitle}>{title}</Text>
-                <TouchableOpacity onPress={onClose}>
-                  <X size={24} color="#64748B" />
-                </TouchableOpacity>
-              </View>
-              <ScrollView
-                style={{ maxHeight: 400 }}
-                showsVerticalScrollIndicator={false}
-              >
-                {options.map((item) => {
-                  // Logic check active:
-                  // - Với Lab: selectedValue là string ID hoặc null. item.id là string ID.
-                  // - Với Type: selectedValue là "All" | "CheckIn"...
-                  // Ta so sánh trực tiếp. Lưu ý Lab "Tất cả" thường là null, nên cần xử lý riêng ở parent.
-                  const isActive = selectedValue === item.id;
-
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[
-                        styles.sheetItem,
-                        isActive && styles.sheetItemActive,
-                      ]}
-                      onPress={() => {
-                        onSelect(item.id);
-                        onClose();
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.sheetItemText,
-                          isActive && styles.sheetItemTextActive,
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                      {isActive && <Check size={18} color="#EA580C" />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+}: any) => (
+  <Modal visible={visible} transparent animationType="fade">
+    <TouchableWithoutFeedback onPress={onClose}>
+      <View style={styles.sheetOverlay}>
+        <TouchableWithoutFeedback>
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHeaderDropdown}>
+              <Text style={styles.sheetTitle}>{title}</Text>
+              <TouchableOpacity onPress={onClose}>
+                <X size={24} color="#64748B" />
+              </TouchableOpacity>
             </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
-  );
-};
+            <ScrollView
+              style={{ maxHeight: 400 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {options.map((item: any) => {
+                const isActive = selectedValue === item.id;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.sheetItem,
+                      isActive && styles.sheetItemActive,
+                    ]}
+                    onPress={() => {
+                      onSelect(item.id);
+                      onClose();
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.sheetItemText,
+                        isActive && styles.sheetItemTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                    {isActive && <Check size={18} color="#EA580C" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableWithoutFeedback>
+      </View>
+    </TouchableWithoutFeedback>
+  </Modal>
+);
 
 // --- MAIN SCREEN ---
 export default function SecurityHistoryScreen() {
-  // State Data
   const [historyList, setHistoryList] = useState<RoomCheckHistoryItem[]>([]);
   const [labOptions, setLabOptions] = useState<LabOption[]>([]);
 
-  // State Filters
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<FilterType>("All");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
-  // State UI Modals
   const [showLabModal, setShowLabModal] = useState(false);
   const [showTypeModal, setShowTypeModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // State List
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
-  // Detail Modal
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<RoomCheckHistoryItem | null>(
     null
   );
 
-  // --- 1. INIT ---
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Logic check role (chuẩn hóa chữ thường)
+  const isSecurityGuard =
+    (userRole || "").trim().toLowerCase() === "securityguard";
+
+  // --- 1. INIT DATA: Lấy Role từ SecureStore ---
   useEffect(() => {
-    const fetchDropdownData = async () => {
+    const initData = async () => {
       try {
+        const token = await SecureStore.getItemAsync("accessToken");
+        let finalRole = null;
+
+        if (token) {
+          try {
+            const decoded: any = jwtDecode(token);
+            finalRole =
+              decoded["role"] ||
+              decoded[
+                "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
+              ] ||
+              decoded["Role"] ||
+              null;
+
+            if (Array.isArray(finalRole)) {
+              if (finalRole.includes("SecurityGuard"))
+                finalRole = "SecurityGuard";
+              else finalRole = finalRole[0];
+            }
+          } catch (e) {
+            console.error("❌ Error decoding token:", e);
+          }
+        }
+        setUserRole(finalRole);
+
         const res = await apiClient.get("/api/LabRooms", {
           params: { PageSize: 10, PageNumber: 1 },
         });
         setLabOptions(res.data.items || []);
       } catch (err) {
-        console.error("Failed to load labs", err);
+        console.error("Failed to load init data", err);
       }
     };
-    fetchDropdownData();
+    initData();
   }, []);
 
   // --- 2. FETCH HISTORY ---
@@ -257,23 +256,18 @@ export default function SecurityHistoryScreen() {
 
       const params: any = {
         PageSize: 10,
-        PageNumber: 1,
+        PageNumber: pageToLoad,
         SortBy: "checkedAt",
         SortDirection: "Descending",
       };
 
-      // Filter Lab
       if (selectedLabId) {
         const selectedLab = labOptions.find((l) => l.id === selectedLabId);
         if (selectedLab) params.SearchPhrase = selectedLab.labName;
       }
 
-      // Filter Type
-      if (filterType !== "All") {
-        params.Type = filterType;
-      }
+      if (filterType !== "All") params.Type = filterType;
 
-      // Filter Date
       if (selectedDate) {
         const startDate = new Date(selectedDate);
         startDate.setHours(0, 0, 0, 0);
@@ -286,11 +280,9 @@ export default function SecurityHistoryScreen() {
       const res = await apiClient.get("/api/RoomChecks", { params });
       const newItems = res.data.items || [];
 
-      if (shouldRefresh) {
-        setHistoryList(newItems);
-      } else {
-        setHistoryList((prev) => [...prev, ...newItems]);
-      }
+      if (shouldRefresh) setHistoryList(newItems);
+      else setHistoryList((prev) => [...prev, ...newItems]);
+
       setHasMore(newItems.length >= 10);
     } catch (error) {
       console.error("Fetch history error:", error);
@@ -306,7 +298,7 @@ export default function SecurityHistoryScreen() {
     fetchHistory(1, true);
   }, [selectedLabId, filterType, selectedDate]);
 
-  // --- 3. HANDLERS ---
+  // --- HANDLERS ---
   const handleDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") setShowDatePicker(false);
     if (date) setSelectedDate(date);
@@ -318,6 +310,10 @@ export default function SecurityHistoryScreen() {
   };
 
   const handleDelete = (id: string) => {
+    if (!isSecurityGuard) {
+      Alert.alert("Quyền hạn", "Chỉ SecurityGuard mới được xóa.");
+      return;
+    }
     Alert.alert("Xác nhận xóa", "Bạn có chắc chắn muốn xóa bản ghi này?", [
       { text: "Hủy", style: "cancel" },
       {
@@ -328,9 +324,10 @@ export default function SecurityHistoryScreen() {
             await apiClient.delete(`/api/RoomChecks/${id}`);
             setHistoryList((prev) => prev.filter((item) => item.id !== id));
             Alert.alert("Thành công", "Đã xóa bản ghi.");
+            if (detailVisible) setDetailVisible(false);
           } catch (error: any) {
-            const msg = error.response?.data?.message || "Lỗi không xác định";
-            Alert.alert("Không thể xóa", msg);
+            const msg = error.response?.data?.message || "Lỗi server";
+            Alert.alert("Lỗi", msg);
           }
         },
       },
@@ -358,15 +355,13 @@ export default function SecurityHistoryScreen() {
     const found = labOptions.find((l) => l.id === selectedLabId);
     return found ? found.labName : "Tất cả phòng";
   };
+  const getTypeLabel = () =>
+    TYPE_OPTIONS.find((t) => t.id === filterType)?.label || "Tất cả loại";
 
-  const getTypeLabel = () => {
-    const found = TYPE_OPTIONS.find((t) => t.id === filterType);
-    return found ? found.label : "Tất cả loại";
-  };
-
-  // --- RENDER UI ---
+  // --- RENDER ITEM ---
   const renderItem = ({ item }: { item: RoomCheckHistoryItem }) => {
     const isCheckIn = item.type === "CheckIn";
+
     return (
       <TouchableOpacity
         style={styles.card}
@@ -376,6 +371,9 @@ export default function SecurityHistoryScreen() {
         <View style={styles.cardHeaderRow}>
           <View style={styles.headerLeftInfo}>
             <Text style={styles.labName}>{item.labRoomName}</Text>
+
+            {/* Đã ẩn hoàn toàn tên guard ở ngoài list */}
+
             <View
               style={{
                 flexDirection: "row",
@@ -389,12 +387,15 @@ export default function SecurityHistoryScreen() {
               </Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleDelete(item.id)}
-          >
-            <Trash2 size={20} color="#EF4444" />
-          </TouchableOpacity>
+
+          {isSecurityGuard && (
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDelete(item.id)}
+            >
+              <Trash2 size={20} color="#EF4444" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.divider} />
@@ -418,6 +419,7 @@ export default function SecurityHistoryScreen() {
             )}
             <Text style={styles.slotName}>{item.slotName}</Text>
           </View>
+
           <View
             style={{
               marginTop: 10,
@@ -448,18 +450,16 @@ export default function SecurityHistoryScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
-
-      {/* HEADER */}
       <View style={styles.pageHeaderContainer}>
         <Text style={styles.pageTitle}>Lịch sử kiểm tra</Text>
         <Text style={styles.pageDescription}>
-          Quản lý và tra cứu lịch sử Check In/Out
+          {isSecurityGuard
+            ? "Chế độ: Bảo vệ (SecurityGuard)"
+            : "Chế độ: Xem (Chỉ đọc)"}
         </Text>
       </View>
 
-      {/* FILTERS CONTAINER */}
       <View style={styles.filterContainer}>
-        {/* Row 1: Lab Dropdown (Full Width) */}
         <FilterTrigger
           label={getLabLabel()}
           icon={
@@ -469,10 +469,7 @@ export default function SecurityHistoryScreen() {
           onPress={() => setShowLabModal(true)}
           onClear={() => setSelectedLabId(null)}
         />
-
-        {/* Row 2: Date & Type Dropdowns (Split 50-50) */}
         <View style={styles.filterRowTwo}>
-          {/* DATE DROPDOWN */}
           <View style={{ flex: 1 }}>
             <FilterTrigger
               label={selectedDate ? formatDateOnly(selectedDate) : "Chọn ngày"}
@@ -487,8 +484,6 @@ export default function SecurityHistoryScreen() {
               onClear={() => setSelectedDate(null)}
             />
           </View>
-
-          {/* TYPE DROPDOWN */}
           <View style={{ flex: 1 }}>
             <FilterTrigger
               label={getTypeLabel()}
@@ -500,7 +495,6 @@ export default function SecurityHistoryScreen() {
               }
               isActive={filterType !== "All"}
               onPress={() => setShowTypeModal(true)}
-              // Nếu Type != All thì coi như active, onClear set về All
               onClear={
                 filterType !== "All" ? () => setFilterType("All") : undefined
               }
@@ -509,7 +503,6 @@ export default function SecurityHistoryScreen() {
         </View>
       </View>
 
-      {/* LIST */}
       <FlatList
         data={historyList}
         keyExtractor={(item) => item.id}
@@ -536,33 +529,30 @@ export default function SecurityHistoryScreen() {
         }
       />
 
-      {/* --- MODALS --- */}
-
-      {/* 1. Lab Selection Modal */}
+      {/* MODALS */}
       <SelectionModal
         visible={showLabModal}
         onClose={() => setShowLabModal(false)}
         title="Chọn phòng Lab"
-        // Thêm option "Tất cả" vào đầu list để render
         options={[
           { id: "ALL_LABS_DUMMY", label: "Tất cả các phòng" },
           ...labOptions.map((l) => ({ id: l.id, label: l.labName })),
         ]}
         selectedValue={selectedLabId || "ALL_LABS_DUMMY"}
-        onSelect={(id) => setSelectedLabId(id === "ALL_LABS_DUMMY" ? null : id)}
+        onSelect={(id: any) =>
+          setSelectedLabId(id === "ALL_LABS_DUMMY" ? null : id)
+        }
       />
 
-      {/* 2. Type Selection Modal */}
       <SelectionModal
         visible={showTypeModal}
         onClose={() => setShowTypeModal(false)}
-        title="Chọn loại kiểm tra"
+        title="Chọn loại"
         options={TYPE_OPTIONS}
         selectedValue={filterType}
-        onSelect={(id) => setFilterType(id as FilterType)}
+        onSelect={(id: any) => setFilterType(id)}
       />
 
-      {/* 3. Date Picker Logic */}
       {showDatePicker && (
         <DateTimePicker
           value={selectedDate || new Date()}
@@ -573,7 +563,6 @@ export default function SecurityHistoryScreen() {
         />
       )}
 
-      {/* iOS Date Picker Overlay Fix */}
       {Platform.OS === "ios" && showDatePicker && (
         <Modal transparent animationType="fade">
           <View style={styles.iosDatePickerOverlay}>
@@ -597,24 +586,19 @@ export default function SecurityHistoryScreen() {
         </Modal>
       )}
 
-      {/* 4. Detail Modal (Giữ nguyên logic của bạn) */}
+      {/* DETAIL MODAL */}
       {detailVisible && selectedItem && (
         <Modal visible={detailVisible} transparent animationType="slide">
           <TouchableWithoutFeedback onPress={() => setDetailVisible(false)}>
             <View style={styles.modalOverlay}>
               <TouchableWithoutFeedback>
                 <View style={styles.modalContent}>
-                  {/* Header Detail */}
                   <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>Chi tiết kiểm tra</Text>
-                    <TouchableOpacity
-                      onPress={() => setDetailVisible(false)}
-                      style={{ padding: 4 }}
-                    >
+                    <TouchableOpacity onPress={() => setDetailVisible(false)}>
                       <X size={24} color="#64748B" />
                     </TouchableOpacity>
                   </View>
-                  {/* Body Detail (Copy nội dung cũ vào đây cho gọn) */}
                   <View style={{ marginBottom: 20 }}>
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Phòng:</Text>
@@ -622,6 +606,18 @@ export default function SecurityHistoryScreen() {
                         {selectedItem.labRoomName}
                       </Text>
                     </View>
+
+                    {/* ✅ SỬA Ở ĐÂY: Nếu KHÔNG phải bảo vệ thì mới hiện tên bảo vệ */}
+                    {!isSecurityGuard && (
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Bảo vệ:</Text>
+                        <Text style={styles.detailValue}>
+                          {selectedItem.guardName || "Unknown"}
+                        </Text>
+                      </View>
+                    )}
+                    {/* -------------------------------------------------------- */}
+
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Thời gian:</Text>
                       <Text style={styles.detailValue}>
@@ -635,17 +631,17 @@ export default function SecurityHistoryScreen() {
                       </Text>
                     </View>
                   </View>
-                  {/* Footer Delete */}
-                  <TouchableOpacity
-                    style={styles.modalDeleteBtn}
-                    onPress={() => {
-                      setDetailVisible(false);
-                      setTimeout(() => handleDelete(selectedItem.id), 300);
-                    }}
-                  >
-                    <Trash2 size={18} color="white" />
-                    <Text style={styles.modalDeleteText}>Xóa bản ghi này</Text>
-                  </TouchableOpacity>
+                  {isSecurityGuard && (
+                    <TouchableOpacity
+                      style={styles.modalDeleteBtn}
+                      onPress={() => handleDelete(selectedItem.id)}
+                    >
+                      <Trash2 size={18} color="white" />
+                      <Text style={styles.modalDeleteText}>
+                        Xóa bản ghi này
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </TouchableWithoutFeedback>
             </View>
@@ -670,12 +666,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   pageDescription: { fontSize: 15, color: "#64748B" },
-
-  // --- FILTER STYLES ---
   filterContainer: { paddingHorizontal: 20, marginBottom: 10 },
   filterRowTwo: { flexDirection: "row", gap: 10, marginTop: 10 },
-
-  // Universal Dropdown Styles
   dropdownTrigger: {
     flexDirection: "row",
     alignItems: "center",
@@ -688,13 +680,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     height: 48,
   },
-  dropdownTriggerActive: {
-    borderColor: "#EA580C",
-    backgroundColor: "#FFF7ED",
-  },
+  dropdownTriggerActive: { borderColor: "#EA580C", backgroundColor: "#FFF7ED" },
   dropdownValue: { fontSize: 14, color: "#334155", fontWeight: "600", flex: 1 },
   dropdownValueActive: { color: "#EA580C" },
-
   clearBtnMin: {
     backgroundColor: "#FB923C",
     borderRadius: 10,
@@ -703,8 +691,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  // --- SHEET / MODAL STYLES ---
   sheetOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -745,32 +731,6 @@ const styles = StyleSheet.create({
   },
   sheetItemText: { fontSize: 16, color: "#334155" },
   sheetItemTextActive: { color: "#EA580C", fontWeight: "600" },
-
-  // --- IOS Date Picker ---
-  iosDatePickerOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  iosDatePickerContent: {
-    backgroundColor: "white",
-    borderRadius: 16,
-    padding: 20,
-    width: "90%",
-    alignItems: "center",
-  },
-  iosCloseBtn: {
-    marginTop: 10,
-    padding: 10,
-    width: "100%",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderColor: "#eee",
-  },
-  iosCloseText: { color: "#007AFF", fontSize: 18, fontWeight: "600" },
-
-  // --- CARD & LIST ---
   card: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -788,14 +748,17 @@ const styles = StyleSheet.create({
   },
   headerLeftInfo: { flex: 1, paddingRight: 10 },
   labName: { fontSize: 16, fontWeight: "bold", color: "#1E293B" },
+  guardRowMin: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
+  guardTextMin: { fontSize: 13, color: "#64748B", fontStyle: "italic" },
   dateText: { fontSize: 12, color: "#64748B", fontWeight: "500" },
   deleteButton: { padding: 8, backgroundColor: "#FEF2F2", borderRadius: 8 },
-
   divider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 8 },
-
-  // ---> ĐÃ THÊM STYLE BỊ THIẾU TẠI ĐÂY <---
   cardBody: { flexDirection: "column" },
-
   infoRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   slotName: { fontSize: 14, color: "#334155", fontWeight: "500" },
   tag: {
@@ -811,8 +774,6 @@ const styles = StyleSheet.create({
   tagText: { fontSize: 12, fontWeight: "700" },
   statusText: { fontSize: 14, fontWeight: "600" },
   emptyText: { textAlign: "center", marginTop: 40, color: "#94A3B8" },
-
-  // --- DETAIL MODAL ---
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -859,4 +820,26 @@ const styles = StyleSheet.create({
     marginTop: "auto",
   },
   modalDeleteText: { color: "white", fontWeight: "bold", fontSize: 16 },
+  iosDatePickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iosDatePickerContent: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 20,
+    width: "90%",
+    alignItems: "center",
+  },
+  iosCloseBtn: {
+    marginTop: 10,
+    padding: 10,
+    width: "100%",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderColor: "#eee",
+  },
+  iosCloseText: { color: "#007AFF", fontSize: 18, fontWeight: "600" },
 });

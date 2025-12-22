@@ -72,8 +72,6 @@ export default function Profile() {
   const router = useRouter();
 
   const [isLogoutModalOpen, setLogoutModalOpen] = useState(false);
-
-  // 🟢 3. STATE CHO USER VÀ AVATAR
   const [userName, setUserName] = useState("Người dùng");
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
@@ -92,7 +90,6 @@ export default function Profile() {
       try {
         const response = await apiClient.get<UserProfile>("/api/Auth/profile");
         if (response.data) {
-          // 🟢 4. SET DỮ LIỆU TỪ API
           if (response.data.userName) setUserName(response.data.userName);
           if (response.data.avatarUrl) setUserAvatar(response.data.avatarUrl);
         }
@@ -153,7 +150,6 @@ export default function Profile() {
       >
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            {/* 🟢 5. LOGIC HIỂN THỊ ẢNH HOẶC CHỮ CÁI ĐẦU */}
             {userAvatar ? (
               <Image
                 source={{ uri: userAvatar }}
@@ -174,7 +170,6 @@ export default function Profile() {
         </View>
       </LinearGradient>
 
-      {/* ... Phần còn lại giữ nguyên ... */}
       <View style={styles.alertCard}>
         <View style={styles.alertIconContainer}>
           <AlertCircle size={20} color="#EA580C" />
@@ -275,9 +270,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 5,
-    overflow: "hidden", // Để ảnh không bị tràn ra ngoài border radius
+    overflow: "hidden",
   },
-  // 🟢 6. STYLE MỚI CHO ẢNH
   avatarImage: {
     width: "100%",
     height: "100%",

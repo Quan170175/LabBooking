@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Vibration,
+  ActivityIndicator,
 } from "react-native";
 import {
   CameraView,
@@ -15,23 +16,30 @@ import {
 } from "expo-camera";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { decryptData } from "../../../../utils/security";
+import apiClient from "../../../../utils/api"; // 🟢 Import API Client
 
-interface StudentInfo {
-  id: string;
-  name: string;
-  class: string;
+// 🟢 Định nghĩa kiểu dữ liệu trả về từ API Verify
+interface VerifyResult {
+  isValid: boolean;
+  message: string;
+  studentName: string;
+  labName: string;
+  timeSlot: string;
 }
 
 export default function SecurityScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [data, setData] = useState<StudentInfo | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [resultData, setResultData] = useState<VerifyResult | null>(null);
 
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
       <View style={styles.center}>
-        <Text style={{ marginBottom: 10 }}>Cần quyền truy cập Camera</Text>
+        <Text style={{ marginBottom: 10, color: "white" }}>
+          Cần quyền truy cập Camera để quét mã
+        </Text>
         <TouchableOpacity onPress={requestPermission} style={styles.btnPerm}>
           <Text style={{ color: "white" }}>Cấp quyền ngay</Text>
         </TouchableOpacity>
@@ -39,43 +47,67 @@ export default function SecurityScannerScreen() {
     );
   }
 
-  const handleBarCodeScanned = ({
+  const handleBarCodeScanned = async ({
     data: rawContent,
   }: BarcodeScanningResult) => {
+    if (scanned || loading) return; // Chặn quét liên tục
     setScanned(true);
     Vibration.vibrate();
 
     try {
-      // rawContent = "https://canh-bao...?code=U2FsdGVk..."
+      setLoading(true);
 
-      // 1. Định nghĩa từ khóa phân tách
-      const splitKey = "?code=";
-
-      // 2. Kiểm tra xem có đúng Link của trường không
+      // 1. Phân tích URL để lấy phần mã hóa
+      // Code tạo QR trước đó dùng format: .../check-in?data=ENCRYPTED_STRING
+      const splitKey = "data=";
       if (!rawContent.includes(splitKey)) {
-        throw new Error("Mã QR không đúng định dạng URL");
+        throw new Error("Mã QR không đúng định dạng của hệ thống");
       }
 
-      // 3. Cắt lấy phần đuôi (Sau dấu = )
       const encryptedPart = rawContent.split(splitKey)[1];
 
-      // 4. Giải mã phần đuôi
-      const result = decryptData(encryptedPart);
+      // 2. Giải mã offline
+      const decryptedString = decryptData(encryptedPart);
+      if (!decryptedString) throw new Error("Giải mã thất bại");
 
-      // 5. Kiểm tra kết quả
-      if (result && result.id) {
-        setData(result);
-      } else {
-        throw new Error("Giải mã thất bại");
-      }
-    } catch (error) {
-      // Xử lý khi quét nhầm mã QR ngoài
+      // 3. Parse JSON để lấy requestId
+      const parsedData = JSON.parse(decryptedString);
+      if (!parsedData.requestId)
+        throw new Error("Dữ liệu không chứa Request ID");
+
+      console.log("🚀 Checking Request ID:", parsedData.requestId);
+
+      // 4. GỌI API VERIFY
+      const response = await apiClient.post("/api/DoorRequests/verify-access", {
+        requestId: parsedData.requestId,
+      });
+
+      // 5. Lưu kết quả từ Server
+      setResultData(response.data);
+    } catch (error: any) {
+      console.error("Scan Error:", error);
       Alert.alert(
-        "Mã không hợp lệ",
-        "Vui lòng quét đúng mã QR Thẻ sinh viên của nhà trường.",
-        [{ text: "Quét lại", onPress: () => setScanned(false) }]
+        "Lỗi",
+        error.message || "Không thể kiểm tra thông tin. Vui lòng thử lại.",
+        [
+          {
+            text: "Đóng",
+            onPress: () => {
+              setScanned(false);
+              setLoading(false);
+            },
+          },
+        ]
       );
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // Helper để đóng modal và reset
+  const handleClose = () => {
+    setResultData(null);
+    setScanned(false);
   };
 
   return (
@@ -86,90 +118,139 @@ export default function SecurityScannerScreen() {
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
       />
 
-      <View style={styles.overlay}>
-        <View style={styles.topOverlay}>
-          <Text style={styles.scanTitle}>MÁY QUÉT THẺ</Text>
-          <Text style={styles.scanSub}>Chỉ nhận diện mã QR nội bộ</Text>
+      {/* Loading Overlay */}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#f97316" />
+          <Text style={styles.loadingText}>Đang kiểm tra dữ liệu...</Text>
         </View>
-        <View style={styles.scanFrame}>
-          <View
-            style={[
-              styles.corner,
-              { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4 },
-            ]}
-          />
-          <View
-            style={[
-              styles.corner,
-              { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4 },
-            ]}
-          />
-          <View
-            style={[
-              styles.corner,
-              { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4 },
-            ]}
-          />
-          <View
-            style={[
-              styles.corner,
-              {
-                bottom: 0,
-                right: 0,
-                borderBottomWidth: 4,
-                borderRightWidth: 4,
-              },
-            ]}
-          />
-        </View>
-      </View>
+      )}
 
-      <Modal visible={!!data} transparent animationType="slide">
+      {/* Khung quét UI */}
+      {!resultData && (
+        <View style={styles.overlay}>
+          <View style={styles.topOverlay}>
+            <Text style={styles.scanTitle}>QUÉT VÉ VÀO LAB</Text>
+            <Text style={styles.scanSub}>Di chuyển camera vào vùng mã QR</Text>
+          </View>
+          <View style={styles.scanFrame}>
+            <View
+              style={[
+                styles.corner,
+                { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4 },
+              ]}
+            />
+            <View
+              style={[
+                styles.corner,
+                { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4 },
+              ]}
+            />
+            <View
+              style={[
+                styles.corner,
+                {
+                  bottom: 0,
+                  left: 0,
+                  borderBottomWidth: 4,
+                  borderLeftWidth: 4,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.corner,
+                {
+                  bottom: 0,
+                  right: 0,
+                  borderBottomWidth: 4,
+                  borderRightWidth: 4,
+                },
+              ]}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Modal Kết Quả */}
+      <Modal visible={!!resultData} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.resultCard}>
-            <View style={styles.successHeader}>
-              <Feather name="check-circle" size={40} color="white" />
-              <Text style={styles.successText}>HỢP LỆ</Text>
+            {/* Header: Xanh nếu Valid, Đỏ nếu Invalid */}
+            <View
+              style={[
+                styles.resultHeader,
+                {
+                  backgroundColor: resultData?.isValid ? "#22c55e" : "#ef4444",
+                },
+              ]}
+            >
+              <Feather
+                name={resultData?.isValid ? "check-circle" : "x-circle"}
+                size={48}
+                color="white"
+              />
+              <Text style={styles.resultHeaderText}>
+                {resultData?.isValid ? "HỢP LỆ" : "TỪ CHỐI"}
+              </Text>
+              <Text style={styles.resultHeaderSub}>{resultData?.message}</Text>
             </View>
 
             <View style={styles.contentBody}>
-              <View style={styles.infoRow}>
-                <Feather name="user" size={24} color="#555" />
-                <View style={styles.textWrap}>
-                  <Text style={styles.label}>Họ và tên</Text>
-                  <Text style={styles.value}>{data?.name}</Text>
+              {/* Chỉ hiển thị thông tin chi tiết nếu có dữ liệu trả về */}
+              {resultData?.studentName && (
+                <>
+                  <View style={styles.infoRow}>
+                    <Feather name="user" size={24} color="#64748b" />
+                    <View style={styles.textWrap}>
+                      <Text style={styles.label}>Sinh viên</Text>
+                      <Text style={styles.value}>{resultData.studentName}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.divider} />
+                </>
+              )}
+
+              {resultData?.labName && (
+                <>
+                  <View style={styles.infoRow}>
+                    <MaterialCommunityIcons
+                      name="door-open"
+                      size={24}
+                      color="#64748b"
+                    />
+                    <View style={styles.textWrap}>
+                      <Text style={styles.label}>Phòng Lab</Text>
+                      <Text style={styles.value}>{resultData.labName}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.divider} />
+                </>
+              )}
+
+              {resultData?.timeSlot && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="time-outline" size={24} color="#64748b" />
+                  <View style={styles.textWrap}>
+                    <Text style={styles.label}>Khung giờ</Text>
+                    <Text style={[styles.value, { color: "#f97316" }]}>
+                      {resultData.timeSlot}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.infoRow}>
-                <Ionicons name="id-card-outline" size={24} color="#555" />
-                <View style={styles.textWrap}>
-                  <Text style={styles.label}>Mã số</Text>
-                  <Text style={styles.value}>{data?.id}</Text>
-                </View>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons
-                  name="google-classroom"
-                  size={24}
-                  color="#555"
-                />
-                <View style={styles.textWrap}>
-                  <Text style={styles.label}>Lớp</Text>
-                  <Text style={styles.value}>{data?.class}</Text>
-                </View>
-              </View>
+              )}
             </View>
 
             <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={() => {
-                setData(null);
-                setScanned(false);
-              }}
+              style={[
+                styles.closeBtn,
+                {
+                  backgroundColor: resultData?.isValid ? "#166534" : "#991b1b",
+                },
+              ]}
+              onPress={handleClose}
             >
-              <Text style={styles.closeText}>XONG</Text>
+              <Text style={styles.closeText}>QUÉT TIẾP</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -180,59 +261,96 @@ export default function SecurityScannerScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "black" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "black",
+  },
   btnPerm: {
-    backgroundColor: "#2980b9",
+    backgroundColor: "#f97316",
     padding: 12,
     borderRadius: 8,
     marginTop: 10,
   },
+
+  // Loading
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+  },
+  loadingText: { color: "white", marginTop: 10, fontWeight: "600" },
+
+  // Scan Frame
   overlay: { flex: 1, alignItems: "center", justifyContent: "center" },
-  topOverlay: { position: "absolute", top: 60, alignItems: "center" },
-  scanTitle: { color: "#00ff00", fontSize: 20, fontWeight: "bold" },
-  scanSub: { color: "white", fontSize: 14, opacity: 0.8 },
-  scanFrame: { width: 260, height: 260, position: "relative" },
+  topOverlay: { position: "absolute", top: 80, alignItems: "center" },
+  scanTitle: {
+    color: "#f97316",
+    fontSize: 24,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  scanSub: { color: "white", fontSize: 14, opacity: 0.9, marginTop: 5 },
+  scanFrame: { width: 280, height: 280, position: "relative" },
   corner: {
     position: "absolute",
     width: 40,
     height: 40,
-    borderColor: "#00ff00",
+    borderColor: "#f97316",
   },
+
+  // Modal
   modalBg: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "rgba(0,0,0,0.8)",
     justifyContent: "center",
     alignItems: "center",
   },
   resultCard: {
     width: "85%",
     backgroundColor: "white",
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: "hidden",
   },
-  successHeader: {
-    backgroundColor: "#27ae60",
-    padding: 20,
+  resultHeader: {
+    padding: 25,
     alignItems: "center",
+    justifyContent: "center",
   },
-  successText: {
+  resultHeaderText: {
     color: "white",
-    fontWeight: "bold",
-    fontSize: 18,
-    marginTop: 5,
+    fontWeight: "900",
+    fontSize: 24,
+    marginTop: 10,
+    letterSpacing: 1,
   },
-  contentBody: { padding: 20 },
+  resultHeaderSub: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 14,
+    marginTop: 5,
+    textAlign: "center",
+  },
+  contentBody: { padding: 25 },
   infoRow: { flexDirection: "row", alignItems: "center", marginVertical: 8 },
-  textWrap: { marginLeft: 15 },
-  label: { fontSize: 12, color: "#888" },
-  value: { fontSize: 18, fontWeight: "bold", color: "#333" },
-  divider: { height: 1, backgroundColor: "#f0f0f0", marginVertical: 5 },
+  textWrap: { marginLeft: 15, flex: 1 },
+  label: { fontSize: 13, color: "#94a3b8", marginBottom: 2 },
+  value: { fontSize: 17, fontWeight: "700", color: "#334155" },
+  divider: {
+    height: 1,
+    backgroundColor: "#e2e8f0",
+    marginVertical: 8,
+    marginLeft: 40,
+  },
+
   closeBtn: {
-    backgroundColor: "#34495e",
-    padding: 15,
+    padding: 16,
     margin: 20,
-    borderRadius: 8,
+    marginTop: 0,
+    borderRadius: 12,
     alignItems: "center",
   },
-  closeText: { color: "white", fontWeight: "bold" },
+  closeText: { color: "white", fontWeight: "bold", fontSize: 16 },
 });

@@ -9,13 +9,10 @@ import {
   View,
 } from "react-native";
 
-// Components
 import BookingDetailModal from "../../../../components/manager/BookingDetailModal";
 import ManagerApprovalCard from "../../../../components/manager/ManagerApprovalCard";
 import ManagerChangeCard from "../../../../components/manager/ManagerChangeCard";
-// 👇 IMPORT MODAL MỚI
 import RejectModal from "../../../../components/manager/RejectModal";
-
 import apiClient from "../../../../utils/api";
 
 type ActiveTab = "booking" | "change";

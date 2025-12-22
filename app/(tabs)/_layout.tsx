@@ -3,9 +3,6 @@ import { Bell, Home, Menu, UserRound } from "lucide-react-native";
 import React from "react";
 import { Platform } from "react-native";
 
-// KHÔNG import AppHeader ở đây
-// KHÔNG dùng <View> bọc ngoài
-
 export default function TabsLayout() {
   return (
     <Tabs

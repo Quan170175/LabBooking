@@ -17,10 +17,8 @@ import {
   Alert,
 } from "react-native";
 
-// 🟢 1. IMPORT API CLIENT
 import apiClient from "../../../utils/api";
 
-// 🟢 2. ĐỊNH NGHĨA TYPE DỰA TRÊN API
 interface UserProfile {
   id: string;
   email: string;
@@ -39,7 +37,6 @@ export default function ProfileDetails() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        // Gọi API GET /api/Auth/profile
         const response = await apiClient.get<UserProfile>("/api/Auth/profile");
         setUser(response.data);
       } catch (error) {
@@ -71,9 +68,6 @@ export default function ProfileDetails() {
       {/* Header */}
       <View style={styles.header}>
         {/* Nút back nếu cần (đã có trong code gốc của bạn nhưng chưa dùng) */}
-        {/* <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-           <ArrowLeft size={20} color="#1E293B" />
-        </TouchableOpacity> */}
         <Text style={styles.headerTitle}>Thông tin cá nhân</Text>
       </View>
 
@@ -83,7 +77,6 @@ export default function ProfileDetails() {
           <UserRound size={32} color="#EA580C" />
         </View>
         <View>
-          {/* 🟢 Hiển thị tên từ API */}
           <Text style={styles.summaryName}>
             {user?.userName || "Người dùng"}
           </Text>
@@ -141,16 +134,6 @@ export default function ProfileDetails() {
             style={[styles.input, styles.readOnlyInput]}
           />
         </View>
-
-        {/* ID (Hiển thị thêm cho mục đích debug nếu cần, có thể xóa) */}
-        {/* <View style={styles.inputGroup}>
-          <Text style={styles.label}>User ID</Text>
-          <TextInput
-            value={user?.id}
-            editable={false}
-            style={[styles.input, styles.readOnlyInput, { fontSize: 12 }]}
-          />
-        </View> */}
       </View>
     </ScrollView>
   );

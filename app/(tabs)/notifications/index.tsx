@@ -16,7 +16,6 @@ import apiClient from "@/utils/api";
 
 const API_ENDPOINT = "/api/Notifications";
 
-// --- INTERFACES ---
 interface NotificationPayload {
   type: string;
   consentRequestId?: string;
@@ -48,7 +47,6 @@ interface NotificationItem {
   };
 }
 
-// --- HELPER ---
 const formatDate = (dateString?: string) => {
   if (!dateString) return "";
   try {
@@ -66,7 +64,6 @@ const formatDate = (dateString?: string) => {
   }
 };
 
-// --- COMPONENT CARD ---
 function NotificationCard({
   notification,
   onCancel,
@@ -78,7 +75,6 @@ function NotificationCard({
   onReschedule: (id: string, consentId?: string) => void;
   onMarkRead: (id: string) => void;
 }) {
-  // 1. Parse Payload để lấy trạng thái thực tế
   let consentStatus = "Pending";
   try {
     if (notification.dataPayload) {
@@ -92,31 +88,22 @@ function NotificationCard({
   // 2. Logic hiển thị
   const isRead = notification.read;
 
-  // Case A: Cần hành động (Status Pending + Là loại Actionable)
-  // Bỏ điều kiện !isRead để dù đọc rồi vẫn hiện nút nếu chưa xử lý xong
   const showActions =
     consentStatus === "Pending" &&
     notification.type === "actionable_reschedule";
 
-  // Case B: Đang chờ duyệt (Status Rescheduled)
-  // Bỏ điều kiện !isRead để dù đọc rồi vẫn hiện trạng thái chờ
   const showWaiting = consentStatus === "Rescheduled";
 
   return (
     <TouchableOpacity
-      style={[
-        styles.card,
-        isRead && styles.cardRead, // Nếu đã đọc thì hiện màu xám
-      ]}
+      style={[styles.card, isRead && styles.cardRead]}
       onPress={() => {
-        // Chỉ cho phép bấm vào thẻ để mark read khi KHÔNG PHẢI là Action/Waiting
         if (!showActions && !showWaiting) {
           onMarkRead(notification.id);
         }
       }}
       activeOpacity={0.7}
     >
-      {/* --- ICON KHÁC NHAU THEO TRẠNG THÁI --- */}
       <View
         style={[
           styles.iconContainer,
@@ -125,16 +112,12 @@ function NotificationCard({
         ]}
       >
         {showActions ? (
-          // ⚠️ Cần hành động
           <AlertTriangle size={20} color="#EA580C" />
         ) : showWaiting ? (
-          // ⏳ Đang chờ (Dùng Clock4 thay cho Hourglass)
           <Clock4 size={20} color="#D97706" />
         ) : isRead ? (
-          // ✅ Đã xong / Đã đọc
           <Check size={20} color="#94a3b8" />
         ) : (
-          // 🔔 Thông báo thường
           <Bell size={20} color="#ea580c" />
         )}
       </View>
@@ -208,11 +191,8 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // --- LẤY DỮ LIỆU ---
   const fetchNotifications = useCallback(async () => {
     try {
-      // PageSize = 10 để tránh lỗi 400
       const response = await apiClient.get(API_ENDPOINT, {
         params: { PageNumber: 1, PageSize: 10 },
       });
@@ -267,7 +247,6 @@ export default function NotificationsScreen() {
     }
   }, []);
 
-  // 👇 QUAN TRỌNG: Dùng useFocusEffect để tự reload data khi quay lại màn hình
   useFocusEffect(
     useCallback(() => {
       fetchNotifications();
@@ -302,7 +281,6 @@ export default function NotificationsScreen() {
           text: "Đồng ý Hủy",
           style: "destructive",
           onPress: async () => {
-            // Optimistic Update
             setNotifications((prev) =>
               prev.map((i) => (i.id === notiId ? { ...i, read: true } : i))
             );

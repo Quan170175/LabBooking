@@ -16,23 +16,15 @@ export default function HomeStackLayout() {
       />
       <Stack.Screen name="support" options={{ header: () => <AppHeader /> }} />
       <Stack.Screen
-        name="timetable"
-        options={{ header: () => <AppHeader /> }}
-      />
-      <Stack.Screen
         name="resources"
         options={{ header: () => <AppHeader /> }}
       />
       <Stack.Screen
-        name="doorrequest"
+        name="door-request"
         options={{ header: () => <AppHeader /> }}
       />
       <Stack.Screen
-        name="testuploadfile"
-        options={{ header: () => <AppHeader /> }}
-      />
-      <Stack.Screen
-        name="my-qrcode"
+        name="send-email"
         options={{ header: () => <AppHeader /> }}
       />
       <Stack.Screen
@@ -61,7 +53,7 @@ export default function HomeStackLayout() {
         options={{ header: () => <AppHeader /> }}
       />
       <Stack.Screen
-        name="(manager)/viewequipment"
+        name="(manager)/view-equipment"
         options={{ header: () => <AppHeader /> }}
       />
       <Stack.Screen

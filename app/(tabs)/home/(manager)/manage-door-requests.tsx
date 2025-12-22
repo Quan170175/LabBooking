@@ -31,20 +31,13 @@ import {
   DoorOpen,
   Building2,
   Search,
-  CalendarDays, // Thêm icon lịch
+  CalendarDays,
 } from "lucide-react-native";
 
-// 🟢 IMPORT API CLIENT
 import apiClient from "../../../../utils/api";
-
-// 🟢 IMPORT FILTER BAR
 import FilterSortBar, {
   FilterOption,
 } from "../../../../components/common/FilterSortBar";
-
-// ==========================================
-// 1. CONSTANTS & TYPE DEFINITIONS
-// ==========================================
 
 interface DoorRequestItem {
   id: string;
@@ -69,17 +62,15 @@ interface DoorRequestDetail {
   acceptedTime?: string;
 }
 
-// --- CẬP NHẬT: Interface Lookup theo JSON mới ---
 interface BookingLookupResponse {
   id: string;
   bookingCode: string;
   labName: string;
   date: string;
-  timeSlot: string; // Sửa timeslot -> timeSlot
+  timeSlot: string;
   requesterFullName: string;
   requesterEmail: string;
   requesterPhoneNumber: string | null;
-  // Đã xóa status
 }
 
 const PENDING_FILTER_OPTIONS: FilterOption[] = [
@@ -92,9 +83,6 @@ const HISTORY_FILTER_OPTIONS: FilterOption[] = [
   { label: "Đã từ chối", value: "Rejected" },
 ];
 
-// ==========================================
-// 2. HELPER FUNCTIONS
-// ==========================================
 const formatTime = (isoString?: string) => {
   try {
     if (!isoString) return "N/A";
@@ -155,9 +143,7 @@ const displayData = (
   return text;
 };
 
-// ==========================================
-// 3. MAIN COMPONENT
-// ==========================================
+//main component//
 export default function ManagerDoorRequestScreen() {
   // --- STATE LIST ---
   const [activeTab, setActiveTab] = useState<"pending" | "history">("pending");
@@ -190,9 +176,6 @@ export default function ManagerDoorRequestScreen() {
   const [lookupResult, setLookupResult] =
     useState<BookingLookupResponse | null>(null);
 
-  // ==========================================
-  // 4. FETCH LIST DATA
-  // ==========================================
   const fetchData = useCallback(async () => {
     if (!isRefreshing) setIsLoading(true);
     try {
@@ -244,9 +227,6 @@ export default function ManagerDoorRequestScreen() {
     fetchData();
   };
 
-  // ==========================================
-  // 5. VIEW DETAIL LOGIC
-  // ==========================================
   const handleViewDetail = async (id: string) => {
     setDetailModalVisible(true);
     setIsLoadingDetail(true);
@@ -564,9 +544,6 @@ export default function ManagerDoorRequestScreen() {
         />
       )}
 
-      {/* ========================================== */}
-      {/* MODAL 1: REJECTION REASON INPUT            */}
-      {/* ========================================== */}
       <Modal
         transparent
         visible={rejectModalVisible}
@@ -619,9 +596,6 @@ export default function ManagerDoorRequestScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ========================================== */}
-      {/* MODAL 2: DETAIL VIEW (FETCHED DATA)        */}
-      {/* ========================================== */}
       <Modal
         animationType="slide"
         transparent
@@ -791,9 +765,6 @@ export default function ManagerDoorRequestScreen() {
         </View>
       </Modal>
 
-      {/* ========================================== */}
-      {/* 🔥 MODAL 3: FIX LỖI KHOẢNG TRẮNG KHI FOCUS */}
-      {/* ========================================== */}
       <Modal
         transparent
         visible={lookupModalVisible}
@@ -1122,7 +1093,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Reject Modal
   rejectModalContent: {
     backgroundColor: "#FFF",
     borderRadius: 12,
@@ -1165,7 +1135,6 @@ const styles = StyleSheet.create({
   rejectBtnTextCancel: { color: "#64748B", fontWeight: "600" },
   rejectBtnTextConfirm: { color: "#FFF", fontWeight: "600" },
 
-  // Note Box
   noteBox: { padding: 12, borderRadius: 8, marginBottom: 16, borderWidth: 1 },
   noteBoxReject: { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
   noteBoxAccept: { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" },
@@ -1179,7 +1148,6 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  // Lookup Modal Styles
   label: {
     fontSize: 14,
     fontWeight: "600",

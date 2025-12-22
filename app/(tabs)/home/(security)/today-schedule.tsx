@@ -33,7 +33,6 @@ import {
 
 import apiClient from "../../../../utils/api";
 
-// --- 1. TYPES (GIỮ NGUYÊN ĐỂ KHÔNG BỊ LỖI TS) ---
 interface SlotDefinition {
   id: string;
   startTime: string;
@@ -76,7 +75,6 @@ const formatTimeDisplay = (timeString: string) => {
   return timeString.split(":").slice(0, 2).join(":");
 };
 
-// --- COMPONENT: DROPDOWN CHỌN PHÒNG (MỚI THÊM) ---
 const BottomSheetSelect = ({
   label,
   data,
@@ -192,7 +190,7 @@ export default function SecurityTodayScheduleScreen() {
   // State Filter (Dropdown)
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
 
-  // Modal Check-in/out State (GIỮ NGUYÊN LOGIC CŨ)
+  // Modal Check-in/out State
   const [modalVisible, setModalVisible] = useState(false);
   const [currentLab, setCurrentLab] = useState<LabScheduleUI | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -212,7 +210,7 @@ export default function SecurityTodayScheduleScreen() {
         const slotsData = slotRes.data || [];
         setSlotsDefinition(slotsData.sort((a, b) => a.slotIndex - b.slotIndex));
 
-        // Lấy danh sách Full Labs cho Dropdown (PageSize lớn để lấy hết)
+        // Lấy danh sách Full Labs
         const allLabsRes = await apiClient.get("/api/LabRooms", {
           params: { PageSize: 10, PageNumber: 1 },
         });
@@ -224,7 +222,7 @@ export default function SecurityTodayScheduleScreen() {
     initData();
   }, []);
 
-  // --- 2. FETCH LABS LIST (CÓ LOGIC SEARCH PHRASE) ---
+  // --- 2. FETCH LABS LIST  ---
   const fetchLabs = async (pageToLoad: number, shouldRefresh = false) => {
     try {
       if (shouldRefresh) setIsLoading(true);
@@ -235,8 +233,6 @@ export default function SecurityTodayScheduleScreen() {
         PageNumber: pageToLoad,
         FilterDate: today,
       };
-
-      // --- LOGIC MỚI: Dùng Dropdown ID -> Map ra Tên phòng -> Gửi SearchPhrase ---
       if (selectedLabId) {
         const selectedLab = labOptions.find((l) => l.id === selectedLabId);
         if (selectedLab) {
@@ -251,12 +247,11 @@ export default function SecurityTodayScheduleScreen() {
       });
       const labItems: LabRoomApiResponse[] = labRes.data.items || [];
 
-      // Map Slots vào Labs (Logic cũ của bạn)
       const labsWithUi: LabScheduleUI[] = labItems.map((lab) => ({
         ...lab,
         uiSlots: slotsDefinition.map((s) => ({
           ...s,
-          status: "Pending", // Mặc định pending vì chưa có API get status thật
+          status: "Pending",
           bookerName: "...",
         })),
       }));
@@ -277,7 +272,6 @@ export default function SecurityTodayScheduleScreen() {
     }
   };
 
-  // --- 3. RELOAD KHI ĐỔI DROPDOWN ---
   useEffect(() => {
     if (slotsDefinition.length > 0) {
       setPage(1);
@@ -285,7 +279,6 @@ export default function SecurityTodayScheduleScreen() {
     }
   }, [selectedLabId, slotsDefinition]);
 
-  // --- HANDLERS (GIỮ NGUYÊN LOGIC CŨ CỦA BẠN) ---
   const handleRefresh = () => {
     setIsRefreshing(true);
     setPage(1);
@@ -378,7 +371,7 @@ export default function SecurityTodayScheduleScreen() {
         </Text>
       </View>
 
-      {/* --- DROPDOWN (MỚI) --- */}
+      {/* --- DROPDOWN --- */}
       <View style={styles.filterContainer}>
         <BottomSheetSelect
           label="Lọc theo phòng"
@@ -388,7 +381,7 @@ export default function SecurityTodayScheduleScreen() {
         />
       </View>
 
-      {/* --- LIST PHÒNG (GIỮ NGUYÊN LOGIC CŨ) --- */}
+      {/* --- LIST PHÒNG  --- */}
       {isLoading && page === 1 ? (
         <ActivityIndicator
           size="large"
@@ -455,7 +448,7 @@ export default function SecurityTodayScheduleScreen() {
         />
       )}
 
-      {/* --- MODAL XỬ LÝ (GIỮ NGUYÊN LOGIC CŨ) --- */}
+      {/* --- MODAL XỬ LÝ --- */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -687,7 +680,6 @@ const styles = StyleSheet.create({
   },
   dropdownValue: { fontSize: 14, color: "#1E293B", fontWeight: "500" },
 
-  // Dropdown Modal
   sheetOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -730,7 +722,6 @@ const styles = StyleSheet.create({
   sheetItemText: { fontSize: 16, color: "#334155" },
   sheetItemTextActive: { color: "#EA580C", fontWeight: "600" },
 
-  // List Styles
   listContent: { paddingHorizontal: 20, paddingBottom: 20 },
   simpleCard: {
     backgroundColor: "white",
@@ -782,7 +773,6 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
 
-  // Modal Action Styles
   actionModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
   actionModalContent: {
     backgroundColor: "white",
