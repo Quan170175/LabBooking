@@ -9,11 +9,6 @@ import {
   RefreshControl,
   Alert,
   Linking,
-  Modal,
-  ScrollView,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import {
   Clock,
@@ -25,20 +20,18 @@ import {
   FileText,
   X,
   Check,
-  Phone,
-  Mail,
-  Eye,
   DoorOpen,
-  Building2,
+  Eye,
   Search,
-  CalendarDays,
 } from "lucide-react-native";
 
 import apiClient from "../../../../utils/api";
 import FilterSortBar, {
   FilterOption,
 } from "../../../../components/common/FilterSortBar";
+import DoorRequestManagerModals from "../../../../components/manager/DoorRequestManagerModals";
 
+// --- INTERFACES ---
 interface DoorRequestItem {
   id: string;
   bookingCode: string;
@@ -73,6 +66,7 @@ interface BookingLookupResponse {
   requesterPhoneNumber: string | null;
 }
 
+// --- CONSTANTS ---
 const PENDING_FILTER_OPTIONS: FilterOption[] = [
   { label: "Đang chờ", value: "Pending" },
 ];
@@ -83,6 +77,7 @@ const HISTORY_FILTER_OPTIONS: FilterOption[] = [
   { label: "Đã từ chối", value: "Rejected" },
 ];
 
+// --- HELPER FUNCTIONS ---
 const formatTime = (isoString?: string) => {
   try {
     if (!isoString) return "N/A";
@@ -143,7 +138,9 @@ const displayData = (
   return text;
 };
 
-//main component//
+// ==========================================
+// MAIN COMPONENT
+// ==========================================
 export default function ManagerDoorRequestScreen() {
   // --- STATE LIST ---
   const [activeTab, setActiveTab] = useState<"pending" | "history">("pending");
@@ -250,20 +247,23 @@ export default function ManagerDoorRequestScreen() {
   };
 
   // ==========================================
-  // 6. APPROVE / REJECT LOGIC
+  // APPROVE / REJECT LOGIC
   // ==========================================
-  const handleAccept = (id: string) => {
+  const handleAccept = (id: string | number) => {
+    // Ép kiểu về string để đồng bộ với API
+    const idStr = String(id);
     Alert.alert("Xác nhận duyệt", "Bạn muốn mở cửa cho yêu cầu này?", [
       { text: "Hủy", style: "cancel" },
       {
         text: "Duyệt ngay",
-        onPress: () => processRequest(id, "Accepted", "Yêu cầu đã được duyệt."),
+        onPress: () =>
+          processRequest(idStr, "Accepted", "Yêu cầu đã được duyệt."),
       },
     ]);
   };
 
-  const handleRejectInit = (id: string) => {
-    setProcessingId(id);
+  const handleRejectInit = (id: string | number) => {
+    setProcessingId(String(id));
     setRejectReason("");
     setRejectModalVisible(true);
   };
@@ -311,7 +311,7 @@ export default function ManagerDoorRequestScreen() {
   };
 
   // ==========================================
-  // 7. LOOKUP API LOGIC
+  // LOOKUP API LOGIC
   // ==========================================
   const handleLookupBooking = async () => {
     if (!lookupCode.trim()) {
@@ -343,7 +343,7 @@ export default function ManagerDoorRequestScreen() {
   };
 
   // ==========================================
-  // 8. RENDER ITEM
+  // RENDER ITEM (LIST)
   // ==========================================
   const renderItem = ({ item }: { item: DoorRequestItem }) => {
     const isPending = activeTab === "pending";
@@ -544,360 +544,43 @@ export default function ManagerDoorRequestScreen() {
         />
       )}
 
-      <Modal
-        transparent
-        visible={rejectModalVisible}
-        animationType="fade"
-        onRequestClose={() => setRejectModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.rejectModalContent}>
-            <View style={styles.rejectHeader}>
-              <Text style={styles.rejectTitle}>Từ chối yêu cầu</Text>
-              <TouchableOpacity onPress={() => setRejectModalVisible(false)}>
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.rejectLabel}>
-              Vui lòng nhập lý do từ chối để thông báo cho sinh viên:
-            </Text>
-
-            <TextInput
-              style={styles.rejectInput}
-              placeholder="VD: Sai thông tin, Chưa đến giờ..."
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              multiline
-              numberOfLines={3}
-              autoFocus
-            />
-
-            <View style={styles.rejectActions}>
-              <TouchableOpacity
-                style={styles.rejectBtnCancel}
-                onPress={() => setRejectModalVisible(false)}
-              >
-                <Text style={styles.rejectBtnTextCancel}>Hủy bỏ</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.rejectBtnConfirm}
-                onPress={confirmReject}
-              >
-                <Text style={styles.rejectBtnTextConfirm}>
-                  Xác nhận từ chối
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal
-        animationType="slide"
-        transparent
-        visible={detailModalVisible}
-        onRequestClose={() => setDetailModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chi tiết yêu cầu</Text>
-              <TouchableOpacity onPress={() => setDetailModalVisible(false)}>
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            {isLoadingDetail ? (
-              <View style={styles.center}>
-                <ActivityIndicator size="large" color="#EA580C" />
-                <Text style={{ marginTop: 12, color: "#64748B" }}>
-                  Đang tải thông tin chi tiết...
-                </Text>
-              </View>
-            ) : selectedDetail ? (
-              <ScrollView
-                style={styles.modalBody}
-                showsVerticalScrollIndicator={false}
-              >
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Trạng thái:</Text>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      {
-                        backgroundColor: getStatusConfig(selectedDetail.status)
-                          .bg,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.statusText,
-                        { color: getStatusConfig(selectedDetail.status).color },
-                      ]}
-                    >
-                      {getStatusConfig(selectedDetail.status).label}
-                    </Text>
-                  </View>
-                </View>
-
-                {(selectedDetail.status === "Rejected" ||
-                  selectedDetail.status === "Accepted") && (
-                  <View
-                    style={[
-                      styles.noteBox,
-                      selectedDetail.status === "Rejected"
-                        ? styles.noteBoxReject
-                        : styles.noteBoxAccept,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.noteTitle,
-                        {
-                          color:
-                            selectedDetail.status === "Rejected"
-                              ? "#B91C1C"
-                              : "#15803D",
-                        },
-                      ]}
-                    >
-                      {selectedDetail.status === "Rejected"
-                        ? "Lý do từ chối:"
-                        : "Ghi chú quản lý:"}
-                    </Text>
-                    <Text style={styles.noteContent}>
-                      {selectedDetail.managerNote || "Không có ghi chú"}
-                    </Text>
-                    <Text style={styles.noteTime}>
-                      {formatTime(selectedDetail.acceptedTime)}
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.divider} />
-
-                <Text style={styles.sectionTitle}>Thông tin người gửi</Text>
-                <DetailItem
-                  label="Họ tên"
-                  value={displayData(selectedDetail.requestedByName)}
-                  icon={<User size={16} color="#64748B" />}
-                />
-                <TouchableOpacity
-                  onPress={() =>
-                    handleCall(selectedDetail.requestedByPhoneNumber)
-                  }
-                >
-                  <DetailItem
-                    label="Số điện thoại"
-                    value={displayData(selectedDetail.requestedByPhoneNumber)}
-                    icon={<Phone size={16} color="#64748B" />}
-                    isLink
-                  />
-                </TouchableOpacity>
-                <DetailItem
-                  label="Email"
-                  value={displayData(selectedDetail.requestedByEmail)}
-                  icon={<Mail size={16} color="#64748B" />}
-                />
-
-                <View style={styles.divider} />
-
-                <Text style={styles.sectionTitle}>
-                  Thông tin phòng & Yêu cầu
-                </Text>
-                <DetailItem
-                  label="Phòng Lab"
-                  value={displayData(selectedDetail.labName)}
-                  icon={<Building2 size={16} color="#64748B" />}
-                />
-                <DetailItem
-                  label="Mã đặt phòng"
-                  value={displayData(selectedDetail.bookingCode)}
-                  icon={<Hash size={16} color="#64748B" />}
-                />
-                <DetailItem
-                  label="Thời gian gửi"
-                  value={formatTime(selectedDetail.requestTime)}
-                  icon={<Clock size={16} color="#64748B" />}
-                />
-
-                <Text style={[styles.detailLabel, { marginTop: 10 }]}>
-                  Lý do mở cửa:
-                </Text>
-                <View style={styles.reasonBox}>
-                  <Text style={styles.reasonFullText}>
-                    {displayData(selectedDetail.reason)}
-                  </Text>
-                </View>
-
-                <View style={{ height: 40 }} />
-              </ScrollView>
-            ) : (
-              <View style={styles.center}>
-                <Text style={{ color: "#EF4444" }}>
-                  Không tìm thấy dữ liệu.
-                </Text>
-              </View>
-            )}
-
-            {activeTab === "pending" && selectedDetail && !isLoadingDetail && (
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.btnReject]}
-                  onPress={() => handleRejectInit(selectedDetail.id)}
-                >
-                  <Text style={styles.textReject}>Từ chối</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.btnAccept]}
-                  onPress={() => handleAccept(selectedDetail.id)}
-                >
-                  <Text style={styles.textAccept}>Duyệt ngay</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        transparent
-        visible={lookupModalVisible}
-        animationType="fade"
-        onRequestClose={() => setLookupModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          // 👇 CẬP NHẬT QUAN TRỌNG: Để undefined cho Android để tránh xung đột layout
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalContent}>
-            {/* Header Lookup */}
-            <View style={styles.modalHeader}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-              >
-                <Search size={24} color="#EA580C" />
-                <Text style={styles.modalTitle}>Tra Cứu Booking</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setLookupModalVisible(false);
-                  setLookupCode("");
-                  setLookupResult(null);
-                }}
-              >
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Content ScrollView */}
-            <ScrollView
-              contentContainerStyle={{ padding: 16 }}
-              // 👇 Giữ flexGrow: 0 để modal không bị giãn
-              style={{ flexGrow: 0 }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Input Area */}
-              <Text style={styles.label}>Nhập mã booking hoặc ID:</Text>
-              <View style={styles.lookupInputContainer}>
-                <TextInput
-                  style={styles.lookupInput}
-                  placeholder="Ví dụ: 3fa85f64..."
-                  value={lookupCode}
-                  onChangeText={setLookupCode}
-                  autoCapitalize="none"
-                  // 👇 Thêm returnKeyType để bàn phím hiện nút "Done" hoặc "Search"
-                  returnKeyType="search"
-                  onSubmitEditing={handleLookupBooking}
-                />
-                <TouchableOpacity
-                  style={styles.lookupBtn}
-                  onPress={handleLookupBooking}
-                  disabled={isLoadingLookup}
-                >
-                  {isLoadingLookup ? (
-                    <ActivityIndicator color="white" />
-                  ) : (
-                    <Text style={{ color: "white", fontWeight: "bold" }}>
-                      Kiểm tra
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* Result Area */}
-              {lookupResult && (
-                <View style={styles.lookupResultCard}>
-                  <View style={styles.resultHeader}>
-                    <Text style={styles.resultTitle}>
-                      ✅ Tìm thấy thông tin
-                    </Text>
-                  </View>
-
-                  <View style={styles.divider} />
-
-                  <DetailItem
-                    label="Phòng"
-                    value={lookupResult.labName}
-                    icon={<Building2 size={16} color="#64748B" />}
-                  />
-                  <DetailItem
-                    label="Người đặt"
-                    value={lookupResult.requesterFullName}
-                    icon={<User size={16} color="#64748B" />}
-                  />
-                  <DetailItem
-                    label="Email"
-                    value={displayData(lookupResult.requesterEmail)}
-                    icon={<Mail size={16} color="#64748B" />}
-                  />
-                  <DetailItem
-                    label="Số điện thoại"
-                    value={displayData(lookupResult.requesterPhoneNumber)}
-                    icon={<Phone size={16} color="#64748B" />}
-                  />
-
-                  <DetailItem
-                    label="Thời gian"
-                    value={`${lookupResult.date}\n(${lookupResult.timeSlot})`}
-                    icon={<CalendarDays size={16} color="#64748B" />}
-                  />
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      {/* 👇 MODAL COMPONENT (REPLACEMENT) */}
+      <DoorRequestManagerModals
+        styles={styles}
+        // Reject
+        rejectModalVisible={rejectModalVisible}
+        setRejectModalVisible={setRejectModalVisible}
+        rejectReason={rejectReason}
+        setRejectReason={setRejectReason}
+        confirmReject={confirmReject}
+        // Detail
+        detailModalVisible={detailModalVisible}
+        setDetailModalVisible={setDetailModalVisible}
+        isLoadingDetail={isLoadingDetail}
+        selectedDetail={selectedDetail}
+        activeTab={activeTab}
+        handleRejectInit={handleRejectInit}
+        handleAccept={handleAccept}
+        // Lookup
+        lookupModalVisible={lookupModalVisible}
+        setLookupModalVisible={setLookupModalVisible}
+        lookupCode={lookupCode}
+        setLookupCode={setLookupCode}
+        handleLookupBooking={handleLookupBooking}
+        isLoadingLookup={isLoadingLookup}
+        lookupResult={lookupResult}
+        // Helpers
+        getStatusConfig={getStatusConfig}
+        formatTime={formatTime}
+        displayData={displayData}
+        handleCall={handleCall}
+      />
     </View>
   );
 }
 
-const DetailItem = ({ label, value, icon, isLink }: any) => (
-  <View style={styles.detailItemRow}>
-    <View style={{ marginTop: 2 }}>{icon}</View>
-    <View style={{ flex: 1 }}>
-      <Text style={styles.detailItemLabel}>{label}</Text>
-      <Text
-        style={[
-          styles.detailItemValue,
-          isLink && { color: "#2563EB", textDecorationLine: "underline" },
-        ]}
-      >
-        {value}
-      </Text>
-    </View>
-  </View>
-);
-
 // ==========================================
-// 8. STYLES
+// STYLES
 // ==========================================
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
@@ -1029,6 +712,7 @@ const styles = StyleSheet.create({
   textReject: { color: "#EF4444", fontWeight: "600", fontSize: 14 },
   textAccept: { color: "white", fontWeight: "600", fontSize: 14 },
 
+  // --- STYLES DÀNH CHO MODAL (Được component con sử dụng) ---
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1075,9 +759,14 @@ const styles = StyleSheet.create({
   },
   detailLabel: { fontSize: 14, fontWeight: "600", color: "#475569" },
   divider: { height: 1, backgroundColor: "#E2E8F0", marginVertical: 12 },
-  detailItemRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+
+  // Styles cho DetailItem
+  detailRowItem: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  detailIconWrapper: { marginTop: 2 },
+  detailTextWrapper: { flex: 1 },
   detailItemLabel: { fontSize: 12, color: "#64748B" },
   detailItemValue: { fontSize: 15, color: "#1E293B", fontWeight: "500" },
+
   reasonBox: {
     backgroundColor: "#F8FAFC",
     padding: 12,

@@ -111,7 +111,6 @@ export default function CreateEquipmentMaintenanceScreen() {
         });
       }
 
-      // 2. Get Categories (🟢 ĐÃ SỬA LOGIC API)
       const catRes = await apiClient.get("/api/EquipmentCategories", {
         params: {
           PageNumber: 1,

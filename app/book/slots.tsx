@@ -23,19 +23,13 @@ import apiClient from "@/utils/api";
 // --- API ---
 // ====================================================================
 
-// const apiClient = axios.create({
-//   baseURL: "http://192.168.1.149:7089/api",
-// });
-
 const api_getSlotTemplates = async () => {
   const response = await apiClient.get("/api/Slot");
-  console.log("✅ Loaded slot templates:", response.data);
   return response.data;
 };
 
 const api_getRoomDetails = async (roomId: string) => {
   const response = await apiClient.get(`/api/LabRooms/${roomId}`);
-  console.log("✅ Loaded room details:", response.data);
   return response.data;
 };
 
@@ -48,7 +42,6 @@ const api_getUnavailableSlots = async (
     const response = await apiClient.get("/api/BookingSlot", {
       params: { LabRoomId: roomId, StartDate: startDate, EndDate: endDate },
     });
-    console.log("✅ Loaded unavailable slots:", response.data);
     return response.data;
   } catch (e: any) {
     console.error("Lỗi tải lịch:", e);
@@ -75,22 +68,56 @@ const formatDateLocal = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-// So sánh 2 chuỗi ngày (YYYY-MM-DD) an toàn
 const isSameDate = (d1: string, d2: string) => {
   if (!d1 || !d2) return false;
   return d1.split("T")[0] === d2.split("T")[0];
 };
 
-// Check 2 tiếng
 const isTimeRestricted = (date: Date, timeString: string) => {
   if (!timeString) return false;
   const [hours, minutes] = timeString.split(":").map(Number);
   const slotTime = new Date(date);
   slotTime.setHours(hours, minutes, 0, 0);
   const now = new Date();
-  // Slot phải lớn hơn (Hiện tại + 2 tiếng)
-  const restrictedThreshold = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+
+  // Slot phải lớn hơn (Hiện tại + 1 tiếng)
+  const restrictedThreshold = new Date(now.getTime() + 1 * 60 * 60 * 1000);
   return slotTime < restrictedThreshold;
+};
+
+// --- HÀM TOOLTIP ĐÃ SỬA ---
+const getTooltipContent = (type: string, item: any) => {
+  // 1. Quá hạn và TRỐNG
+  if (type === "RESTRICTED_EMPTY") return "Đã quá thời gian đặt";
+
+  // 2. Quá hạn nhưng CÓ NGƯỜI ĐẶT
+  if (type === "RESTRICTED_BOOKED") {
+    let content = item?.title || "Đã được đặt";
+    if (item?.bookerName) {
+      content += `\n👤 ${item.bookerName}`;
+    }
+    content += "\n(Đã kết thúc)";
+    return content;
+  }
+
+  // 3. Các trường hợp bình thường
+  if (!item) return "Người khác đã đặt";
+
+  if (type === "MAINTENANCE" || item.reason === "Maintenance") {
+    return item.description
+      ? `Lý do: ${item.description}`
+      : item.title || "Phòng đang bảo trì";
+  }
+
+  if (item.title) {
+    let content = item.title;
+    if (item.bookerName) {
+      content += `\n👤 ${item.bookerName}`;
+    }
+    return content;
+  }
+
+  return "Người khác đã đặt";
 };
 
 // ====================================================================
@@ -100,17 +127,17 @@ const isTimeRestricted = (date: Date, timeString: string) => {
 export default function BookSlots() {
   const router = useRouter();
   const { type = "project", roomId } = useLocalSearchParams();
+
+  // Logic params
   const isRecurring = type === "teaching_recurring";
   const isFlexibleTeaching = type === "teaching_flexible";
   const isProject = type === "project";
   const isPriority = type === "priority";
-
   const myPriority = isPriority ? 1 : 2;
 
   // --- STATE ---
   const [currentMonday, setCurrentMonday] = useState(getMonday(new Date()));
   const [anchorDate, setAnchorDate] = useState<Date | null>(null);
-
   const [weekDates, setWeekDates] = useState<Date[]>([]);
   const [baseSlots, setBaseSlots] = useState<
     { dayIndex: number; slotId: string }[]
@@ -119,15 +146,21 @@ export default function BookSlots() {
   const [selectedSlots, setSelectedSlots] = useState<
     { date: string; slotId: string; isConflict: boolean }[]
   >([]);
-
   const [unavailableSlots, setUnavailableSlots] = useState<any[]>([]);
+
+  // Loading & Data State
   const [isLoadingSlots, setIsLoadingSlots] = useState(true);
   const [isLoadingRoom, setIsLoadingRoom] = useState(true);
   const [isLoadingUnavailable, setIsLoadingUnavailable] = useState(true);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
-
   const [allSlots, setAllSlots] = useState<any[]>([]);
   const [roomDetails, setRoomDetails] = useState<any>(null);
+
+  // --- TOOLTIP STATE ---
+  const [activeTooltip, setActiveTooltip] = useState<{
+    date: string;
+    slotId: string;
+  } | null>(null);
 
   const maxSlotsTotal = useMemo(() => {
     if (isFlexibleTeaching) return 20;
@@ -151,6 +184,7 @@ export default function BookSlots() {
       dates.push(newDate);
     }
     setWeekDates(dates);
+    setActiveTooltip(null);
   }, [currentMonday]);
 
   // --- Reset ---
@@ -159,6 +193,7 @@ export default function BookSlots() {
     setNumWeeks(1);
     setSelectedSlots([]);
     setAnchorDate(null);
+    setActiveTooltip(null);
   }, [isRecurring]);
 
   // --- Load Data ---
@@ -262,23 +297,19 @@ export default function BookSlots() {
     currentMonday,
   ]);
 
-  // --- HÀM QUÉT TRÙNG TƯƠNG LAI (QUAN TRỌNG) ---
+  // --- CONFLICT CHECK ---
   const checkFutureConflicts = async (
     dayIndex: number,
     slotId: string,
     startMon: Date,
     weeksToCheck: number
   ) => {
-    // Lấy khoảng thời gian rộng hơn (WeeksToCheck * 7 ngày)
     const endDate = new Date(startMon);
     endDate.setDate(startMon.getDate() + weeksToCheck * 7 + 7);
 
     const startStr = formatDateLocal(startMon);
     const endStr = formatDateLocal(endDate);
 
-    console.log(
-      `Scanning future: ${startStr} -> ${endStr} for ${weeksToCheck} weeks`
-    );
     const busyData = await api_getUnavailableSlots(
       roomId as string,
       startStr,
@@ -295,13 +326,8 @@ export default function BookSlots() {
       );
 
       if (conflictItem) {
-        console.log(
-          `Conflict found at ${targetDateStr}, Priority: ${conflictItem.priority}`
-        );
         const existingPriority = conflictItem.priority ?? 2;
         const isMaintenance = existingPriority === 0;
-
-        // Chỉ cho phép đè nếu: Không phải bảo trì + Tôi là 1 + Họ là 2
         const canOverride =
           !isMaintenance && myPriority === 1 && existingPriority === 2;
 
@@ -317,19 +343,15 @@ export default function BookSlots() {
     return { isConflict: false, conflictDate: null, reason: null };
   };
 
-  // --- [FIX] Check khi Thay đổi số tuần ---
   const handleChangeNumWeeks = async (newWeekValue: number) => {
     if (baseSlots.length === 0) return;
     const clampedWeeks = Math.max(1, Math.min(newWeekValue, maxWeeksAllowed));
 
-    // Nếu tăng số tuần -> Phải check conflict cho các tuần mới thêm vào
     if (clampedWeeks > numWeeks) {
       setIsCheckingConflict(true);
       const startPoint = anchorDate || currentMonday;
 
-      // Check từng slot trong baseSlots xem có bị vướng ở các tuần mới không
       for (const slot of baseSlots) {
-        // Ép kiểu 'any' để tránh lỗi TS
         const checkResult: any = await checkFutureConflicts(
           slot.dayIndex,
           slot.slotId,
@@ -349,18 +371,17 @@ export default function BookSlots() {
 
           Alert.alert(
             "Không thể tăng tuần",
-            `Nếu tăng lên ${clampedWeeks} tuần, Slot ${slotInfo?.label} vào ${dayName} ngày ${dateDisplay} sẽ bị trùng (${checkResult.reason}).\n\nVui lòng chọn slot khác hoặc giữ nguyên số tuần.`
+            `Nếu tăng lên ${clampedWeeks} tuần, Slot ${slotInfo?.label} vào ${dayName} ngày ${dateDisplay} sẽ bị trùng (${checkResult.reason}).`
           );
-          return; // Dừng, không setNumWeeks
+          return;
         }
       }
       setIsCheckingConflict(false);
     }
-
     setNumWeeks(clampedWeeks);
   };
 
-  // --- Toggle Recurring ---
+  // --- TOGGLE LOGIC ---
   const toggleRecurringSlot = async (dayIndex: number, slotId: string) => {
     let startPoint = anchorDate;
     if (!startPoint || currentMonday < startPoint) startPoint = currentMonday;
@@ -369,11 +390,6 @@ export default function BookSlots() {
     targetDateThisWeek.setDate(currentMonday.getDate() + dayIndex);
     const dateString = formatDateLocal(targetDateThisWeek);
     const slotInfo = allSlots.find((s) => s.id === slotId);
-
-    if (isTimeRestricted(targetDateThisWeek, slotInfo?.startTime)) {
-      Alert.alert("Không hợp lệ", "Slot này quá gần giờ hiện tại.");
-      return;
-    }
 
     const unavailableSlotThisWeek = unavailableSlots.find(
       (s) => isSameDate(s.date, dateString) && s.slotId === slotId
@@ -429,42 +445,17 @@ export default function BookSlots() {
     setBaseSlots(newBaseSlots);
   };
 
-  // --- Other Handlers ---
-  const handlePrevWeek = () =>
-    setCurrentMonday((prev) => {
-      const d = new Date(prev);
-      d.setDate(prev.getDate() - 7);
-      return d;
-    });
-  const handleNextWeek = () =>
-    setCurrentMonday((prev) => {
-      const d = new Date(prev);
-      d.setDate(prev.getDate() + 7);
-      return d;
-    });
-
   const checkCanSelect = (unavailableSlot: any) => {
     if (!unavailableSlot) return true;
     const existingPriority = unavailableSlot.priority ?? 2;
-    if (existingPriority === 0) {
-      Alert.alert("Bảo trì", "Phòng đang bảo trì, không thể chọn.");
-      return false;
-    }
+    if (existingPriority === 0) return false;
+    if (unavailableSlot.isMyBooking) return false;
     if (myPriority === 1 && existingPriority === 2) return true;
-
-    Alert.alert("Không thể chọn", "Slot này đã có người đặt.");
     return false;
   };
 
   const toggleMultiSlot = (date: Date, slotId: string) => {
     const dateString = formatDateLocal(date);
-    const slotInfo = allSlots.find((s) => s.id === slotId);
-
-    if (isTimeRestricted(date, slotInfo?.startTime)) {
-      Alert.alert("Không hợp lệ", "Slot quá gần giờ hiện tại.");
-      return;
-    }
-
     const unavailableSlot = unavailableSlots.find(
       (s) => isSameDate(s.date, dateString) && s.slotId === slotId
     );
@@ -498,8 +489,45 @@ export default function BookSlots() {
     else toggleMultiSlot(date, slotId);
   };
 
+  const handleSlotPress = (
+    date: Date,
+    slotId: string,
+    dayIndex: number,
+    isDisabled: boolean
+  ) => {
+    const dateString = formatDateLocal(date);
+
+    if (
+      activeTooltip?.date === dateString &&
+      activeTooltip?.slotId === slotId
+    ) {
+      setActiveTooltip(null);
+      return;
+    }
+
+    if (isDisabled) {
+      setActiveTooltip({ date: dateString, slotId });
+      return;
+    }
+
+    setActiveTooltip(null);
+    handleToggleSlot(date, slotId, dayIndex);
+  };
+
+  const handlePrevWeek = () =>
+    setCurrentMonday((prev) => {
+      const d = new Date(prev);
+      d.setDate(prev.getDate() - 7);
+      return d;
+    });
+  const handleNextWeek = () =>
+    setCurrentMonday((prev) => {
+      const d = new Date(prev);
+      d.setDate(prev.getDate() + 7);
+      return d;
+    });
+
   const goToDevices = async () => {
-    // 1. Validate cơ bản
     if (selectedSlots.length === 0) {
       Alert.alert(
         "Chưa chọn slot",
@@ -507,74 +535,26 @@ export default function BookSlots() {
       );
       return;
     }
-
-    // 2. Phân loại slot (Chủ yếu để debug hoặc nếu bạn muốn hiện Alert xác nhận ngay tại đây)
-    const normalSlots = selectedSlots.filter((s) => !s.isConflict);
-    const overrideSlots = selectedSlots.filter((s) => s.isConflict);
-
-    console.log(`[Navigation] Chuẩn bị sang trang Device:`);
-    console.log(`- Tổng slot: ${selectedSlots.length}`);
-    console.log(`- Slot trống (Đặt mới): ${normalSlots.length}`);
-    console.log(`- Slot trùng (Ghi đè): ${overrideSlots.length}`);
-
     try {
-      // 3. Lấy dữ liệu booking hiện tại từ Storage
       const currentStr = await AsyncStorage.getItem("currentBooking");
       const currentBooking = currentStr ? JSON.parse(currentStr) : {};
-
-      // 4. Đóng gói dữ liệu mới
       const updatedBookingData = {
         ...currentBooking,
-
-        // A. Lưu toàn bộ slot đã chọn (bao gồm cả cờ isConflict)
         slots: selectedSlots,
-
-        // B. Lưu thông tin thiết bị có sẵn của phòng (để trang Device hiển thị Read-only)
         existingDevices: roomDetails?.equipments || [],
-
-        // C. Lưu thêm thông tin phòng (để trang sau hiển thị Header đẹp)
         roomName: roomDetails?.labName,
         roomLocation: roomDetails?.location,
         maximumLimit: roomDetails?.maximumLimit || 0,
       };
-
-      // 5. Lưu xuống Storage
       await AsyncStorage.setItem(
         "currentBooking",
         JSON.stringify(updatedBookingData)
       );
-
-      // 6. Chuyển trang
       router.push("/book/devices" as any);
     } catch (error) {
-      console.error("Lỗi khi lưu dữ liệu chuyển trang:", error);
-      Alert.alert(
-        "Lỗi hệ thống",
-        "Không thể lưu dữ liệu đặt phòng. Vui lòng thử lại."
-      );
+      console.error("Lỗi lưu:", error);
     }
   };
-
-  const selectionInfo = useMemo(() => {
-    if (isRecurring) {
-      if (baseSlots.length === 0) return "Chưa chọn slot";
-      return (
-        <>
-          <Text style={{ fontWeight: "bold" }}>{baseSlots.length}</Text>{" "}
-          slot/tuần. Tổng:{" "}
-          <Text style={{ fontWeight: "bold" }}>{selectedSlots.length}</Text> /{" "}
-          {maxSlotsTotal} slots
-        </>
-      );
-    }
-    return (
-      <>
-        Đã chọn:{" "}
-        <Text style={{ fontWeight: "bold" }}>{selectedSlots.length}</Text> /{" "}
-        {maxSlotsTotal} slot
-      </>
-    );
-  }, [isRecurring, selectedSlots.length, baseSlots.length, maxSlotsTotal]);
 
   const isLoading = isLoadingSlots || isLoadingRoom;
   if (isLoading)
@@ -603,7 +583,6 @@ export default function BookSlots() {
     (currentMonday.getTime() - (anchorDate || currentMonday).getTime()) /
       (7 * 24 * 60 * 60 * 1000)
   );
-
   const headerIcon = (
     <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <Path
@@ -618,186 +597,276 @@ export default function BookSlots() {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <BookingProgress step={2} />
-      <BookingPageHeader
-        icon={headerIcon}
-        title={roomDetails.labName}
-        subtitle={`${roomDetails.location} - ${roomDetails.maximumLimit} chỗ`}
-      />
-      <View style={styles.calendarNav}>
-        <TouchableOpacity onPress={handlePrevWeek} style={styles.navButton}>
-          <ChevronLeft size={20} color="#EA580C" />
-        </TouchableOpacity>
-        <Text style={styles.dateRangeText}>{dateRange}</Text>
-        <TouchableOpacity onPress={handleNextWeek} style={styles.navButton}>
-          <ChevronRight size={20} color="#EA580C" />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.calendarContainer}>
-        <View style={styles.weekdaysHeader}>
-          {weekDates.map((date, idx) => (
-            <View key={idx} style={styles.dayHeader}>
-              <Text style={styles.dayNameText}>{weekdays_short[idx]}</Text>
-              <Text style={styles.dateNumText}>{date.getDate()}</Text>
-            </View>
-          ))}
+    <View style={{ flex: 1 }}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        scrollEventThrottle={16}
+      >
+        <BookingProgress step={2} />
+        <BookingPageHeader
+          icon={headerIcon}
+          title={roomDetails.labName}
+          subtitle={`${roomDetails.location} - ${roomDetails.maximumLimit} chỗ`}
+        />
+        <View style={styles.calendarNav}>
+          <TouchableOpacity onPress={handlePrevWeek} style={styles.navButton}>
+            <ChevronLeft size={20} color="#EA580C" />
+          </TouchableOpacity>
+          <Text style={styles.dateRangeText}>{dateRange}</Text>
+          <TouchableOpacity onPress={handleNextWeek} style={styles.navButton}>
+            <ChevronRight size={20} color="#EA580C" />
+          </TouchableOpacity>
         </View>
 
-        {(isLoadingUnavailable || isCheckingConflict) && (
-          <View style={styles.slotsLoading}>
-            <ActivityIndicator size="small" color="#EA580C" />
-            {isCheckingConflict && (
-              <Text style={styles.checkingText}>Kiểm tra lịch...</Text>
-            )}
+        <View style={styles.calendarContainer}>
+          <View style={styles.weekdaysHeader}>
+            {weekDates.map((date, idx) => (
+              <View key={idx} style={styles.dayHeader}>
+                <Text style={styles.dayNameText}>{weekdays_short[idx]}</Text>
+                <Text style={styles.dateNumText}>{date.getDate()}</Text>
+              </View>
+            ))}
           </View>
-        )}
 
-        <View
-          style={[
-            styles.slotsGrid,
-            (isLoadingUnavailable || isCheckingConflict) && styles.hidden,
-          ]}
-        >
-          {weekDates.map((date, dayIndex) => (
-            <View key={dayIndex} style={styles.dayColumn}>
-              {allSlots.map((slot) => {
-                const dateString = formatDateLocal(date);
-                const unavailableSlot = unavailableSlots.find(
-                  (s) => isSameDate(s.date, dateString) && s.slotId === slot.id
-                );
-                const existingPriority = unavailableSlot?.priority ?? 2;
-                const isMaintenance = existingPriority === 0;
-                const canOverride =
-                  unavailableSlot &&
-                  !isMaintenance &&
-                  myPriority === 1 &&
-                  existingPriority === 2;
-                const isDisabled = unavailableSlot && !canOverride;
-                const isRestricted = isTimeRestricted(date, slot.startTime);
+          {(isLoadingUnavailable || isCheckingConflict) && (
+            <View style={styles.slotsLoading}>
+              <ActivityIndicator size="small" color="#EA580C" />
+              {isCheckingConflict && (
+                <Text style={styles.checkingText}>Kiểm tra lịch...</Text>
+              )}
+            </View>
+          )}
 
-                let isSelected = false;
-                if (isRecurring) {
-                  const isInSelectedWeekRange =
-                    weeksDiffFromStart >= 0 && weeksDiffFromStart < numWeeks;
-                  if (isInSelectedWeekRange)
-                    isSelected = baseSlots.some(
-                      (s) => s.dayIndex === dayIndex && s.slotId === slot.id
-                    );
-                } else {
-                  isSelected = selectedSlots.some(
-                    (s) => s.date === dateString && s.slotId === slot.id
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setActiveTooltip(null)}
+            style={[
+              styles.slotsGrid,
+              (isLoadingUnavailable || isCheckingConflict) && styles.hidden,
+            ]}
+          >
+            {weekDates.map((date, dayIndex) => (
+              <View key={dayIndex} style={styles.dayColumn}>
+                {allSlots.map((slot) => {
+                  const dateString = formatDateLocal(date);
+                  const unavailableSlot = unavailableSlots.find(
+                    (s) =>
+                      isSameDate(s.date, dateString) && s.slotId === slot.id
                   );
-                }
 
-                let slotStyle: any = styles.availableSlot;
-                let textStyle: any = [styles.slotLabel];
+                  // --- 1. PRIORITY LOGIC ---
+                  const isRestricted = isTimeRestricted(date, slot.startTime);
+                  const existingPriority = unavailableSlot?.priority ?? 2;
+                  const isMaintenance =
+                    existingPriority === 0 ||
+                    unavailableSlot?.reason === "Maintenance";
+                  const isMyBooking = unavailableSlot?.isMyBooking === true;
+                  const canOverride =
+                    unavailableSlot &&
+                    !isMaintenance &&
+                    !isMyBooking &&
+                    myPriority === 1 &&
+                    existingPriority === 2;
 
-                if (isSelected) {
-                  slotStyle = styles.selectedSlot;
-                  textStyle.push(styles.selectedSlotText);
-                } else if (canOverride) {
-                  slotStyle = styles.overrideSlot;
-                  textStyle.push(styles.overrideSlotText);
-                } else if (isRestricted) {
-                  slotStyle = styles.pastSlot;
-                  textStyle.push(styles.unavailableSlotText);
-                } else if (isDisabled) {
-                  if (isMaintenance) {
+                  let isSelected = false;
+                  if (isRecurring) {
+                    const isInSelectedWeekRange =
+                      weeksDiffFromStart >= 0 && weeksDiffFromStart < numWeeks;
+                    if (isInSelectedWeekRange)
+                      isSelected = baseSlots.some(
+                        (s) => s.dayIndex === dayIndex && s.slotId === slot.id
+                      );
+                  } else {
+                    isSelected = selectedSlots.some(
+                      (s) => s.date === dateString && s.slotId === slot.id
+                    );
+                  }
+
+                  // --- 2. STYLE LOGIC ---
+                  let slotStyle: any = styles.availableSlot;
+                  let textStyle: any = [styles.slotLabel];
+                  let isDisabled = false;
+                  let tooltipType = "";
+
+                  // --- SỬA LOGIC XÁC ĐỊNH TOOLTIP TẠI ĐÂY ---
+                  if (isRestricted) {
+                    slotStyle = styles.pastSlot;
+                    textStyle.push(styles.unavailableSlotText);
+                    isDisabled = true;
+                    // Nếu quá hạn mà có data -> RESTRICTED_BOOKED
+                    if (unavailableSlot) {
+                      tooltipType = "RESTRICTED_BOOKED";
+                    } else {
+                      tooltipType = "RESTRICTED_EMPTY";
+                    }
+                  } else if (isMaintenance) {
                     slotStyle = styles.maintenanceSlot;
                     textStyle.push(styles.maintenanceSlotText);
-                  } else {
+                    isDisabled = true;
+                    tooltipType = "MAINTENANCE";
+                  } else if (isSelected) {
+                    slotStyle = styles.selectedSlot;
+                    textStyle.push(styles.selectedSlotText);
+                  } else if (isMyBooking) {
+                    slotStyle = styles.myBookingSlot;
+                    textStyle.push(styles.myBookingText);
+                    isDisabled = true;
+                    tooltipType = "MY_BOOKING";
+                  } else if (canOverride) {
+                    slotStyle = styles.overrideSlot;
+                    textStyle.push(styles.overrideSlotText);
+                  } else if (unavailableSlot) {
                     slotStyle = styles.unavailableSlot;
                     textStyle.push(styles.unavailableSlotText);
+                    isDisabled = true;
+                    tooltipType = "BOOKED";
                   }
-                }
 
-                return (
-                  <TouchableOpacity
-                    key={slot.id}
-                    onPress={() => handleToggleSlot(date, slot.id, dayIndex)}
-                    disabled={(!isRecurring && isDisabled) || isRestricted}
-                    style={[styles.slotButton, slotStyle]}
-                  >
-                    <Text style={textStyle}>{slot.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
+                  const showTooltip =
+                    activeTooltip?.date === dateString &&
+                    activeTooltip?.slotId === slot.id;
+
+                  return (
+                    <View
+                      key={slot.id}
+                      style={{ zIndex: showTooltip ? 100 : 1 }}
+                    >
+                      {showTooltip && (
+                        <View style={styles.tooltipContainer}>
+                          <View style={styles.tooltipBubble}>
+                            {/* --- ĐÃ SỬA CĂN GIỮA (CENTER) --- */}
+                            {unavailableSlot?.typeLabel && (
+                              <View
+                                style={{
+                                  backgroundColor: isMaintenance
+                                    ? "#EF4444"
+                                    : "#3B82F6",
+                                  alignSelf: "center",
+                                  paddingHorizontal: 6,
+                                  paddingVertical: 2,
+                                  borderRadius: 4,
+                                  marginBottom: 4,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: "white",
+                                    fontSize: 9,
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {unavailableSlot.typeLabel.toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
+                            <Text style={styles.tooltipText}>
+                              {getTooltipContent(tooltipType, unavailableSlot)}
+                            </Text>
+                            <Text style={styles.tooltipSubText}>
+                              {slot.startTime} - {slot.endTime}
+                            </Text>
+                          </View>
+                          <View style={styles.tooltipArrow} />
+                        </View>
+                      )}
+
+                      <TouchableOpacity
+                        onPress={() =>
+                          handleSlotPress(date, slot.id, dayIndex, isDisabled)
+                        }
+                        activeOpacity={0.7}
+                        style={[styles.slotButton, slotStyle]}
+                      >
+                        <Text style={textStyle}>
+                          {isMaintenance ? "Bảo trì" : slot.label}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </TouchableOpacity>
         </View>
-      </View>
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendBox, styles.availableSlot]} />
-          <Text style={styles.legendText}>Trống</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendBox, styles.selectedSlot]} />
-          <Text style={styles.legendText}>Đang chọn</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendBox, styles.unavailableSlot]} />
-          <Text style={styles.legendText}>Đã đặt</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendBox, styles.maintenanceSlot]} />
-          <Text style={styles.legendText}>Bảo trì</Text>
-        </View>
-        {isPriority && (
+
+        <View style={styles.legend}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendBox, styles.overrideSlot]} />
-            <Text style={styles.legendText}>Ghi đè</Text>
+            <View style={[styles.legendBox, styles.availableSlot]} />
+            <Text style={styles.legendText}>Trống</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendBox, styles.selectedSlot]} />
+            <Text style={styles.legendText}>Đang chọn</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendBox, styles.myBookingSlot]} />
+            <Text style={styles.legendText}>Lịch của bạn</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendBox, styles.unavailableSlot]} />
+            <Text style={styles.legendText}>Lịch khác</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendBox, styles.maintenanceSlot]} />
+            <Text style={styles.legendText}>Bảo trì</Text>
+          </View>
+          {isPriority && (
+            <View style={styles.legendItem}>
+              <View style={[styles.legendBox, styles.overrideSlot]} />
+              <Text style={styles.legendText}>Ghi đè</Text>
+            </View>
+          )}
+        </View>
+
+        {isRecurring && (
+          <View style={styles.weekSelectorContainer}>
+            <Text style={styles.weekSelectorLabel}>Lặp lại:</Text>
+            <View style={styles.weekSelectorControls}>
+              <TouchableOpacity
+                onPress={() => handleChangeNumWeeks(numWeeks - 1)}
+                disabled={numWeeks <= 1}
+                style={[
+                  styles.weekNavButton,
+                  numWeeks <= 1 && styles.disabledButton,
+                ]}
+              >
+                <Text style={styles.weekNavText}>-</Text>
+              </TouchableOpacity>
+              <Text style={styles.weekCountText}>
+                <Text style={{ fontWeight: "bold" }}>{numWeeks}</Text>
+                {maxWeeksAllowed > 0 ? ` / ${maxWeeksAllowed}` : ""} tuần
+              </Text>
+              <TouchableOpacity
+                onPress={() => handleChangeNumWeeks(numWeeks + 1)}
+                disabled={numWeeks >= (maxWeeksAllowed || 20)}
+                style={[
+                  styles.weekNavButton,
+                  numWeeks >= (maxWeeksAllowed || 20) && styles.disabledButton,
+                ]}
+              >
+                <Text style={styles.weekNavText}>+</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
-      </View>
-      {isRecurring && (
-        <View style={styles.weekSelectorContainer}>
-          <Text style={styles.weekSelectorLabel}>Lặp lại:</Text>
-          <View style={styles.weekSelectorControls}>
-            <TouchableOpacity
-              onPress={() => handleChangeNumWeeks(numWeeks - 1)}
-              disabled={numWeeks <= 1}
-              style={[
-                styles.weekNavButton,
-                numWeeks <= 1 && styles.disabledButton,
-              ]}
-            >
-              <Text style={styles.weekNavText}>-</Text>
-            </TouchableOpacity>
-            <Text style={styles.weekCountText}>
-              <Text style={{ fontWeight: "bold" }}>{numWeeks}</Text>
-              {maxWeeksAllowed > 0 ? ` / ${maxWeeksAllowed}` : ""} tuần
-            </Text>
-            <TouchableOpacity
-              onPress={() => handleChangeNumWeeks(numWeeks + 1)}
-              disabled={numWeeks >= (maxWeeksAllowed || 20)}
-              style={[
-                styles.weekNavButton,
-                numWeeks >= (maxWeeksAllowed || 20) && styles.disabledButton,
-              ]}
-            >
-              <Text style={styles.weekNavText}>+</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.footer}>
+          <Text style={styles.selectionText}>
+            {isRecurring
+              ? `${baseSlots.length} slot/tuần. Tổng: ${selectedSlots.length} slots`
+              : `Đã chọn: ${selectedSlots.length} / ${maxSlotsTotal} slot`}
+          </Text>
+          <BookingButton
+            label="Tiếp theo"
+            onPress={goToDevices}
+            disabled={selectedSlots.length === 0}
+          />
         </View>
-      )}
-      <View style={styles.footer}>
-        <Text style={styles.selectionText}>
-          {isRecurring
-            ? `${baseSlots.length} slot/tuần. Tổng: ${selectedSlots.length} slots`
-            : `Đã chọn: ${selectedSlots.length} / ${maxSlotsTotal} slot`}
-        </Text>
-        <BookingButton
-          label="Tiếp theo"
-          onPress={goToDevices}
-          disabled={selectedSlots.length === 0}
-        />
-      </View>
-      <View style={styles.infoSection}>
-        <SlotTimeInfo />
-      </View>
-    </ScrollView>
+        <View style={styles.infoSection}>
+          <SlotTimeInfo />
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -831,6 +900,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FFE8DA",
     position: "relative",
+    zIndex: 1,
   },
   weekdaysHeader: {
     flexDirection: "row",
@@ -874,11 +944,17 @@ const styles = StyleSheet.create({
   availableSlot: { backgroundColor: "#fff", borderColor: "#F1F5F9" },
   selectedSlot: { backgroundColor: "#EA580C", borderColor: "#EA580C" },
   selectedSlotText: { color: "#fff" },
-  // --- SWAPPED COLORS ---
-  unavailableSlot: { backgroundColor: "#FEFCE8", borderColor: "#FACC15" }, // Booked = Vàng
+  unavailableSlot: { backgroundColor: "#FEFCE8", borderColor: "#FACC15" },
   unavailableSlotText: { color: "#A16207" },
-  maintenanceSlot: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" }, // Maintenance = Xám
-  maintenanceSlotText: { color: "#94A3B8", fontWeight: "500" },
+  maintenanceSlot: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#EF4444",
+    borderWidth: 1,
+    opacity: 1,
+  },
+  maintenanceSlotText: { color: "#DC2626", fontWeight: "700", fontSize: 10 },
+  myBookingSlot: { backgroundColor: "#DCFCE7", borderColor: "#86EFAC" },
+  myBookingText: { color: "#166534", fontWeight: "600" },
   overrideSlot: {
     backgroundColor: "#FFF1F2",
     borderColor: "#FDA4AF",
@@ -890,8 +966,6 @@ const styles = StyleSheet.create({
     borderColor: "#CBD5E1",
     opacity: 0.7,
   },
-  conflictSlot: { backgroundColor: "#FFFBEB", borderColor: "#FBBF24" },
-  conflictSlotText: { color: "#B45309", fontWeight: "600" },
   legend: {
     marginTop: 16,
     display: "flex",
@@ -940,8 +1014,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   selectionText: { fontSize: 14, color: "#64748B", flex: 1 },
-  infoSection: {
-    marginTop: 12,
-    // Không cần style nền/border ở đây nữa vì component con đã tự lo
+  infoSection: { marginTop: 12 },
+  tooltipContainer: {
+    position: "absolute",
+    bottom: "110%",
+    left: -50,
+    right: -50,
+    alignItems: "center",
+    zIndex: 999,
+  },
+  tooltipBubble: {
+    backgroundColor: "#1E293B",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    minWidth: 100,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  tooltipText: {
+    color: "#F8FAFC",
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: 2,
+    textAlign: "center",
+  },
+  tooltipSubText: { color: "#94A3B8", fontSize: 9 },
+  tooltipArrow: {
+    width: 0,
+    height: 0,
+    backgroundColor: "transparent",
+    borderStyle: "solid",
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#1E293B",
+    marginTop: -1,
   },
 });

@@ -19,7 +19,6 @@ import {
   RichToolbar,
 } from "react-native-pell-rich-editor";
 
-// 🟢 IMPORT API CLIENT
 import apiClient from "../../../utils/api";
 
 // --- INTERFACES ---

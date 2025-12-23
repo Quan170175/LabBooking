@@ -1,22 +1,21 @@
+import { Stack } from "expo-router";
+import { Briefcase, Calendar, Info, MapPin, X } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  ScrollView,
 } from "react-native";
-import { Stack } from "expo-router";
-import { X, Calendar, Clock, MapPin, User, Info } from "lucide-react-native";
 
 // --- COMPONENTS ---
-import BookingHistoryCard from "../../../../components/home/BookingHistoryCard";
 import BookingFilterHeader from "../../../../components/home/BookingFilterHeader";
+import BookingHistoryCard from "../../../../components/home/BookingHistoryCard";
 import EmptyBookingHistory from "../../../../components/home/EmptyBookingHistory";
 
 import apiClient from "../../../../utils/api";
@@ -24,9 +23,16 @@ import apiClient from "../../../../utils/api";
 // --- TYPES ---
 type StatusFilter = "all" | "approved" | "pending" | "rejected";
 
+interface SlotMaster {
+  id: string;
+  startTime: string;
+  endTime: string;
+  label: string;
+}
+
 export default function ManagerHistoryScreen() {
   const [bookings, setBookings] = useState<any[]>([]);
-  const [slotTemplates, setSlotTemplates] = useState<any[]>([]);
+  const [slotTemplates, setSlotTemplates] = useState<SlotMaster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -37,72 +43,105 @@ export default function ManagerHistoryScreen() {
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
+  // --- HELPER: Format Time ---
+  const formatTimeStr = (time: string) => time?.substring(0, 5) || "";
+
   // --- 1. LOAD DATA ---
   const loadData = async () => {
     try {
+      setIsLoading(true);
+
+      // Gọi song song 2 API
       const [resSlots, resHistory] = await Promise.all([
         apiClient.get("/api/Slot"),
-        mockFetchManagerHistory(),
+        apiClient.get("/api/Bookings/HistoryApprove"),
       ]);
 
-      setSlotTemplates(resSlots.data);
+      // 1. Xử lý Slot Master Data -> Tạo Map để tra cứu nhanh
+      const rawSlots: SlotMaster[] = resSlots.data?.data || resSlots.data || [];
+      setSlotTemplates(rawSlots);
 
-      const sortedHistory = resHistory.sort(
+      const slotMap: Record<string, SlotMaster> = {};
+      rawSlots.forEach((s) => {
+        // Lưu key là lowercase ID để tra cứu cho an toàn
+        slotMap[s.id.toLowerCase()] = s;
+      });
+
+      // 2. Xử lý Booking History
+      const rawHistory = resHistory.data?.data || resHistory.data || [];
+
+      const mappedHistory = rawHistory.map((item: any) => {
+        // --- Xử lý thời gian Check-in / Check-out dựa trên Slots ---
+        const itemSlots = item.slots || [];
+        let checkInAt = null;
+        let checkOutAt = null;
+
+        if (itemSlots.length > 0) {
+          // Sắp xếp slot theo ngày + slotId (giả định slotId có thứ tự hoặc dùng logic khác)
+          // Ở đây ta sort theo Date trước
+          const sortedSlots = [...itemSlots].sort(
+            (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+          );
+
+          const firstSlot = sortedSlots[0];
+          const lastSlot = sortedSlots[sortedSlots.length - 1];
+
+          // Tra cứu giờ từ SlotMap
+          const startMaster = slotMap[firstSlot.slotId?.toLowerCase()];
+          const endMaster = slotMap[lastSlot.slotId?.toLowerCase()];
+
+          if (startMaster && endMaster) {
+            // Ghép chuỗi ISO: YYYY-MM-DD + T + HH:mm:ss
+            checkInAt = `${firstSlot.date}T${startMaster.startTime}`;
+            checkOutAt = `${lastSlot.date}T${endMaster.endTime}`;
+          }
+        }
+
+        // --- Map các trường dữ liệu ---
+        return {
+          id: item.id,
+          title: item.title || "Yêu cầu không tiêu đề",
+          // API không trả về tên sinh viên, ta hiển thị CourseCode hoặc Title
+          studentName:
+            item.courseResponse?.courseName ||
+            item.courseResponse?.courseCode ||
+            "Sự kiện",
+          courseCode: item.courseResponse?.courseCode,
+
+          // Dùng ngày của slot đầu tiên làm ngày tạo (hoặc ngày diễn ra) để sắp xếp
+          createdAt: checkInAt || new Date().toISOString(),
+
+          checkInAt: checkInAt, // Để hiển thị giờ bắt đầu
+          checkOutAt: checkOutAt, // Để hiển thị giờ kết thúc
+
+          status: item.status,
+          // Lấy labName từ object con
+          labName: item.labRoomResponse?.labName || "Chưa chọn phòng",
+
+          // Reason mapped từ description
+          reason: item.description,
+
+          // Nếu bị từ chối/hủy, lấy lý do (API hiện tại chưa thấy trường rejectReason rõ ràng, tạm dùng description hoặc note)
+          rejectReason: null,
+
+          totalSlots: itemSlots.length,
+        };
+      });
+
+      // Sắp xếp: Mới nhất lên đầu (dựa vào thời gian check-in)
+      mappedHistory.sort(
         (a: any, b: any) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
 
-      setBookings(sortedHistory);
+      setBookings(mappedHistory);
     } catch (e: any) {
       console.error("Load history error:", e);
-      Alert.alert("Lỗi", "Không tải được lịch sử.");
+      // Alert.alert("Lỗi", "Không tải được lịch sử.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
-
-  // Mock Data
-  const mockFetchManagerHistory = async () => {
-    await new Promise((r) => setTimeout(r, 500));
-    return [
-      {
-        id: "bk-01",
-        title: "Mượn phòng làm đồ án tốt nghiệp",
-        studentName: "Nguyễn Văn A",
-        createdAt: "2025-12-10T08:00:00Z",
-        checkInAt: "2025-12-12T07:00:00Z",
-        checkOutAt: "2025-12-12T09:00:00Z",
-        status: "Approved",
-        slotId: 1,
-        labName: "Lab A101 - IoT",
-        reason: "Em cần phòng để test mạch điều khiển.",
-      },
-      {
-        id: "bk-02",
-        title: "Họp nhóm nghiên cứu khoa học",
-        studentName: "Trần Thị B",
-        createdAt: "2025-12-11T09:30:00Z",
-        checkInAt: "2025-12-13T13:00:00Z",
-        checkOutAt: "2025-12-13T15:00:00Z",
-        status: "Pending",
-        slotId: 3,
-        labName: "Lab A101 - IoT",
-        reason: "Nhóm em cần không gian yên tĩnh để viết báo cáo.",
-      },
-      {
-        id: "bk-03",
-        title: "Mượn phòng training",
-        studentName: "Lê Văn C",
-        createdAt: "2025-11-20T10:00:00Z",
-        checkInAt: "2025-11-22T07:00:00Z",
-        checkOutAt: "2025-11-22T11:00:00Z",
-        status: "Rejected",
-        slotId: 1,
-        labName: "Lab A101 - IoT",
-        rejectReason: "Phòng đang bảo trì máy chiếu.",
-      },
-    ];
   };
 
   useEffect(() => {
@@ -122,7 +161,7 @@ export default function ManagerHistoryScreen() {
       if (statusFilter === "approved") return s === "approved";
       if (statusFilter === "pending") return s === "pending";
       if (statusFilter === "rejected")
-        return ["rejected", "cancelled", "expired"].includes(s);
+        return ["rejected", "cancelled", "expired", "denied"].includes(s);
       return true;
     });
   }, [bookings, statusFilter]);
@@ -133,6 +172,7 @@ export default function ManagerHistoryScreen() {
     setModalVisible(true);
   };
 
+  // --- HELPERS UI ---
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case "approved":
@@ -154,12 +194,27 @@ export default function ManagerHistoryScreen() {
       case "pending":
         return "Chờ duyệt";
       case "rejected":
-        return "Đã từ chối";
+        return "Từ chối";
       case "cancelled":
         return "Đã hủy";
       default:
         return status;
     }
+  };
+
+  const formatDateTimeVN = (isoString: string) => {
+    if (!isoString) return "N/A";
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return "N/A";
+
+    return `${date.getHours().toString().padStart(2, "0")}:${date
+      .getMinutes()
+      .toString()
+      .padStart(2, "0")} - ${date.getDate().toString().padStart(2, "0")}/${(
+      date.getMonth() + 1
+    )
+      .toString()
+      .padStart(2, "0")}/${date.getFullYear()}`;
   };
 
   // --- RENDER ---
@@ -185,14 +240,11 @@ export default function ManagerHistoryScreen() {
               activeOpacity={0.7}
               onPress={() => openDetail(item)}
             >
-              {/* Vô hiệu hóa pointerEvents của Card con để đảm bảo Card con không bắt sự kiện click */}
               <View pointerEvents="none">
                 <BookingHistoryCard
                   booking={item}
                   slotTemplates={slotTemplates}
-                  onRemove={function (id: string): void {
-                    throw new Error("Function not implemented.");
-                  }} // 🔥 QUAN TRỌNG: Không truyền onRemove để ẩn nút xóa
+                  onRemove={() => {}} // Ẩn nút xóa
                 />
               </View>
             </TouchableOpacity>
@@ -209,7 +261,7 @@ export default function ManagerHistoryScreen() {
         />
       )}
 
-      {/* --- POPUP (MODAL) Ở GIỮA --- */}
+      {/* --- POPUP (MODAL) --- */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -254,12 +306,18 @@ export default function ManagerHistoryScreen() {
 
                 <View style={styles.divider} />
 
+                {/* --- Nội dung chi tiết --- */}
+
+                {/* Lớp / Môn học (Thay cho Người đặt vì API ẩn info user) */}
                 <View style={styles.infoRow}>
-                  <User size={18} color="#EA580C" />
+                  <Briefcase size={18} color="#EA580C" />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Người đặt:</Text>
+                    <Text style={styles.label}>Nội dung / Môn học:</Text>
                     <Text style={styles.value}>
                       {selectedBooking.studentName}
+                      {selectedBooking.courseCode
+                        ? ` (${selectedBooking.courseCode})`
+                        : ""}
                     </Text>
                   </View>
                 </View>
@@ -267,7 +325,7 @@ export default function ManagerHistoryScreen() {
                 <View style={styles.infoRow}>
                   <MapPin size={18} color="#EA580C" />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Phòng:</Text>
+                    <Text style={styles.label}>Phòng Lab:</Text>
                     <Text style={styles.value}>{selectedBooking.labName}</Text>
                   </View>
                 </View>
@@ -275,16 +333,22 @@ export default function ManagerHistoryScreen() {
                 <View style={styles.infoRow}>
                   <Calendar size={18} color="#EA580C" />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Thời gian Check-in:</Text>
+                    <Text style={styles.label}>
+                      Thời gian (Bắt đầu - Kết thúc):
+                    </Text>
                     <Text style={styles.value}>
-                      {new Date(selectedBooking.checkInAt).toLocaleDateString(
-                        "vi-VN"
+                      {selectedBooking.checkInAt ? (
+                        <>
+                          {formatDateTimeVN(selectedBooking.checkInAt)}
+                          {"\n-> "}
+                          {formatDateTimeVN(selectedBooking.checkOutAt)}
+                        </>
+                      ) : (
+                        "Chưa có lịch cụ thể"
                       )}
-                      {" - "}
-                      {new Date(selectedBooking.checkInAt).toLocaleTimeString(
-                        "vi-VN",
-                        { hour: "2-digit", minute: "2-digit" }
-                      )}
+                    </Text>
+                    <Text style={styles.subValue}>
+                      (Tổng: {selectedBooking.totalSlots} slots)
                     </Text>
                   </View>
                 </View>
@@ -294,10 +358,10 @@ export default function ManagerHistoryScreen() {
                     style={{ flexDirection: "row", gap: 6, marginBottom: 4 }}
                   >
                     <Info size={16} color="#64748B" />
-                    <Text style={styles.label}>Lý do:</Text>
+                    <Text style={styles.label}>Mô tả / Ghi chú:</Text>
                   </View>
                   <Text style={styles.noteText}>
-                    {selectedBooking.reason || "Không có ghi chú"}
+                    {selectedBooking.reason || "Không có mô tả"}
                   </Text>
                 </View>
 
@@ -320,7 +384,7 @@ export default function ManagerHistoryScreen() {
               </ScrollView>
             )}
 
-            {/* Footer: Chỉ nút Đóng */}
+            {/* Footer */}
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={styles.closeBtn}
@@ -393,7 +457,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   label: { fontSize: 12, color: "#64748B", marginBottom: 2 },
-  value: { fontSize: 14, fontWeight: "500", color: "#0F172A" },
+  value: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#0F172A",
+    flexWrap: "wrap",
+  },
+  subValue: { fontSize: 12, color: "#94A3B8", marginTop: 2 },
   noteBox: {
     backgroundColor: "#F8FAFC",
     padding: 12,
