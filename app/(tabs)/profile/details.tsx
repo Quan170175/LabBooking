@@ -1,17 +1,11 @@
 import { useRouter } from "expo-router";
-import {
-  ArrowLeft,
-  Calendar,
-  ChevronDown,
-  UserRound,
-} from "lucide-react-native";
+import { UserRound } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
   ActivityIndicator,
   Alert,
@@ -19,21 +13,21 @@ import {
 
 import apiClient from "../../../utils/api";
 
+// 1. Cập nhật Interface để nhận phoneNumber từ API
 interface UserProfile {
   id: string;
   email: string;
   userName: string;
   roles: string[];
+  phoneNumber: string; // Thêm trường này
 }
 
 export default function ProfileDetails() {
   const router = useRouter();
 
-  // --- STATE ---
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // --- 3. GỌI API LẤY THÔNG TIN ---
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -50,7 +44,6 @@ export default function ProfileDetails() {
     fetchProfile();
   }, []);
 
-  // --- RENDER LOADING ---
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -67,7 +60,6 @@ export default function ProfileDetails() {
     >
       {/* Header */}
       <View style={styles.header}>
-        {/* Nút back nếu cần (đã có trong code gốc của bạn nhưng chưa dùng) */}
         <Text style={styles.headerTitle}>Thông tin cá nhân</Text>
       </View>
 
@@ -80,7 +72,6 @@ export default function ProfileDetails() {
           <Text style={styles.summaryName}>
             {user?.userName || "Người dùng"}
           </Text>
-          {/* Hiển thị Role (tuỳ chọn) */}
           <Text style={styles.summaryPhone}>
             {user?.roles && user.roles.length > 0
               ? user.roles.join(", ")
@@ -95,41 +86,27 @@ export default function ProfileDetails() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Họ và tên</Text>
           <TextInput
-            value={user?.userName} // 🟢 Data từ API
+            value={user?.userName}
             editable={false}
             style={[styles.input, styles.readOnlyInput]}
           />
         </View>
 
-        <View style={styles.row}>
-          {/* Ngày sinh (API chưa có, để placeholder) */}
-          <View style={[styles.inputGroup, { flex: 1 }]}>
-            <Text style={styles.label}>Ngày sinh</Text>
-            <View>
-              <TextInput
-                defaultValue="--/--/----" // Placeholder vì API không có
-                editable={false}
-                style={[styles.input, styles.readOnlyInput]}
-              />
-              <Calendar size={18} color="#94A3B8" style={styles.inputIcon} />
-            </View>
-          </View>
-
-          {/* Giới tính (API chưa có, để placeholder) */}
-          <View style={[styles.inputGroup, { flex: 1 }]}>
-            <Text style={styles.label}>Giới tính</Text>
-            <View style={[styles.picker, styles.readOnlyBackground]}>
-              <Text style={[styles.pickerText, styles.readOnlyText]}>--</Text>
-              <ChevronDown size={18} color="#94A3B8" />
-            </View>
-          </View>
+        {/* --- Số điện thoại (Thay thế cho Ngày sinh/Giới tính) --- */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Số điện thoại</Text>
+          <TextInput
+            value={user?.phoneNumber || "Chưa cập nhật"} // Data từ API
+            editable={false}
+            style={[styles.input, styles.readOnlyInput]}
+          />
         </View>
 
-        {/* Email */}
+        {/* --- Email --- */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
-            value={user?.email} // 🟢 Data từ API
+            value={user?.email}
             editable={false}
             style={[styles.input, styles.readOnlyInput]}
           />
@@ -158,16 +135,6 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 24,
     marginBottom: 24,
-  },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#FFEDD5",
   },
   headerTitle: {
     fontSize: 20,
@@ -233,36 +200,5 @@ const styles = StyleSheet.create({
     color: "#64748B",
     backgroundColor: "#F8FAFC",
     borderColor: "#E2E8F0",
-  },
-  readOnlyBackground: {
-    backgroundColor: "#F8FAFC",
-    borderColor: "#E2E8F0",
-  },
-  readOnlyText: {
-    color: "#64748B",
-  },
-  inputIcon: {
-    position: "absolute",
-    right: 16,
-    top: 16,
-  },
-  row: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  picker: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#FFF7ED",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    height: 50,
-    borderColor: "#FFEDD5",
-    borderWidth: 1,
-  },
-  pickerText: {
-    fontSize: 14,
-    color: "#1E293B",
   },
 });

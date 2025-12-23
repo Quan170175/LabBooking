@@ -196,9 +196,6 @@ export default function viewequipmentStatusScreen() {
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.catName}>{item.name}</Text>
-        <Text style={styles.catCount}>
-          {item.equipmentCount !== undefined ? item.equipmentCount : 0} thiết bị
-        </Text>
       </View>
       <ChevronRight size={20} color="#CBD5E1" />
     </TouchableOpacity>

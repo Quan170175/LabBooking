@@ -146,7 +146,7 @@ export default function CreateEquipmentMaintenanceScreen() {
       const url = `/api/EquipmentCategories/${categoryId}/equipments`;
       // Thêm params PageSize để đảm bảo lấy hết thiết bị
       const res = await apiClient.get(url, {
-        params: { PageNumber: 1, PageSize: 100 },
+        params: { PageNumber: 1, PageSize: 10 },
       });
 
       const resBody = res.data;
@@ -356,9 +356,6 @@ export default function CreateEquipmentMaintenanceScreen() {
                         ]}
                       >
                         {cat.name}
-                        {selectedCountInCat > 0
-                          ? ` (${selectedCountInCat}/${cat.equipmentCount})`
-                          : ` (${cat.equipmentCount})`}
                       </Text>
                     </TouchableOpacity>
                   );
