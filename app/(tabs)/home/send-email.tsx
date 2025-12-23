@@ -167,7 +167,7 @@ export default function EmailComposerScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Soạn Email Hàng Loạt</Text>
+          <Text style={styles.title}>Soạn Email</Text>
           <Text style={styles.subtitle}>
             Gửi thông báo tới danh sách sinh viên
           </Text>

@@ -24,11 +24,8 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
-// *** IMPORT apiClient ***
-// (Đảm bảo đường dẫn này đúng với cấu trúc dự án của bạn)
 import apiClient from "../../utils/api";
 
-// Component GoogleGlyph
 const GoogleGlyph = () => (
   <Svg height={20} width={20} viewBox="0 0 24 24">
     <Path
@@ -54,7 +51,6 @@ export default function LoginScreen() {
   const router = useRouter();
 
   // Animation Values
-  // Set mặc định là 1 và 0 để hiện ngay lập tức (vì đã có animation ở index.tsx rồi)
   const headerOpacity = useSharedValue(1);
   const headerTranslateY = useSharedValue(0);
   const mainOpacity = useSharedValue(1);
@@ -220,12 +216,10 @@ export default function LoginScreen() {
                 <Text style={styles.buttonText}>Đăng nhập bằng Google</Text>
               </TouchableOpacity>
 
-              {/* --- NÚT SECURITY LOGIN (Đã sửa style đồng bộ) --- */}
               <TouchableOpacity
                 style={[styles.button, { marginTop: 12 }]}
                 onPress={() => router.push("/security-login" as any)}
               >
-                {/* Thêm icon Shield */}
                 <Shield size={20} color="#334155" strokeWidth={2} />
                 <Text style={styles.buttonText}>Đăng nhập cho bảo vệ</Text>
               </TouchableOpacity>
@@ -280,9 +274,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     height: "100%",
-    // PaddingTop đẩy nội dung xuống một chút từ header
     paddingTop: 40,
-    // PaddingBottom LỚN để đẩy 2 nút lên cao
     paddingBottom: 100,
   },
   headerContainer: {
