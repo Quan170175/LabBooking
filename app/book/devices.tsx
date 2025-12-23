@@ -18,6 +18,9 @@ import {
 import apiClient from "@/utils/api";
 import Svg, { Circle, Path } from "react-native-svg";
 
+import * as SecureStore from "expo-secure-store"; // Dùng cái này mới lấy được token từ trang Login
+import { jwtDecode } from "jwt-decode";
+
 // --- COMPONENTS ---
 // (Giữ nguyên đường dẫn import của bạn)
 import AddDeviceModal, {
@@ -445,13 +448,48 @@ export default function BookDevices() {
 
     setIsSubmitting(true);
     try {
+      // ==========================================================
+      // 👇 BẮT ĐẦU ĐOẠN LẤY TOKEN VÀ USER ID CHUẨN THEO LOGIN
+      // ==========================================================
+
+      // 1. Lấy token từ SecureStore (Key phải khớp với trang Login là "accessToken")
+      const token = await SecureStore.getItemAsync("accessToken");
+
+      if (!token) {
+        Alert.alert("Lỗi xác thực", "Vui lòng đăng nhập lại.");
+        router.replace("/(auth)/login" as any); // Hoặc đường dẫn login của ní
+        return;
+      }
+
+      // 2. Decode token để lấy User ID
+      const decoded: any = jwtDecode(token);
+
+      // 3. Lấy ID ra (Backend thường trả về field tên là 'sub', 'id', hoặc 'userId')
+      // Ní có thể console.log(decoded) để xem chính xác tên field là gì
+      const userId =
+        decoded.id ||
+        decoded.sub ||
+        decoded.userId ||
+        decoded[
+          "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+        ];
+
+      if (!userId) {
+        throw new Error("Token không chứa User ID hợp lệ");
+      }
+
+      console.log("✅ Lấy được UserID:", userId);
+      // ==========================================================
+      // 👆 KẾT THÚC ĐOẠN LẤY TOKEN
+      // ==========================================================
+
       let apiType = "Teaching";
       if (booking.type === "project") apiType = "Project";
       else if (booking.type === "priority") apiType = "UniversityEvent";
 
       let payload: any = {
         labRoomId: booking.roomId,
-        createdById: "5b63378f-f391-4906-88a8-4c903f8a7ded", // TODO: Auth ID
+        createdById: userId, // TODO: Auth ID
         title: title,
         description: description,
         numberOfParticipants: parseInt(participants),
