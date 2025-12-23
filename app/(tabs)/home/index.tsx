@@ -17,6 +17,7 @@ import {
   QrCode,
   ScanLine,
   ClipboardCheck,
+  HistoryIcon,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -231,7 +232,7 @@ const APP_SECTIONS = [
         to: "/(tabs)/home/today-schedule-history",
         title: "Lịch sử bàn giao",
         description: "Xem lịch sử bàn giao phòng",
-        icon: ScanLine,
+        icon: HistoryIcon,
         allowedRoles: [ROLES.SECURITYGUARD, ROLES.MANAGER],
       },
     ],
