@@ -50,10 +50,7 @@ const processQueue = (
 // Response Interceptor (ĐÃ CẬP NHẬT XỬ LÝ 403)
 apiClient.interceptors.response.use(
   (response) => {
-    // --- LOGIC BÓC VỎ DATA ---
-    // Nếu response có dạng { statusCode, message, data }
     if (response.data && response.data.statusCode && "data" in response.data) {
-      // Gán phần ruột 'data' đè lên response.data để FE cũ hiểu
       response.data = response.data.data;
     }
     return response;
@@ -61,33 +58,30 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
 
-    // 🟢 1. XỬ LÝ LỖI 403 (Forbidden / Sai quyền / Sai cơ sở)
-    // Đây là đoạn code giúp bạn xóa Token khi bị lỗi như ảnh
-    if (error.response?.status === 403) {
-      console.log(
-        "⛔ Lỗi 403: Tài khoản không có quyền truy cập. Đang đăng xuất..."
-      );
+    // --- 🟢 MỚI: NẾU LÀ API LOGIN THÌ KHÔNG XỬ LÝ 401/403 TỰ ĐỘNG ---
+    // Điều này để Component Login tự bắt lỗi và hiện "Sai mật khẩu"
+    if (originalRequest.url?.includes("/api/auth/login")) {
+      return Promise.reject(error);
+    }
+    // -----------------------------------------------------------
 
+    // 1. XỬ LÝ LỖI 403
+    if (error.response?.status === 403) {
+      console.log("⛔ Lỗi 403: Đang đăng xuất...");
       try {
-        // Xóa token trong SecureStore
         await SecureStore.deleteItemAsync("accessToken");
         await SecureStore.deleteItemAsync("refreshToken");
-
-        // Điều hướng về trang Login
-        // Sử dụng require để tránh lỗi vòng lặp import (circular dependency)
         const { router } = require("expo-router");
-
-        // Dùng replace để người dùng không bấm Back quay lại được trang lỗi
         router.replace("/login");
       } catch (logoutError) {
         console.error("Lỗi khi đăng xuất tự động:", logoutError);
       }
-
       return Promise.reject(error);
     }
 
-    // 🟢 2. XỬ LÝ LỖI 401 (Token hết hạn - Auto Refresh)
+    // 2. XỬ LÝ LỖI 401 (Token hết hạn)
     if (error.response?.status === 401 && !originalRequest._retry) {
+      // Nếu đang trong quá trình refresh rồi thì cho các request sau vào hàng đợi
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -105,37 +99,22 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        console.log("AccessToken hết hạn. Đang lấy refreshToken...");
         const refreshToken = await SecureStore.getItemAsync("refreshToken");
 
         if (!refreshToken) {
-          console.log("Không tìm thấy refreshToken, đang đăng xuất.");
-          await SecureStore.deleteItemAsync("accessToken");
-          await SecureStore.deleteItemAsync("refreshToken");
-
-          const { router } = require("expo-router");
-          router.replace("/login");
-
-          return Promise.reject(error);
+          throw new Error("No refresh token");
         }
 
-        console.log("Đang gọi API /api/auth/refresh-token...");
-
-        // Gọi API refresh token (dùng axios gốc để tránh lặp interceptor)
+        // Gọi API refresh (Dùng axios instance mới hoặc axios gốc để tránh interceptor này)
         const refreshResponse = await axios.post(
           `${BACKEND_URL}/api/auth/refresh-token`,
-          {
-            refreshToken: refreshToken,
-          }
+          { refreshToken }
         );
 
-        // Kiểm tra cấu trúc data trả về (có bọc vỏ hay không)
         const responseData = refreshResponse.data.data || refreshResponse.data;
-
         const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
           responseData;
 
-        console.log("Đã nhận được token mới. Đang lưu...");
         await SecureStore.setItemAsync("accessToken", newAccessToken);
         await SecureStore.setItemAsync("refreshToken", newRefreshToken);
 
@@ -144,30 +123,24 @@ apiClient.interceptors.response.use(
         ] = `Bearer ${newAccessToken}`;
 
         processQueue(null, newAccessToken);
-        isRefreshing = false;
+        isRefreshing = false; // Giải phóng trạng thái
 
-        console.log("Đã refresh token, thực hiện lại request gốc.");
         originalRequest.headers["Authorization"] = `Bearer ${newAccessToken}`;
         return apiClient(originalRequest);
       } catch (refreshError: any) {
-        console.error(
-          "Lỗi nghiêm trọng khi refresh token:",
-          refreshError.message
-        );
+        // Nếu refresh token cũng hỏng, xoá hết và bắt login lại
         await SecureStore.deleteItemAsync("accessToken");
         await SecureStore.deleteItemAsync("refreshToken");
 
-        const { router } = require("expo-router");
-        router.replace("/login");
-
-        isRefreshing = false;
+        isRefreshing = false; // QUAN TRỌNG: Phải reset cái này nếu thất bại
         processQueue(refreshError, null);
 
+        const { router } = require("expo-router");
+        router.replace("/login");
         return Promise.reject(refreshError);
       }
     }
 
-    // Các lỗi khác trả về bình thường để component tự xử lý
     return Promise.reject(error);
   }
 );

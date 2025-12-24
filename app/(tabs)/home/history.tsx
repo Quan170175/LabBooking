@@ -75,7 +75,7 @@ export default function ManagerHistoryScreen() {
       // Gọi song song 2 API
       const [resSlots, resHistory] = await Promise.all([
         apiClient.get("/api/Slot"),
-        apiClient.get("/api/Bookings/HistoryApprove"),
+        apiClient.get("/api/Bookings/My-History-Booking"),
       ]);
 
       // 1. Xử lý Slot Master Data -> Tạo Map để tra cứu nhanh

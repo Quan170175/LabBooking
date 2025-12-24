@@ -17,7 +17,7 @@ import apiClient from "../../../utils/api";
 interface UserProfile {
   id: string;
   email: string;
-  userName: string;
+  fullName: string;
   roles: string[];
   phoneNumber: string; // Thêm trường này
 }
@@ -70,7 +70,7 @@ export default function ProfileDetails() {
         </View>
         <View>
           <Text style={styles.summaryName}>
-            {user?.userName || "Người dùng"}
+            {user?.fullName || "Người dùng"}
           </Text>
           <Text style={styles.summaryPhone}>
             {user?.roles && user.roles.length > 0
@@ -86,7 +86,7 @@ export default function ProfileDetails() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Họ và tên</Text>
           <TextInput
-            value={user?.userName}
+            value={user?.fullName}
             editable={false}
             style={[styles.input, styles.readOnlyInput]}
           />
