@@ -264,10 +264,16 @@ const useRescheduleViewModel = () => {
         onPress: async () => {
           try {
             setIsSubmitting(true);
+
+            const finalSlots = [
+              ...(context.safeSlots || []),
+              ...newSelectedSlots,
+            ];
+
             await apiClient.post("/api/BookingConsent/resolve", {
               consentId,
               action: "Reschedule",
-              newSlots: newSelectedSlots,
+              newSlots: finalSlots,
             });
             if (notificationId)
               await apiClient
