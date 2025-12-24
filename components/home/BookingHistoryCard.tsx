@@ -4,54 +4,49 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type Props = {
   booking: any;
-  slotTemplates: any[]; // [MỚI] Nhận danh sách slot từ cha
+  slotTemplates: any[];
   onRemove: (id: string) => void;
+  showCancelButton?: boolean; // [MỚI] Thêm prop tùy chọn, mặc định là true
 };
 
 export default function BookingHistoryCard({
   booking: b,
   slotTemplates,
   onRemove,
+  showCancelButton = true, // [MỚI] Mặc định là true (User dùng thì hiện)
 }: Props) {
   const status = b.status?.toLowerCase() || "pending";
   const isApproved = status === "approved";
   const isRejected = status === "rejected";
+  // Các trạng thái hủy/từ chối khác cũng tính là rejected để ẩn nút
+  const isCancelled = ["cancelled", "denied", "expired"].includes(status);
 
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // --- LOGIC HIỂN THỊ SLOT XỊN XÒ ---
+  // --- LOGIC HIỂN THỊ SLOT ---
   const slotsDisplay = useMemo(() => {
-    if (!b.slots || b.slots.length === 0) return ["Lịch trống hoặc bị từ chối"];
+    if (!b.slots || b.slots.length === 0) return ["Nhấn vào để xem chi tiết"];
 
-    // 1. Gom nhóm theo ngày (Group by Date)
+    // ... (Giữ nguyên logic xử lý slot của bạn) ...
+    // Để code ngắn gọn mình ẩn phần xử lý slot đi, bạn giữ nguyên code cũ nhé
     const grouped: Record<string, string[]> = {};
-
     b.slots.forEach((s: any) => {
       try {
-        // Format ngày: "2025-11-22" -> "22/11"
         const dateObj = new Date(s.date);
         const dateStr = dateObj.toLocaleDateString("vi-VN", {
           day: "2-digit",
           month: "2-digit",
         });
-
-        // Tìm tên Slot: id -> "Ca 1"
-        // (Giả sử API trả về field 'label' hoặc 'name', bạn check lại API /Slot nhé)
         const template = slotTemplates.find((t) => t.id === s.slotId);
-        // Lấy tên ngắn gọn (bỏ phần giờ phía sau nếu có)
         const slotName = template
           ? template.label.split("(")[0].trim()
           : "Slot";
-
         if (!grouped[dateStr]) grouped[dateStr] = [];
         grouped[dateStr].push(slotName);
       } catch (e) {
         return;
       }
     });
-
-    // 2. Format thành chuỗi: "Ngày 22/11: Ca 1, Ca 2"
-    // Sắp xếp ngày tăng dần
     const sortedDates = Object.keys(grouped).sort((a, b) => {
       const [dA, mA] = a.split("/");
       const [dB, mB] = b.split("/");
@@ -59,18 +54,13 @@ export default function BookingHistoryCard({
         parseInt(mA) * 31 + parseInt(dA) - (parseInt(mB) * 31 + parseInt(dB))
       );
     });
-
     const lines = sortedDates.map((date) => {
-      // Sắp xếp tên slot (Ca 1, Ca 2...)
       const slotNames = grouped[date].sort().join(", ");
       return `• Ngày ${date}: ${slotNames}`;
     });
-
-    // 3. Xử lý Thu gọn / Mở rộng
     if (isExpanded) return lines;
-    if (lines.length > 2) {
+    if (lines.length > 2)
       return [lines[0], lines[1], `...và ${lines.length - 2} ngày khác.`];
-    }
     return lines;
   }, [b.slots, slotTemplates, isExpanded]);
 
@@ -84,23 +74,19 @@ export default function BookingHistoryCard({
         <View style={styles.cardBody}>
           <View style={styles.cardHeader}>
             <View style={{ flex: 1 }}>
-              {/* Tên Phòng */}
               <Text style={styles.cardTitle} numberOfLines={1}>
-                {b.labRoomResponse?.labName || "Phòng Lab"}
+                {b.labName || "Phòng Lab"}
               </Text>
-
-              {/* Tiêu đề Booking */}
               <Text style={styles.cardSubtitle} numberOfLines={1}>
                 {b.title}
               </Text>
 
-              {/* --- DANH SÁCH SLOT --- */}
+              {/* SLOT LIST */}
               <View style={styles.slotContainer}>
                 <Calendar size={12} color="#64748B" style={{ marginTop: 3 }} />
                 <View style={{ flex: 1 }}>
                   {slotsDisplay.map((line: string, idx: number) => (
                     <Text key={idx} style={styles.cardSlots}>
-                      {/* Tô đậm phần ngày tháng cho đẹp */}
                       {line.split(":")[0]}:{" "}
                       <Text style={{ color: "#0F172A", fontWeight: "500" }}>
                         {line.split(":")[1]}
@@ -110,8 +96,7 @@ export default function BookingHistoryCard({
                 </View>
               </View>
 
-              {/* Nút Xem thêm */}
-              {b.slots?.length > 2 && ( // Check logic này tùy theo số dòng bạn muốn hiện
+              {b.slots?.length > 2 && (
                 <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)}>
                   <Text style={styles.toggleText}>
                     {isExpanded ? "Thu gọn" : "Xem thêm"}
@@ -120,14 +105,14 @@ export default function BookingHistoryCard({
               )}
             </View>
 
-            {/* Badge & Actions (Giữ nguyên code cũ) */}
+            {/* Actions */}
             <View style={styles.cardActions}>
               <View
                 style={[
                   styles.badge,
                   isApproved
                     ? styles.badgeApproved
-                    : isRejected
+                    : isRejected || isCancelled
                     ? styles.badgeRejected
                     : styles.badgePending,
                 ]}
@@ -137,32 +122,35 @@ export default function BookingHistoryCard({
                     styles.badgeText,
                     isApproved
                       ? styles.badgeTextApproved
-                      : isRejected
+                      : isRejected || isCancelled
                       ? styles.badgeTextRejected
                       : styles.badgeTextPending,
                   ]}
                 >
                   {isApproved
                     ? "Đã duyệt"
-                    : isRejected
+                    : isRejected || isCancelled
                     ? "Từ chối"
                     : "Chờ duyệt"}
                 </Text>
               </View>
 
-              {!isApproved && (
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => onRemove(b.id)}
-                >
-                  <Trash2 size={14} color="#64748B" />
-                  <Text style={styles.deleteButtonText}>Hủy</Text>
-                </TouchableOpacity>
-              )}
+              {/* [MỚI] Kiểm tra thêm điều kiện showCancelButton */}
+              {!isApproved &&
+                !isRejected &&
+                !isCancelled &&
+                showCancelButton && (
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => onRemove(b.id)}
+                  >
+                    <Trash2 size={14} color="#64748B" />
+                    <Text style={styles.deleteButtonText}>Hủy</Text>
+                  </TouchableOpacity>
+                )}
             </View>
           </View>
 
-          {/* Chi tiết phụ */}
           <View style={styles.detailsContainer}>
             <Text style={styles.detailText}>Loại: {b.type}</Text>
             {b.courseResponse && (
@@ -172,7 +160,7 @@ export default function BookingHistoryCard({
             )}
             {b.projectResponse && (
               <Text style={styles.detailText}>
-                Dự án: {b.projectResponse.projectName}
+                DA: {b.projectResponse.projectName}
               </Text>
             )}
           </View>
@@ -182,7 +170,9 @@ export default function BookingHistoryCard({
   );
 }
 
+// ... (Giữ nguyên phần styles)
 const styles = StyleSheet.create({
+  // Copy lại styles cũ của bạn vào đây
   card: {
     backgroundColor: "white",
     borderRadius: 12,
@@ -206,7 +196,6 @@ const styles = StyleSheet.create({
   },
   cardBody: { flex: 1, minWidth: 0 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
-
   cardTitle: { fontSize: 16, fontWeight: "700", color: "#0F172A" },
   cardSubtitle: {
     fontSize: 14,
@@ -214,10 +203,8 @@ const styles = StyleSheet.create({
     color: "#334155",
     marginBottom: 4,
   },
-
   slotContainer: { flexDirection: "row", gap: 6, marginTop: 4 },
-  cardSlots: { fontSize: 13, color: "#64748B", lineHeight: 20 }, // Tăng lineHeight cho dễ đọc
-
+  cardSlots: { fontSize: 13, color: "#64748B", lineHeight: 20 },
   toggleText: {
     fontSize: 12,
     fontWeight: "600",
@@ -225,7 +212,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginLeft: 18,
   },
-
   cardActions: { alignItems: "flex-end", flexShrink: 0 },
   deleteButton: {
     marginTop: 8,
@@ -240,7 +226,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteButtonText: { fontSize: 12, color: "#64748B" },
-
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99 },
   badgeText: { fontSize: 11, fontWeight: "700" },
   badgeApproved: { backgroundColor: "#ECFDF5" },
@@ -249,7 +234,6 @@ const styles = StyleSheet.create({
   badgeTextPending: { color: "#92400E" },
   badgeRejected: { backgroundColor: "#FEF2F2" },
   badgeTextRejected: { color: "#991B1B" },
-
   detailsContainer: {
     marginTop: 8,
     paddingTop: 8,
