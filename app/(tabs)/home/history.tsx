@@ -1,5 +1,5 @@
+import * as Clipboard from "expo-clipboard";
 import { Stack } from "expo-router";
-// 1. Thêm icon Copy
 import {
   Briefcase,
   Calendar,
@@ -11,7 +11,7 @@ import {
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert, // 2. Thêm Alert để thông báo
+  Alert,
   FlatList,
   Modal,
   RefreshControl,
@@ -21,14 +21,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-// 3. Import thư viện Clipboard
-import * as Clipboard from "expo-clipboard";
 
 // --- COMPONENTS ---
 import BookingFilterHeader from "../../../components/home/BookingFilterHeader";
 import BookingHistoryCard from "../../../components/home/BookingHistoryCard";
 import EmptyBookingHistory from "../../../components/home/EmptyBookingHistory";
-
 import apiClient from "../../../utils/api";
 
 // --- TYPES ---
@@ -36,9 +33,14 @@ type StatusFilter = "all" | "approved" | "pending" | "rejected";
 
 interface SlotMaster {
   id: string;
-  startTime: string; // "07:00:00"
-  endTime: string; // "09:15:00"
+  startTime: string;
+  endTime: string;
   label: string;
+}
+
+interface GroupedSlot {
+  date: string;
+  slotNames: string[];
 }
 
 export default function ManagerHistoryScreen() {
@@ -46,121 +48,139 @@ export default function ManagerHistoryScreen() {
   const [slotTemplates, setSlotTemplates] = useState<SlotMaster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Filter
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-
-  // Popup State
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // --- HELPER: Format Time ---
-  const formatTimeStr = (time: string) => time?.substring(0, 5) || "";
+  // --- HELPERS ---
+  const formatDateVN = (dateString: string) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    return `${date.getDate().toString().padStart(2, "0")}/${(
+      date.getMonth() + 1
+    )
+      .toString()
+      .padStart(2, "0")}/${date.getFullYear()}`;
+  };
 
-  // --- 4. HÀM COPY QR ---
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case "UniversityEvent":
+        return "Sự kiện trường";
+      case "Teaching":
+        return "Lịch giảng dạy";
+      case "Booking":
+        return "Đặt phòng mượn";
+      default:
+        return type || "Khác";
+    }
+  };
+
   const copyToClipboard = async (qrString: string) => {
     if (!qrString) {
-      Alert.alert("Thông báo", "Không tìm thấy dữ liệu QR của yêu cầu này.");
+      Alert.alert("Thông báo", "Không tìm thấy dữ liệu QR.");
       return;
     }
     await Clipboard.setStringAsync(qrString);
-    Alert.alert("Đã sao chép", "Chuỗi QR Code đã được lưu vào bộ nhớ tạm.");
+    Alert.alert("Đã sao chép", "QR Code đã lưu vào bộ nhớ tạm.");
   };
 
-  // --- 1. LOAD DATA ---
+  // --- LOAD DATA ---
   const loadData = async () => {
     try {
       setIsLoading(true);
 
-      // Gọi song song 2 API
       const [resSlots, resHistory] = await Promise.all([
         apiClient.get("/api/Slot"),
         apiClient.get("/api/Bookings/My-History-Booking"),
       ]);
 
-      // 1. Xử lý Slot Master Data -> Tạo Map để tra cứu nhanh
       const rawSlots: SlotMaster[] = resSlots.data?.data || resSlots.data || [];
       setSlotTemplates(rawSlots);
-
       const slotMap: Record<string, SlotMaster> = {};
-      rawSlots.forEach((s) => {
-        // Lưu key là lowercase ID để tra cứu cho an toàn
-        slotMap[s.id.toLowerCase()] = s;
-      });
+      rawSlots.forEach((s) => (slotMap[s.id.toLowerCase()] = s));
 
-      // 2. Xử lý Booking History
       const rawHistory = resHistory.data?.data || resHistory.data || [];
 
       const mappedHistory = rawHistory.map((item: any) => {
-        // --- Xử lý thời gian Check-in / Check-out dựa trên Slots ---
         const itemSlots = item.slots || [];
         let checkInAt = null;
         let checkOutAt = null;
 
-        if (itemSlots.length > 0) {
-          // Sắp xếp slot theo ngày + slotId
-          const sortedSlots = [...itemSlots].sort(
-            (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-          );
+        // --- XỬ LÝ GOM NHÓM SLOT ---
+        const slotsByDate: Record<string, string[]> = {};
+        const sortedSlots = [...itemSlots].sort(
+          (a: any, b: any) =>
+            new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
 
-          const firstSlot = sortedSlots[0];
-          const lastSlot = sortedSlots[sortedSlots.length - 1];
+        sortedSlots.forEach((slot: any) => {
+          const dateStr = formatDateVN(slot.date);
+          if (!slotsByDate[dateStr]) slotsByDate[dateStr] = [];
 
-          // Tra cứu giờ từ SlotMap
-          const startMaster = slotMap[firstSlot.slotId?.toLowerCase()];
-          const endMaster = slotMap[lastSlot.slotId?.toLowerCase()];
+          const masterSlot = slotMap[slot.slotId?.toLowerCase()];
+          // Lấy tên slot gọn: "Slot 1"
+          const label = masterSlot ? masterSlot.label : "Slot ???";
 
-          if (startMaster && endMaster) {
-            // Ghép chuỗi ISO: YYYY-MM-DD + T + HH:mm:ss
-            checkInAt = `${firstSlot.date}T${startMaster.startTime}`;
-            checkOutAt = `${lastSlot.date}T${endMaster.endTime}`;
+          slotsByDate[dateStr].push(label);
+        });
+
+        const groupedSlotsArray: GroupedSlot[] = Object.keys(slotsByDate).map(
+          (date) => ({
+            date: date,
+            slotNames: slotsByDate[date],
+          })
+        );
+
+        if (sortedSlots.length > 0) {
+          const first = sortedSlots[0];
+          const last = sortedSlots[sortedSlots.length - 1];
+          const sMaster = slotMap[first.slotId?.toLowerCase()];
+          const eMaster = slotMap[last.slotId?.toLowerCase()];
+          if (sMaster && eMaster) {
+            checkInAt = `${first.date}T${sMaster.startTime}`;
+            checkOutAt = `${last.date}T${eMaster.endTime}`;
           }
         }
 
-        // --- Map các trường dữ liệu ---
+        let displayTitle = "Sự kiện";
+        let displayCode = "";
+        if (item.courseResponse) {
+          displayTitle = item.courseResponse.courseName;
+          displayCode = item.courseResponse.courseCode;
+        } else if (item.projectResponse) {
+          displayTitle = item.projectResponse.projectName;
+        } else {
+          displayTitle = item.title;
+        }
+
         return {
           id: item.id,
-          title: item.title || "Yêu cầu không tiêu đề",
-          // API không trả về tên sinh viên, ta hiển thị CourseCode hoặc Title
-          studentName:
-            item.courseResponse?.courseName ||
-            item.courseResponse?.courseCode ||
-            "Sự kiện",
-          courseCode: item.courseResponse?.courseCode,
-
-          // Dùng ngày của slot đầu tiên làm ngày tạo (hoặc ngày diễn ra) để sắp xếp
+          title: item.title || "Yêu cầu",
+          studentName: displayTitle,
+          courseCode: displayCode,
+          type: item.type,
+          typeLabel: getTypeLabel(item.type),
           createdAt: checkInAt || new Date().toISOString(),
-
-          checkInAt: checkInAt, // Để hiển thị giờ bắt đầu
-          checkOutAt: checkOutAt, // Để hiển thị giờ kết thúc
-
+          checkInAt: checkInAt,
+          checkOutAt: checkOutAt,
           status: item.status,
-          // Lấy labName từ object con
           labName: item.labRoomResponse?.labName || "Chưa chọn phòng",
-
-          // Reason mapped từ description
           reason: item.description,
-
-          // Nếu bị từ chối/hủy, lấy lý do
-          rejectReason: null,
-
+          rejectReason: item.priorityDetail?.managerNote || null,
           totalSlots: itemSlots.length,
-
-          // 5. LẤY CHUỖI QR (Dự phòng tên trường qrCode hoặc qrCodeString)
           qrCodeString: item.qrCodeString || item.qrCode || "",
+          groupedSlots: groupedSlotsArray,
         };
       });
 
-      // Sắp xếp: Mới nhất lên đầu (dựa vào thời gian check-in)
       mappedHistory.sort(
         (a: any, b: any) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
-
       setBookings(mappedHistory);
     } catch (e: any) {
       console.error("Load history error:", e);
-      // Alert.alert("Lỗi", "Không tải được lịch sử.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -176,7 +196,6 @@ export default function ManagerHistoryScreen() {
     loadData();
   };
 
-  // --- 2. FILTER ---
   const filteredBookings = useMemo(() => {
     return bookings.filter((b) => {
       if (statusFilter === "all") return true;
@@ -189,13 +208,6 @@ export default function ManagerHistoryScreen() {
     });
   }, [bookings, statusFilter]);
 
-  // --- 3. HANDLE OPEN MODAL ---
-  const openDetail = (item: any) => {
-    setSelectedBooking(item);
-    setModalVisible(true);
-  };
-
-  // --- HELPERS UI ---
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case "approved":
@@ -225,19 +237,9 @@ export default function ManagerHistoryScreen() {
     }
   };
 
-  const formatDateTimeVN = (isoString: string) => {
-    if (!isoString) return "N/A";
-    const date = new Date(isoString);
-    if (isNaN(date.getTime())) return "N/A";
-
-    return `${date.getHours().toString().padStart(2, "0")}:${date
-      .getMinutes()
-      .toString()
-      .padStart(2, "0")} - ${date.getDate().toString().padStart(2, "0")}/${(
-      date.getMonth() + 1
-    )
-      .toString()
-      .padStart(2, "0")}/${date.getFullYear()}`;
+  const openDetail = (item: any) => {
+    setSelectedBooking(item);
+    setModalVisible(true);
   };
 
   // --- RENDER ---
@@ -258,6 +260,7 @@ export default function ManagerHistoryScreen() {
         <FlatList
           data={filteredBookings}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <TouchableOpacity
               activeOpacity={0.7}
@@ -267,12 +270,11 @@ export default function ManagerHistoryScreen() {
                 <BookingHistoryCard
                   booking={item}
                   slotTemplates={slotTemplates}
-                  onRemove={() => {}} // Ẩn nút xóa
+                  onRemove={() => {}}
                 />
               </View>
             </TouchableOpacity>
           )}
-          contentContainerStyle={styles.listContent}
           ListEmptyComponent={<EmptyBookingHistory />}
           refreshControl={
             <RefreshControl
@@ -284,7 +286,7 @@ export default function ManagerHistoryScreen() {
         />
       )}
 
-      {/* --- POPUP (MODAL) --- */}
+      {/* --- MODAL DETAIL --- */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -293,7 +295,6 @@ export default function ManagerHistoryScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Chi tiết yêu cầu</Text>
               <TouchableOpacity
@@ -305,10 +306,20 @@ export default function ManagerHistoryScreen() {
             </View>
 
             {selectedBooking && (
-              <ScrollView style={styles.modalBody}>
-                <Text style={styles.bookingTitle}>{selectedBooking.title}</Text>
+              <ScrollView
+                style={styles.modalBody}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.bookingTitle}>
+                  {selectedBooking.studentName}
+                </Text>
+                {selectedBooking.courseCode ? (
+                  <Text style={styles.courseCodeText}>
+                    {selectedBooking.courseCode}
+                  </Text>
+                ) : null}
 
-                {/* Phần hiển thị Status và nút Copy QR */}
+                {/* Status Row */}
                 <View style={styles.statusRowContainer}>
                   <View
                     style={[
@@ -329,7 +340,6 @@ export default function ManagerHistoryScreen() {
                     </Text>
                   </View>
 
-                  {/* NÚT COPY QR (Chỉ hiện khi Approved) */}
                   {selectedBooking.status?.toLowerCase() === "approved" && (
                     <TouchableOpacity
                       style={styles.copyBtn}
@@ -338,25 +348,20 @@ export default function ManagerHistoryScreen() {
                       }
                     >
                       <Copy size={14} color="#0F172A" />
-                      <Text style={styles.copyBtnText}>Copy QR String</Text>
+                      <Text style={styles.copyBtnText}>Copy QR</Text>
                     </TouchableOpacity>
                   )}
                 </View>
 
                 <View style={styles.divider} />
 
-                {/* --- Nội dung chi tiết --- */}
-
-                {/* Lớp / Môn học (Thay cho Người đặt vì API ẩn info user) */}
+                {/* Info Detail */}
                 <View style={styles.infoRow}>
                   <Briefcase size={18} color="#EA580C" />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Nội dung / Môn học:</Text>
+                    <Text style={styles.label}>Loại lịch:</Text>
                     <Text style={styles.value}>
-                      {selectedBooking.studentName}
-                      {selectedBooking.courseCode
-                        ? ` (${selectedBooking.courseCode})`
-                        : ""}
+                      {selectedBooking.typeLabel}
                     </Text>
                   </View>
                 </View>
@@ -369,26 +374,35 @@ export default function ManagerHistoryScreen() {
                   </View>
                 </View>
 
-                <View style={styles.infoRow}>
-                  <Calendar size={18} color="#EA580C" />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>
-                      Thời gian (Bắt đầu - Kết thúc):
+                {/* --- DANH SÁCH SLOT GOM NHÓM NGANG --- */}
+                <View style={styles.scheduleContainer}>
+                  <View
+                    style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}
+                  >
+                    <Calendar size={18} color="#EA580C" />
+                    <Text style={[styles.label, { marginTop: 2 }]}>
+                      Chi tiết lịch đặt ({selectedBooking.totalSlots} slots):
                     </Text>
-                    <Text style={styles.value}>
-                      {selectedBooking.checkInAt ? (
-                        <>
-                          {formatDateTimeVN(selectedBooking.checkInAt)}
-                          {"\n-> "}
-                          {formatDateTimeVN(selectedBooking.checkOutAt)}
-                        </>
-                      ) : (
-                        "Chưa có lịch cụ thể"
-                      )}
-                    </Text>
-                    <Text style={styles.subValue}>
-                      (Tổng: {selectedBooking.totalSlots} slots)
-                    </Text>
+                  </View>
+
+                  <View style={styles.groupedList}>
+                    {selectedBooking.groupedSlots?.map(
+                      (group: GroupedSlot, index: number) => (
+                        // Layout nằm ngang
+                        <View key={index} style={styles.rowItem}>
+                          <Text style={styles.rowDateText}>{group.date}:</Text>
+                          <View style={styles.slotsCol}>
+                            {group.slotNames.map((slotName, sIndex) => (
+                              <View key={sIndex} style={styles.slotBadgeDetail}>
+                                <Text style={styles.slotTextDetail}>
+                                  {slotName}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )
+                    )}
                   </View>
                 </View>
 
@@ -404,26 +418,24 @@ export default function ManagerHistoryScreen() {
                   </Text>
                 </View>
 
-                {selectedBooking.status === "Rejected" &&
-                  selectedBooking.rejectReason && (
-                    <View
-                      style={[
-                        styles.noteBox,
-                        { backgroundColor: "#FEF2F2", borderColor: "#FCA5A5" },
-                      ]}
-                    >
-                      <Text style={[styles.label, { color: "#DC2626" }]}>
-                        Lý do từ chối:
-                      </Text>
-                      <Text style={[styles.noteText, { color: "#B91C1C" }]}>
-                        {selectedBooking.rejectReason}
-                      </Text>
-                    </View>
-                  )}
+                {selectedBooking.rejectReason && (
+                  <View
+                    style={[
+                      styles.noteBox,
+                      { backgroundColor: "#FEF2F2", borderColor: "#FCA5A5" },
+                    ]}
+                  >
+                    <Text style={[styles.label, { color: "#DC2626" }]}>
+                      Lý do từ chối:
+                    </Text>
+                    <Text style={[styles.noteText, { color: "#B91C1C" }]}>
+                      {selectedBooking.rejectReason}
+                    </Text>
+                  </View>
+                )}
               </ScrollView>
             )}
 
-            {/* Footer */}
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={styles.closeBtn}
@@ -463,39 +475,41 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 10,
-    maxHeight: "80%",
+    maxHeight: "85%",
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   modalTitle: { fontSize: 18, fontWeight: "bold", color: "#0F172A" },
   closeIconBtn: { padding: 4, backgroundColor: "#F1F5F9", borderRadius: 50 },
   modalBody: { marginBottom: 16 },
+
   bookingTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#334155",
+    marginBottom: 2,
+  },
+  courseCodeText: {
+    fontSize: 14,
+    color: "#64748B",
     marginBottom: 8,
+    fontStyle: "italic",
   },
 
-  // Container cho Status Badge và nút Copy
   statusRowContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 16,
+    marginTop: 4,
   },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   statusText: { fontSize: 12, fontWeight: "600" },
 
-  // Style cho nút copy mới
   copyBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -507,13 +521,10 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
     gap: 6,
   },
-  copyBtnText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#334155",
-  },
+  copyBtnText: { fontSize: 11, fontWeight: "600", color: "#334155" },
 
   divider: { height: 1, backgroundColor: "#E2E8F0", marginBottom: 16 },
+
   infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -527,7 +538,53 @@ const styles = StyleSheet.create({
     color: "#0F172A",
     flexWrap: "wrap",
   },
-  subValue: { fontSize: 12, color: "#94A3B8", marginTop: 2 },
+
+  // --- Styles list slot trong modal ---
+  scheduleContainer: {
+    backgroundColor: "#FAFAFA",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  groupedList: {
+    gap: 8,
+    // paddingLeft: 30, // Bỏ padding này để tận dụng chiều ngang
+    paddingLeft: 4,
+  },
+
+  // ROW ITEM: Chỉnh thành hàng ngang
+  rowItem: {
+    flexDirection: "row", // Ngang
+    alignItems: "flex-start", // Canh trên (nếu slot nhiều dòng)
+    gap: 8, // Khoảng cách giữa Ngày và Slot đầu tiên
+    marginBottom: 2,
+  },
+  rowDateText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#334155",
+    marginTop: 4, // Đẩy xuống xíu để cân với badge slot
+    minWidth: 70, // Cố định độ rộng để ngày thẳng hàng (tùy chỉnh)
+  },
+
+  slotsCol: {
+    flex: 1, // Chiếm hết phần còn lại bên phải
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  slotBadgeDetail: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  slotTextDetail: { fontSize: 12, color: "#EA580C", fontWeight: "500" },
+
   noteBox: {
     backgroundColor: "#F8FAFC",
     padding: 12,
@@ -537,6 +594,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   noteText: { fontSize: 13, color: "#475569", lineHeight: 18 },
+
   modalFooter: { marginTop: 4 },
   closeBtn: {
     backgroundColor: "#F1F5F9",
