@@ -1,17 +1,8 @@
 import { Stack } from "expo-router";
-// 1. Thêm icon Copy
-import {
-  Briefcase,
-  Calendar,
-  Copy,
-  Info,
-  MapPin,
-  X,
-} from "lucide-react-native";
+import { Briefcase, Calendar, Info, MapPin, X } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert, // 2. Thêm Alert để thông báo
   FlatList,
   Modal,
   RefreshControl,
@@ -21,8 +12,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-// 3. Import thư viện Clipboard
-import * as Clipboard from "expo-clipboard";
 
 // --- COMPONENTS ---
 import BookingFilterHeader from "../../../../components/home/BookingFilterHeader";
@@ -36,8 +25,8 @@ type StatusFilter = "all" | "approved" | "pending" | "rejected";
 
 interface SlotMaster {
   id: string;
-  startTime: string; // "07:00:00"
-  endTime: string; // "09:15:00"
+  startTime: string;
+  endTime: string;
   label: string;
 }
 
@@ -56,16 +45,6 @@ export default function ManagerHistoryScreen() {
 
   // --- HELPER: Format Time ---
   const formatTimeStr = (time: string) => time?.substring(0, 5) || "";
-
-  // --- 4. HÀM COPY QR ---
-  const copyToClipboard = async (qrString: string) => {
-    if (!qrString) {
-      Alert.alert("Thông báo", "Không tìm thấy dữ liệu QR của yêu cầu này.");
-      return;
-    }
-    await Clipboard.setStringAsync(qrString);
-    Alert.alert("Đã sao chép", "Chuỗi QR Code đã được lưu vào bộ nhớ tạm.");
-  };
 
   // --- 1. LOAD DATA ---
   const loadData = async () => {
@@ -98,7 +77,8 @@ export default function ManagerHistoryScreen() {
         let checkOutAt = null;
 
         if (itemSlots.length > 0) {
-          // Sắp xếp slot theo ngày + slotId
+          // Sắp xếp slot theo ngày + slotId (giả định slotId có thứ tự hoặc dùng logic khác)
+          // Ở đây ta sort theo Date trước
           const sortedSlots = [...itemSlots].sort(
             (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
           );
@@ -141,13 +121,10 @@ export default function ManagerHistoryScreen() {
           // Reason mapped từ description
           reason: item.description,
 
-          // Nếu bị từ chối/hủy, lấy lý do
+          // Nếu bị từ chối/hủy, lấy lý do (API hiện tại chưa thấy trường rejectReason rõ ràng, tạm dùng description hoặc note)
           rejectReason: null,
 
           totalSlots: itemSlots.length,
-
-          // 5. LẤY CHUỖI QR (Dự phòng tên trường qrCode hoặc qrCodeString)
-          qrCodeString: item.qrCodeString || item.qrCode || "",
         };
       });
 
@@ -308,39 +285,23 @@ export default function ManagerHistoryScreen() {
               <ScrollView style={styles.modalBody}>
                 <Text style={styles.bookingTitle}>{selectedBooking.title}</Text>
 
-                {/* Phần hiển thị Status và nút Copy QR */}
-                <View style={styles.statusRowContainer}>
-                  <View
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor:
+                        getStatusColor(selectedBooking.status) + "20",
+                    },
+                  ]}
+                >
+                  <Text
                     style={[
-                      styles.statusBadge,
-                      {
-                        backgroundColor:
-                          getStatusColor(selectedBooking.status) + "20",
-                      },
+                      styles.statusText,
+                      { color: getStatusColor(selectedBooking.status) },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.statusText,
-                        { color: getStatusColor(selectedBooking.status) },
-                      ]}
-                    >
-                      {getStatusText(selectedBooking.status)}
-                    </Text>
-                  </View>
-
-                  {/* NÚT COPY QR (Chỉ hiện khi Approved) */}
-                  {selectedBooking.status?.toLowerCase() === "approved" && (
-                    <TouchableOpacity
-                      style={styles.copyBtn}
-                      onPress={() =>
-                        copyToClipboard(selectedBooking.qrCodeString)
-                      }
-                    >
-                      <Copy size={14} color="#0F172A" />
-                      <Text style={styles.copyBtnText}>Copy QR String</Text>
-                    </TouchableOpacity>
-                  )}
+                    {getStatusText(selectedBooking.status)}
+                  </Text>
                 </View>
 
                 <View style={styles.divider} />
@@ -480,39 +441,14 @@ const styles = StyleSheet.create({
     color: "#334155",
     marginBottom: 8,
   },
-
-  // Container cho Status Badge và nút Copy
-  statusRowContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
   statusBadge: {
+    alignSelf: "flex-start",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
+    marginBottom: 16,
   },
   statusText: { fontSize: 12, fontWeight: "600" },
-
-  // Style cho nút copy mới
-  copyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F1F5F9",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    gap: 6,
-  },
-  copyBtnText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#334155",
-  },
-
   divider: { height: 1, backgroundColor: "#E2E8F0", marginBottom: 16 },
   infoRow: {
     flexDirection: "row",
