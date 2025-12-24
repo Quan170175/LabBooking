@@ -28,9 +28,6 @@ import {
   XCircle,
   Search,
   Eye,
-  User,
-  Mail,
-  Phone,
   Building2,
   QrCode,
   CalendarDays,
@@ -52,11 +49,13 @@ interface DoorRequestItem {
 }
 
 interface VerifyResultData {
-  isValid: boolean;
-  message: string;
-  studentName: string;
+  id: string;
+  bookingCode: string;
   labName: string;
+  date: string;
   timeSlot: string;
+  studentName?: string; // Nếu API trả về studentName hoặc requesterFullName
+  isValid?: boolean; // Thuộc tính bổ sung để UI xử lý logic
 }
 
 interface DoorRequestDetail {
@@ -74,8 +73,6 @@ interface DoorRequestDetail {
 }
 
 // --- CONSTANTS ---
-// ĐÃ BỎ SIGNATURE_KEY
-
 const PENDING_FILTER_OPTIONS: FilterOption[] = [
   { label: "Đang chờ", value: "Pending" },
 ];
@@ -101,15 +98,46 @@ const formatDateForAPI = (date: Date) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-const getErrorMessage = (error: any) => {
-  const errorData = error.response?.data;
-  if (errorData?.message) return errorData.message;
+// --- HELPER FUNCTIONS ---
 
-  const rawMessage = typeof errorData === "string" ? errorData : "";
-  if (rawMessage.includes("doesn't exist")) {
-    return "Mã đặt phòng không tồn tại.";
+const getErrorMessage = (error: any) => {
+  const data = error?.response?.data || error;
+
+  console.log("🔥 Parsing Error Data:", JSON.stringify(data, null, 2));
+
+  if (!data) return "Lỗi kết nối hoặc không có phản hồi.";
+  if (data.errors && typeof data.errors === "object") {
+    const errorKeys = Object.keys(data.errors);
+
+    if (errorKeys.length > 0) {
+      const firstKey = errorKeys[0];
+      const firstError = data.errors[firstKey];
+
+      if (Array.isArray(firstError) && firstError.length > 0) {
+        return firstError[0];
+      }
+      if (typeof firstError === "string") {
+        return firstError;
+      }
+    }
   }
-  return "Có lỗi xảy ra, vui lòng thử lại.";
+
+  if (data.detail && typeof data.detail === "string") {
+    return data.detail;
+  }
+
+  if (data.message && typeof data.message === "string") {
+    if (
+      data.message !== "Validation Failed" &&
+      data.message !== "One or more validation errors occurred."
+    ) {
+      return data.message;
+    }
+  }
+
+  if (typeof data === "string") return data;
+
+  return data.message || data.title || "Có lỗi xảy ra, vui lòng thử lại.";
 };
 
 // ==========================================
@@ -160,7 +188,7 @@ export default function DoorRequestScreen() {
       PageSize: 10,
       SortBy: "RequestTime",
       SortDirection: sortDirection,
-      IsHistory: true,
+      IsHistory: isHistoryTab,
     };
     if (filterDate) params.FilterDate = formatDateForAPI(filterDate);
     if (isHistoryTab) {
@@ -171,17 +199,14 @@ export default function DoorRequestScreen() {
 
     try {
       const response = await apiClient.get("/api/DoorRequests", { params });
-      const resData = response.data;
-      let items: DoorRequestItem[] =
-        resData?.items ||
-        resData?.data ||
-        (Array.isArray(resData) ? resData : []);
-      if (isHistoryTab) {
-        items = items.filter((item) => item.status !== "Pending");
-      }
-      setDisplayList(items);
+      // Xử lý dữ liệu trả về linh hoạt
+      const resData =
+        response.data?.items ||
+        response.data?.data ||
+        (Array.isArray(response.data) ? response.data : []);
+      setDisplayList(resData);
     } catch (error: any) {
-      console.error("GET Error:", error);
+      console.error("GET Requests Error:", error);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -207,18 +232,48 @@ export default function DoorRequestScreen() {
     setVerifyResult(null);
 
     try {
-      const response = await apiClient.get(
+      const response: any = await apiClient.get(
         `/api/Bookings/lookup/${bookingCode.trim()}`
       );
-      const body = response.data;
 
-      if (body.statusCode === 200 && body.data) {
-        setVerifyResult(body.data);
+      // --- LOG ĐỂ KIỂM TRA (DEBUG) ---
+      console.log(
+        "1. Raw Response:",
+        !!response.config ? "Axios Object" : "JSON Object"
+      );
+
+      // Bước 1: Lấy JSON body (loại bỏ lớp vỏ Axios nếu có)
+      const apiBody = response.data !== undefined ? response.data : response;
+
+      // Bước 2: Tìm dữ liệu thực tế (Phòng máy, thời gian...)
+      // Chúng ta sẽ kiểm tra xem dữ liệu nằm trực tiếp hay nằm trong field .data
+      let finalData = null;
+
+      if (apiBody.bookingCode) {
+        // Trường hợp 1: Dữ liệu đã được bóc tách hoàn toàn (giống log trước của bạn)
+        finalData = apiBody;
+      } else if (apiBody.data && apiBody.data.bookingCode) {
+        // Trường hợp 2: Dữ liệu nằm trong field .data (giống trên Swagger)
+        finalData = apiBody.data;
+      }
+
+      // Bước 3: Xử lý kết quả
+      if (finalData) {
+        console.log("==> ĐÃ TÌM THẤY PHÒNG:", finalData.labName);
+        setVerifyResult({ ...finalData, isValid: true });
       } else {
-        Alert.alert("Thông báo", body.message || "Không tìm thấy thông tin.");
+        // Nếu không tìm thấy field bookingCode ở đâu cả
+        const msg =
+          apiBody?.message ||
+          "Mã đặt phòng không hợp lệ hoặc không có dữ liệu.";
+        Alert.alert("Thông báo", msg);
       }
     } catch (error: any) {
-      Alert.alert("Lỗi", getErrorMessage(error));
+      console.error("Lỗi API:", error);
+      const errorMsg =
+        error.response?.data?.message ||
+        "Không thể kết nối hoặc mã không tồn tại.";
+      Alert.alert("Lỗi", errorMsg);
     } finally {
       setIsVerifying(false);
     }
@@ -228,17 +283,13 @@ export default function DoorRequestScreen() {
     if (!bookingCode.trim() || !reason.trim())
       return Alert.alert("Thiếu thông tin", "Nhập đủ mã và lý do.");
 
-    if (verifyResult && !verifyResult.isValid) {
-      return Alert.alert("Lỗi", "Mã đặt phòng không hợp lệ.");
-    }
-
     setIsSubmitting(true);
     try {
       await apiClient.post("/api/DoorRequests", {
         bookingCode: bookingCode.trim(),
         reason: reason.trim(),
       });
-      Alert.alert("Thành công", "Đã gửi yêu cầu.");
+      Alert.alert("Thành công", "Đã gửi yêu cầu mở cửa.");
       setBookingCode("");
       setReason("");
       setVerifyResult(null);
@@ -276,7 +327,7 @@ export default function DoorRequestScreen() {
     setSelectedRequest(null);
     try {
       const response = await apiClient.get(`/api/DoorRequests/${id}`);
-      setSelectedRequest(response.data);
+      setSelectedRequest(response.data?.data || response.data);
     } catch (error) {
       Alert.alert("Lỗi", "Không tải được chi tiết yêu cầu.");
       setDetailModalVisible(false);
@@ -285,18 +336,12 @@ export default function DoorRequestScreen() {
     }
   };
 
-  // --- [UPDATED] Hàm tạo QR không mã hóa ---
   const handleShowQrCode = async (id: string) => {
     setQrModalVisible(true);
     setIsLoadingQr(true);
     setQrContent("");
-
     try {
-      // Chỉ tạo object JSON thuần
-      const payload = {
-        requestId: id,
-        createdAt: new Date().toISOString(),
-      };
+      const payload = { requestId: id, createdAt: new Date().toISOString() };
       setQrContent(JSON.stringify(payload));
     } catch (error) {
       Alert.alert("Lỗi", "Không thể tạo mã QR.");
@@ -396,22 +441,20 @@ export default function DoorRequestScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={{ zIndex: 10 }}>
-        <FilterSortBar
-          selectedDate={filterDate}
-          onDateChange={setFilterDate}
-          sortDirection={sortDirection}
-          onSortChange={setSortDirection}
-          filterStatus={filterStatus}
-          onStatusChange={setFilterStatus}
-          statusOptions={
-            activeTab === "history"
-              ? HISTORY_FILTER_OPTIONS
-              : PENDING_FILTER_OPTIONS
-          }
-          isStatusDisabled={activeTab === "pending"}
-        />
-      </View>
+      <FilterSortBar
+        selectedDate={filterDate}
+        onDateChange={setFilterDate}
+        sortDirection={sortDirection}
+        onSortChange={setSortDirection}
+        filterStatus={filterStatus}
+        onStatusChange={setFilterStatus}
+        statusOptions={
+          activeTab === "history"
+            ? HISTORY_FILTER_OPTIONS
+            : PENDING_FILTER_OPTIONS
+        }
+        isStatusDisabled={activeTab === "pending"}
+      />
 
       <View style={styles.tabContainer}>
         <TouchableOpacity
@@ -481,10 +524,10 @@ export default function DoorRequestScreen() {
         />
       )}
 
-      {/* CREATE MODAL */}
+      {/* MODAL TẠO MỚI */}
       <Modal
         visible={modalVisible}
-        transparent={true}
+        transparent
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
@@ -504,7 +547,7 @@ export default function DoorRequestScreen() {
               <View style={styles.inputRow}>
                 <TextInput
                   style={styles.inputFlex}
-                  placeholder="Nhập mã..."
+                  placeholder="Ví dụ: G8ZCCU7A"
                   value={bookingCode}
                   onChangeText={(t) => {
                     setBookingCode(t);
@@ -535,73 +578,47 @@ export default function DoorRequestScreen() {
                   ]}
                 >
                   <View style={styles.verifiedHeader}>
-                    {verifyResult.isValid ? (
-                      <CheckCircle2 size={16} color="#166534" />
-                    ) : (
-                      <XCircle size={16} color="#DC2626" />
-                    )}
+                    <CheckCircle2 size={16} color="#166534" />
+                    <Text style={styles.verifiedTitle}>Thông tin hợp lệ</Text>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      marginTop: 4,
+                    }}
+                  >
+                    <Building2 size={14} color="#64748B" />
                     <Text
                       style={[
-                        styles.verifiedTitle,
-                        !verifyResult.isValid && { color: "#DC2626" },
+                        styles.verifiedText,
+                        { fontWeight: "700", color: "#0F172A" },
                       ]}
                     >
-                      {verifyResult.message}
+                      {verifyResult.labName}
                     </Text>
                   </View>
-
-                  {verifyResult.isValid && (
-                    <>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 6,
-                          marginTop: 4,
-                        }}
-                      >
-                        <Building2 size={14} color="#64748B" />
-                        <Text
-                          style={[
-                            styles.verifiedText,
-                            { fontWeight: "700", color: "#0F172A" },
-                          ]}
-                        >
-                          {verifyResult.labName}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 6,
-                          marginTop: 4,
-                        }}
-                      >
-                        <CalendarDays size={14} color="#64748B" />
-                        <Text style={styles.verifiedText}>
-                          {verifyResult.timeSlot}
-                        </Text>
-                      </View>
-
-                      <View style={styles.requesterInfoBox}>
-                        <Text style={styles.requesterLabel}>
-                          Người yêu cầu:
-                        </Text>
-                        <Text style={styles.requesterName}>
-                          {verifyResult.studentName}
-                        </Text>
-                      </View>
-                    </>
-                  )}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      marginTop: 4,
+                    }}
+                  >
+                    <CalendarDays size={14} color="#64748B" />
+                    <Text style={styles.verifiedText}>
+                      {verifyResult.date} ({verifyResult.timeSlot})
+                    </Text>
+                  </View>
                 </View>
               )}
 
-              <Text style={styles.label}>Lý do:</Text>
+              <Text style={styles.label}>Lý do cần mở cửa:</Text>
               <TextInput
                 style={styles.inputMulti}
-                placeholder="Lý do..."
+                placeholder="Nhập lý do..."
                 value={reason}
                 onChangeText={setReason}
                 multiline
@@ -610,14 +627,10 @@ export default function DoorRequestScreen() {
               <TouchableOpacity
                 style={[
                   styles.submitButton,
-                  (isSubmitting || (verifyResult && !verifyResult.isValid)) &&
-                    styles.disabledButton,
+                  (isSubmitting || !verifyResult) && styles.disabledButton,
                 ]}
                 onPress={handleCreateRequest}
-                disabled={
-                  isSubmitting ||
-                  (verifyResult !== null && !verifyResult.isValid)
-                }
+                disabled={isSubmitting || !verifyResult}
               >
                 {isSubmitting ? (
                   <ActivityIndicator color="#FFF" />
@@ -630,52 +643,10 @@ export default function DoorRequestScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* DETAIL MODAL (Giữ nguyên) */}
-      <Modal
-        visible={detailModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setDetailModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: "80%" }]}>
-            {/* Nội dung chi tiết - Giống code cũ */}
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chi tiết yêu cầu</Text>
-              <TouchableOpacity onPress={() => setDetailModalVisible(false)}>
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-            {isLoadingDetail ? (
-              <ActivityIndicator
-                size="large"
-                color="#EA580C"
-                style={{ margin: 20 }}
-              />
-            ) : selectedRequest ? (
-              <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
-                <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>Thông tin</Text>
-                  <Text style={styles.detailText}>
-                    Booking: {selectedRequest.bookingCode}
-                  </Text>
-                  <Text style={styles.detailText}>
-                    Phòng: {selectedRequest.labName}
-                  </Text>
-                  <Text style={styles.detailText}>
-                    Lý do: {selectedRequest.reason}
-                  </Text>
-                </View>
-              </ScrollView>
-            ) : null}
-          </View>
-        </View>
-      </Modal>
-
-      {/* QR MODAL */}
+      {/* MODAL QR CODE */}
       <Modal
         visible={qrModalVisible}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={() => setQrModalVisible(false)}
       >
@@ -683,7 +654,7 @@ export default function DoorRequestScreen() {
           <View
             style={[
               styles.modalContent,
-              { alignItems: "center", paddingTop: 30, paddingBottom: 40 },
+              { alignItems: "center", paddingBottom: 40 },
             ]}
           >
             <View
@@ -694,65 +665,33 @@ export default function DoorRequestScreen() {
                 marginBottom: 10,
               }}
             >
-              <TouchableOpacity
-                onPress={() => setQrModalVisible(false)}
-                style={{ padding: 4 }}
-              >
+              <TouchableOpacity onPress={() => setQrModalVisible(false)}>
                 <X size={26} color="#64748B" />
               </TouchableOpacity>
             </View>
-
             <Text
-              style={{
-                fontSize: 20,
-                fontWeight: "bold",
-                marginBottom: 30,
-                color: "#0F172A",
-              }}
+              style={{ fontSize: 18, fontWeight: "bold", marginBottom: 20 }}
             >
-              Mã QR Ra Vào
+              Mã QR Mở Cửa
             </Text>
-
             {isLoadingQr ? (
-              <View style={{ height: 200, justifyContent: "center" }}>
-                <ActivityIndicator size="large" color="#EA580C" />
-              </View>
-            ) : qrContent ? (
+              <ActivityIndicator size="large" color="#EA580C" />
+            ) : (
               <View
                 style={{
                   padding: 20,
                   backgroundColor: "white",
-                  borderRadius: 16,
-                  elevation: 4,
-                  shadowColor: "#000",
-                  shadowOpacity: 0.1,
-                  shadowRadius: 10,
-                  alignItems: "center",
-                  justifyContent: "center",
+                  borderRadius: 10,
+                  elevation: 5,
                 }}
               >
-                <QRCode
-                  value={qrContent}
-                  size={200}
-                  color="black"
-                  backgroundColor="white"
-                />
-              </View>
-            ) : (
-              <View style={{ height: 200, justifyContent: "center" }}>
-                <Text style={{ color: "#EF4444" }}>Không có dữ liệu QR</Text>
+                <QRCode value={qrContent} size={200} />
               </View>
             )}
-
             <Text
-              style={{
-                marginTop: 24,
-                textAlign: "center",
-                color: "#64748B",
-                maxWidth: "80%",
-              }}
+              style={{ marginTop: 20, color: "#64748B", textAlign: "center" }}
             >
-              Vui lòng đưa mã này vào thiết bị quét để mở cửa.
+              Đưa mã này vào máy quét tại phòng Lab.
             </Text>
           </View>
         </View>
@@ -769,7 +708,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: 16,
-    backgroundColor: "#FFF7ED",
   },
   headerTitle: { fontSize: 20, fontWeight: "bold", color: "#0F172A" },
   addButton: {
@@ -779,15 +717,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    elevation: 2,
   },
   tabContainer: {
     flexDirection: "row",
-    backgroundColor: "#FFF7ED",
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#E2E8F0",
-    marginTop: 4,
   },
   tabButton: {
     flex: 1,
@@ -799,19 +734,13 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomColor: "#EA580C" },
   tabText: { fontSize: 14, fontWeight: "600", color: "#64748B" },
   tabTextActive: { color: "#EA580C", fontWeight: "700" },
-  listContent: { padding: 16, paddingTop: 12 },
-  emptyState: { alignItems: "center", marginTop: 60, gap: 12 },
-  emptyText: { color: "#94A3B8", fontSize: 15 },
+  listContent: { padding: 16 },
   card: {
     backgroundColor: "#FFF",
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     elevation: 1,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
   },
   cardHeader: {
     flexDirection: "row",
@@ -820,11 +749,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  cardTitle: { fontSize: 16, fontWeight: "bold", color: "#0F172A" },
+  cardTitle: { fontSize: 16, fontWeight: "bold" },
   deleteButton: { padding: 4 },
   iconButton: { padding: 4 },
   row: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  descriptionText: { fontSize: 14, color: "#334155", flex: 1, lineHeight: 20 },
+  descriptionText: { fontSize: 14, color: "#334155", flex: 1 },
   cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -862,7 +791,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#0F172A" },
+  modalTitle: { fontSize: 18, fontWeight: "bold" },
   label: {
     fontSize: 14,
     fontWeight: "600",
@@ -876,7 +805,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
     borderRadius: 8,
     padding: 12,
-    fontSize: 16,
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
@@ -899,34 +827,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   verifiedTitle: { fontSize: 14, fontWeight: "bold", color: "#166534" },
   verifiedText: { fontSize: 13, color: "#334155" },
-  requesterInfoBox: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(22, 101, 52, 0.1)",
-  },
-  requesterLabel: {
-    fontSize: 12,
-    color: "#15803d",
-    marginBottom: 2,
-    fontWeight: "600",
-  },
-  requesterName: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#0F172A",
-  },
   inputMulti: {
     backgroundColor: "#F1F5F9",
     borderRadius: 8,
     padding: 12,
-    fontSize: 16,
-    textAlignVertical: "top",
     minHeight: 80,
+    textAlignVertical: "top",
     marginBottom: 24,
     borderWidth: 1,
     borderColor: "#E2E8F0",
@@ -937,17 +847,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  disabledButton: { opacity: 0.6, backgroundColor: "#94A3B8" },
+  disabledButton: { opacity: 0.5 },
   submitButtonText: { color: "#FFF", fontSize: 16, fontWeight: "bold" },
-  detailSection: { marginBottom: 20 },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0F172A",
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: "#EA580C",
-    paddingLeft: 8,
-  },
-  detailText: { fontSize: 14, color: "#334155", flex: 1, marginBottom: 4 },
+  emptyState: { alignItems: "center", marginTop: 60, gap: 12 },
+  emptyText: { color: "#94A3B8" },
 });

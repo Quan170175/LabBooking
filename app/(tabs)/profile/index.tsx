@@ -63,7 +63,7 @@ const settings: Setting[] = [
 interface UserProfile {
   id: string;
   email: string;
-  userName: string;
+  fullName: string;
   avatarUrl: string | null;
   roles: string[];
 }
@@ -90,7 +90,7 @@ export default function Profile() {
       try {
         const response = await apiClient.get<UserProfile>("/api/Auth/profile");
         if (response.data) {
-          if (response.data.userName) setUserName(response.data.userName);
+          if (response.data.fullName) setUserName(response.data.fullName);
           if (response.data.avatarUrl) setUserAvatar(response.data.avatarUrl);
         }
       } catch (error) {

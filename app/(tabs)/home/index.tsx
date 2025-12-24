@@ -1,8 +1,6 @@
 import { useRouter } from "expo-router";
 import {
-  BookOpen,
   CalendarCheck2,
-  CalendarDays,
   ClipboardList,
   Clock3,
   ShieldCheck,
@@ -14,7 +12,6 @@ import {
   History,
   HomeIcon,
   Mail,
-  QrCode,
   ScanLine,
   ClipboardCheck,
   HistoryIcon,
@@ -38,6 +35,9 @@ import FeatureTile from "../../../components/home/FeatureTile";
 import { registerPushTokenOnServer } from "../../../services/apiserver";
 import { registerForPushNotificationsAsync } from "../../../services/notificationService";
 
+// --- IMPORT API CLIENT ---
+import apiClient from "../../../utils/api";
+
 // 1. ĐỊNH NGHĨA ROLES
 const ROLES = {
   STUDENT: "Student",
@@ -46,12 +46,11 @@ const ROLES = {
   SECURITYGUARD: "SecurityGuard",
 };
 
-// 2. CẤU HÌNH MENU THEO SECTIONS
+// 2. CẤU HÌNH MENU THEO SECTIONS (Giữ nguyên)
 const APP_SECTIONS = [
   {
     id: "booking",
     title: "Hoạt động đặt phòng",
-    description: "Các chức năng chính để đăng ký phòng Lab",
     items: [
       {
         to: "/book/choose-type",
@@ -84,7 +83,7 @@ const APP_SECTIONS = [
       {
         to: "/home/send-email",
         title: "Gửi thông báo",
-        description: "Soạn và gửi email thông báo cho các thành viên",
+        description: "Soạn và gửi email cho SV",
         icon: Mail,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
       },
@@ -95,19 +94,11 @@ const APP_SECTIONS = [
         icon: CalendarCheck2,
         allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
       },
-      {
-        to: "/(tabs)/home/TestCalendarScreen",
-        title: "Thông báo lịch",
-        description: "Xem Thông báo lịch",
-        icon: CalendarCheck2,
-        allowedRoles: [ROLES.STUDENT, ROLES.LECTURER],
-      },
     ],
   },
   {
     id: "admin",
     title: "Khu vực quản lý",
-    description: "Chức năng dành riêng cho Manager",
     items: [
       {
         to: "/(tabs)/home/approvals",
@@ -133,7 +124,7 @@ const APP_SECTIONS = [
       {
         to: "/(tabs)/home/(manager)/my-lab",
         title: "Thông tin phòng",
-        description: "Xem thông tin phòng của tôi",
+        description: "Xem thông tin phòng",
         icon: HomeIcon,
         allowedRoles: [ROLES.MANAGER],
       },
@@ -149,12 +140,11 @@ const APP_SECTIONS = [
   {
     id: "manager",
     title: "Khu vực bảo trì",
-    description: "Chức năng dành riêng cho Manager",
     items: [
       {
         to: "/(tabs)/home/(manager)/create-room-maintenance",
         title: "Bảo trì phòng",
-        description: "Đóng phòng để sửa chữa",
+        description: "Đóng phòng sửa chữa",
         icon: Wrench,
         allowedRoles: [ROLES.MANAGER],
       },
@@ -177,7 +167,6 @@ const APP_SECTIONS = [
   {
     id: "info",
     title: "Tài nguyên & Hỗ trợ",
-    description: "Tài nguyên và trợ giúp",
     items: [
       {
         to: "/home/support",
@@ -198,7 +187,6 @@ const APP_SECTIONS = [
   {
     id: "security",
     title: "Khu vực An ninh",
-    description: "Chức năng dành riêng cho Bảo vệ",
     items: [
       {
         to: "/(tabs)/home/incident-history",
@@ -217,21 +205,21 @@ const APP_SECTIONS = [
       {
         to: "/(tabs)/home/today-schedule",
         title: "Bàn giao phòng",
-        description: "Kiểm tra thiết bị và bàn giao phòng giữa các ca",
+        description: "Kiểm tra thiết bị",
         icon: ClipboardCheck,
         allowedRoles: [ROLES.SECURITYGUARD],
       },
       {
         to: "/(tabs)/home/scanner",
         title: "Quét xác thực",
-        description: "Quét mã để kiểm tra quyền vào phòng",
+        description: "Kiểm tra quyền vào phòng",
         icon: ScanLine,
         allowedRoles: [ROLES.SECURITYGUARD],
       },
       {
         to: "/(tabs)/home/today-schedule-history",
         title: "Lịch sử bàn giao",
-        description: "Xem lịch sử bàn giao phòng",
+        description: "Xem lịch sử bàn giao",
         icon: HistoryIcon,
         allowedRoles: [ROLES.SECURITYGUARD, ROLES.MANAGER],
       },
@@ -243,9 +231,8 @@ export default function Home() {
   const router = useRouter();
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userName, setUserName] = useState<string>("");
+  const [userName, setUserName] = useState<string>("Người dùng");
 
-  // --- INIT LOGIC ---
   useEffect(() => {
     async function initializeApp() {
       try {
@@ -256,18 +243,31 @@ export default function Home() {
           return;
         }
 
+        // 1. Lấy Role từ JWT để render menu nhanh
         const decoded: any = jwtDecode(token);
         const roleKey =
           "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
-        const nameKey =
-          "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name";
-
         const role = decoded[roleKey] || decoded.role || "Student";
-        const name = decoded[nameKey] || decoded.name || "User";
-
         setUserRole(role);
-        setUserName(name);
 
+        // 2. GỌI API PROFILE ĐỂ LẤY FULLNAME CHÍNH XÁC
+        try {
+          // Sử dụng apiClient giống như trong EmailComposerScreen
+          const response = await apiClient.get("/api/Auth/profile");
+
+          if (response.data && response.data.fullName) {
+            setUserName(response.data.fullName);
+          } else {
+            // Fallback nếu API không trả về fullName (dùng tạm tên từ JWT)
+            setUserName(decoded.fullName || decoded.name || "User");
+          }
+        } catch (apiError) {
+          console.error("Lỗi lấy thông tin Profile từ API:", apiError);
+          // Nếu API lỗi, lấy tên từ JWT làm dự phòng
+          setUserName(decoded.fullName || decoded.name || "User");
+        }
+
+        // 3. Đăng ký thông báo
         const pushToken = await registerForPushNotificationsAsync();
         if (pushToken) {
           await registerPushTokenOnServer(pushToken, token);
@@ -281,7 +281,6 @@ export default function Home() {
     initializeApp();
   }, []);
 
-  // Hàm lấy lời chào theo giờ
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Chào buổi sáng";
@@ -302,14 +301,12 @@ export default function Home() {
     );
   }
 
-  // 🟢 ĐÃ SỬA: Bọc ScrollView trong containerWrapper để chứa nút Chat
   return (
     <View style={styles.containerWrapper}>
       <ScrollView
         contentContainerStyle={styles.root}
         showsVerticalScrollIndicator={false}
       >
-        {/* --- HERO SECTION (ANIMATED) --- */}
         <Animated.View
           entering={FadeInDown.duration(800).springify()}
           style={styles.hero}
@@ -325,7 +322,7 @@ export default function Home() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.greetingText}>{getGreeting()},</Text>
                 <Text style={styles.userNameText} numberOfLines={1}>
-                  {userName.split("@")[0]}
+                  {userName}
                 </Text>
               </View>
             </View>
@@ -336,7 +333,6 @@ export default function Home() {
                 : "Đặt phòng thực hành, theo dõi lịch và cập nhật thông báo ngay trên điện thoại."}
             </Text>
 
-            {/* Nút CTA chỉ hiện khi KHÔNG PHẢI là Manager VÀ KHÔNG PHẢI là Security */}
             {userRole !== ROLES.MANAGER && userRole !== ROLES.SECURITYGUARD && (
               <TouchableOpacity
                 style={styles.cta}
@@ -349,14 +345,10 @@ export default function Home() {
           </View>
         </Animated.View>
 
-        {/* --- SECTIONS LOOP --- */}
         {APP_SECTIONS.map((section, sectionIndex) => {
-          // Lọc các items trong section dựa trên Role
           const validItems = section.items.filter((item) =>
             userRole ? item.allowedRoles.includes(userRole) : false
           );
-
-          // Nếu section không có item nào phù hợp với Role thì ẩn đi
           if (validItems.length === 0) return null;
 
           return (
@@ -368,104 +360,39 @@ export default function Home() {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>{section.title}</Text>
               </View>
-
               <View style={styles.grid}>
-                {validItems.map((item) => {
-                  const isUnderConstruction = item.to === "/home/resources";
-
-                  return (
-                    <View key={item.to} style={styles.gridItem}>
-                      <FeatureTile
-                        {...item}
-                        onPress={
-                          isUnderConstruction
-                            ? () =>
-                                Alert.alert(
-                                  "Thông báo",
-                                  "Chức năng đang phát triển"
-                                )
-                            : undefined
-                        }
-                      />
-                    </View>
-                  );
-                })}
+                {validItems.map((item) => (
+                  <View key={item.to} style={styles.gridItem}>
+                    <FeatureTile {...item} />
+                  </View>
+                ))}
               </View>
             </Animated.View>
           );
         })}
-
-        {/* 🟢 Padding bottom để không bị nút Chat che nội dung cuối */}
         <View style={{ height: 90 }} />
       </ScrollView>
     </View>
   );
 }
 
-// STYLES
 const styles = StyleSheet.create({
-  // 🟢 Style mới cho wrapper
-  containerWrapper: {
-    flex: 1,
-    backgroundColor: "#fff7ed",
-    position: "relative",
-  },
-
-  // 🟢 Style mới cho nút chat
-  chatButton: {
-    position: "absolute",
-    bottom: 100,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#2563EB",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#2563EB",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-    zIndex: 999,
-  },
-  onlineDot: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#22c55e",
-    borderWidth: 1.5,
-    borderColor: "#2563EB",
-    zIndex: 1000,
-  },
-
+  containerWrapper: { flex: 1, backgroundColor: "#fff7ed" },
   root: {
     padding: 16,
     paddingTop: 20,
     paddingBottom: 40,
-    // Background đã chuyển ra containerWrapper, nhưng để đây cũng không sao
     backgroundColor: "#fff7ed",
     flexGrow: 1,
   },
-
-  // Hero Styles
   hero: {
     borderRadius: 24,
     backgroundColor: "#f97316",
     marginBottom: 24,
-    shadowColor: "#f97316",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
     elevation: 10,
     overflow: "hidden",
   },
-  heroContent: {
-    padding: 20,
-  },
+  heroContent: { padding: 20 },
   heroHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -479,8 +406,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
   },
   heroImage: {
     width: "100%",
@@ -493,13 +418,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
-  userNameText: {
-    color: "white",
-    fontSize: 22,
-    fontWeight: "800",
-  },
+  userNameText: { color: "white", fontSize: 22, fontWeight: "800" },
   heroDesc: {
     color: "rgba(255,255,255,0.95)",
     fontSize: 14,
@@ -511,47 +431,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 99,
-    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  ctaText: {
-    color: "#ea580c",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-
-  // Section Styles
-  sectionContainer: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0f172a",
-    letterSpacing: -0.5,
-  },
-  sectionDesc: {
-    fontSize: 13,
-    color: "#64748b",
-    marginTop: 2,
-  },
+  ctaText: { color: "#ea580c", fontWeight: "700", fontSize: 15 },
+  sectionContainer: { marginBottom: 24 },
+  sectionHeader: { marginBottom: 12, paddingHorizontal: 4 },
+  sectionTitle: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
     rowGap: 12,
   },
-  gridItem: {
-    width: "48%",
-  },
+  gridItem: { width: "48%" },
 });
