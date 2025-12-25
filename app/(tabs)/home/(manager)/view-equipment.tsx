@@ -251,9 +251,9 @@ export default function viewequipmentStatusScreen() {
         ) : (
           <>
             <Text style={styles.headerTitle}>Tình trạng thiết bị</Text>
-            <Text style={styles.headerSub}>
+            {/* <Text style={styles.headerSub}>
               Theo dõi trạng thái hoạt động của thiết bị
-            </Text>
+            </Text> */}
           </>
         )}
       </View>

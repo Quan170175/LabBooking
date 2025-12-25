@@ -85,11 +85,48 @@ export default function ManagerHistoryScreen() {
     Alert.alert("Đã sao chép", "QR Code đã lưu vào bộ nhớ tạm.");
   };
 
+  // --- API ACTIONS ---
+
+  // [MỚI] Hàm xử lý xóa nằm hoàn toàn ở Parent
+  const handleDeleteBooking = (id: string) => {
+    Alert.alert(
+      "Xác nhận hủy",
+      "Bạn có chắc chắn muốn hủy lịch này không? Hành động này không thể hoàn tác.",
+      [
+        { text: "Không", style: "cancel" },
+        {
+          text: "Có, Hủy ngay",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // [TODO] Sửa đường dẫn API Delete/Cancel cho đúng với Backend của bạn
+              // Ví dụ: await apiClient.delete(`/api/Bookings/${id}`);
+              // Hoặc: await apiClient.put(`/api/Bookings/Update-Status/${id}?status=Cancelled`);
+
+              // Giả lập gọi API xóa
+              await apiClient.delete(`/api/Bookings/${id}`);
+
+              // Xóa thành công -> Cập nhật state để UI tự mất item đó
+              setBookings((prev) => prev.filter((b) => b.id !== id));
+
+              Alert.alert("Thành công", "Đã hủy lịch đặt.");
+            } catch (error: any) {
+              console.error("Lỗi hủy lịch:", error);
+              Alert.alert(
+                "Thất bại",
+                error?.response?.data?.message || "Có lỗi xảy ra khi hủy lịch."
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // --- LOAD DATA ---
   const loadData = async () => {
     try {
       setIsLoading(true);
-
       const [resSlots, resHistory] = await Promise.all([
         apiClient.get("/api/Slot"),
         apiClient.get("/api/Bookings/My-History-Booking"),
@@ -107,7 +144,6 @@ export default function ManagerHistoryScreen() {
         let checkInAt = null;
         let checkOutAt = null;
 
-        // --- XỬ LÝ GOM NHÓM SLOT ---
         const slotsByDate: Record<string, string[]> = {};
         const sortedSlots = [...itemSlots].sort(
           (a: any, b: any) =>
@@ -117,11 +153,8 @@ export default function ManagerHistoryScreen() {
         sortedSlots.forEach((slot: any) => {
           const dateStr = formatDateVN(slot.date);
           if (!slotsByDate[dateStr]) slotsByDate[dateStr] = [];
-
           const masterSlot = slotMap[slot.slotId?.toLowerCase()];
-          // Lấy tên slot gọn: "Slot 1"
           const label = masterSlot ? masterSlot.label : "Slot ???";
-
           slotsByDate[dateStr].push(label);
         });
 
@@ -242,7 +275,6 @@ export default function ManagerHistoryScreen() {
     setModalVisible(true);
   };
 
-  // --- RENDER ---
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: "Lịch sử duyệt đơn" }} />
@@ -262,18 +294,13 @@ export default function ManagerHistoryScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
-            <TouchableOpacity
-              activeOpacity={0.7}
+            <BookingHistoryCard
+              booking={item}
+              slotTemplates={slotTemplates}
+              // [MỚI] Truyền hàm xóa của Parent vào đây
+              onRemove={() => handleDeleteBooking(item.id)}
               onPress={() => openDetail(item)}
-            >
-              <View pointerEvents="none">
-                <BookingHistoryCard
-                  booking={item}
-                  slotTemplates={slotTemplates}
-                  onRemove={() => {}}
-                />
-              </View>
-            </TouchableOpacity>
+            />
           )}
           ListEmptyComponent={<EmptyBookingHistory />}
           refreshControl={
@@ -286,7 +313,7 @@ export default function ManagerHistoryScreen() {
         />
       )}
 
-      {/* --- MODAL DETAIL --- */}
+      {/* --- MODAL DETAIL GIỮ NGUYÊN --- */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -319,7 +346,6 @@ export default function ManagerHistoryScreen() {
                   </Text>
                 ) : null}
 
-                {/* Status Row */}
                 <View style={styles.statusRowContainer}>
                   <View
                     style={[
@@ -355,7 +381,6 @@ export default function ManagerHistoryScreen() {
 
                 <View style={styles.divider} />
 
-                {/* Info Detail */}
                 <View style={styles.infoRow}>
                   <Briefcase size={18} color="#EA580C" />
                   <View style={{ flex: 1 }}>
@@ -374,7 +399,6 @@ export default function ManagerHistoryScreen() {
                   </View>
                 </View>
 
-                {/* --- DANH SÁCH SLOT GOM NHÓM NGANG --- */}
                 <View style={styles.scheduleContainer}>
                   <View
                     style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}
@@ -388,7 +412,6 @@ export default function ManagerHistoryScreen() {
                   <View style={styles.groupedList}>
                     {selectedBooking.groupedSlots?.map(
                       (group: GroupedSlot, index: number) => (
-                        // Layout nằm ngang
                         <View key={index} style={styles.rowItem}>
                           <Text style={styles.rowDateText}>{group.date}:</Text>
                           <View style={styles.slotsCol}>
@@ -422,7 +445,10 @@ export default function ManagerHistoryScreen() {
                   <View
                     style={[
                       styles.noteBox,
-                      { backgroundColor: "#FEF2F2", borderColor: "#FCA5A5" },
+                      {
+                        backgroundColor: "#FEF2F2",
+                        borderColor: "#FCA5A5",
+                      },
                     ]}
                   >
                     <Text style={[styles.label, { color: "#DC2626" }]}>
@@ -455,8 +481,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 8 },
-
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -486,7 +510,6 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: "bold", color: "#0F172A" },
   closeIconBtn: { padding: 4, backgroundColor: "#F1F5F9", borderRadius: 50 },
   modalBody: { marginBottom: 16 },
-
   bookingTitle: {
     fontSize: 16,
     fontWeight: "700",
@@ -499,7 +522,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontStyle: "italic",
   },
-
   statusRowContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -509,7 +531,6 @@ const styles = StyleSheet.create({
   },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   statusText: { fontSize: 12, fontWeight: "600" },
-
   copyBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -522,9 +543,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   copyBtnText: { fontSize: 11, fontWeight: "600", color: "#334155" },
-
   divider: { height: 1, backgroundColor: "#E2E8F0", marginBottom: 16 },
-
   infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -538,8 +557,6 @@ const styles = StyleSheet.create({
     color: "#0F172A",
     flexWrap: "wrap",
   },
-
-  // --- Styles list slot trong modal ---
   scheduleContainer: {
     backgroundColor: "#FAFAFA",
     padding: 10,
@@ -550,27 +567,23 @@ const styles = StyleSheet.create({
   },
   groupedList: {
     gap: 8,
-    // paddingLeft: 30, // Bỏ padding này để tận dụng chiều ngang
     paddingLeft: 4,
   },
-
-  // ROW ITEM: Chỉnh thành hàng ngang
   rowItem: {
-    flexDirection: "row", // Ngang
-    alignItems: "flex-start", // Canh trên (nếu slot nhiều dòng)
-    gap: 8, // Khoảng cách giữa Ngày và Slot đầu tiên
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
     marginBottom: 2,
   },
   rowDateText: {
     fontSize: 13,
     fontWeight: "700",
     color: "#334155",
-    marginTop: 4, // Đẩy xuống xíu để cân với badge slot
-    minWidth: 70, // Cố định độ rộng để ngày thẳng hàng (tùy chỉnh)
+    marginTop: 4,
+    minWidth: 70,
   },
-
   slotsCol: {
-    flex: 1, // Chiếm hết phần còn lại bên phải
+    flex: 1,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
@@ -584,7 +597,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   slotTextDetail: { fontSize: 12, color: "#EA580C", fontWeight: "500" },
-
   noteBox: {
     backgroundColor: "#F8FAFC",
     padding: 12,
@@ -594,7 +606,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   noteText: { fontSize: 13, color: "#475569", lineHeight: 18 },
-
   modalFooter: { marginTop: 4 },
   closeBtn: {
     backgroundColor: "#F1F5F9",

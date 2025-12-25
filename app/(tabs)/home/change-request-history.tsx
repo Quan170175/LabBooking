@@ -184,7 +184,7 @@ export default function LecturerChangeRequestsScreen() {
           onPress: async () => {
             try {
               // Gọi API hủy thực tế nếu cần
-              // await apiClient.delete(`/api/BookingChangeRequest/${item.id}`);
+              await apiClient.delete(`/api/BookingChangeRequest/${item.id}`);
               setRequests((prev) => prev.filter((r) => r.id !== item.id));
               Alert.alert("Thành công", "Đã hủy yêu cầu.");
             } catch (e) {
@@ -241,9 +241,9 @@ export default function LecturerChangeRequestsScreen() {
   const ListHeader = () => (
     <View style={styles.headerContainer}>
       <Text style={styles.headerTitle}>Lịch sử thay đổi</Text>
-      <Text style={styles.headerSubtitle}>
+      {/* <Text style={styles.headerSubtitle}>
         Theo dõi trạng thái các yêu cầu dời lịch
-      </Text>
+      </Text> */}
       <View style={styles.tabContainer}>
         {(["All", "Pending", "Approved", "Rejected"] as const).map((tab) => (
           <TouchableOpacity
@@ -407,7 +407,8 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     color: "#0F172A",
-    marginBottom: 4,
+    marginBottom: 20,
+    marginTop: 20,
   },
   headerSubtitle: { fontSize: 14, color: "#64748B", marginBottom: 16 },
 

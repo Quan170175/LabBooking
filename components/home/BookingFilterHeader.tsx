@@ -28,7 +28,6 @@ export default function BookingFilterHeader({
       <View style={styles.filterContainer}>
         <Text style={styles.filterLabel}>Lọc:</Text>
 
-        {/* --- THAY ĐỔI: Thêm 1 View bao bọc các nút --- */}
         <View style={styles.buttonGroup}>
           {FILTERS.map((filter) => (
             <TouchableOpacity
@@ -50,7 +49,6 @@ export default function BookingFilterHeader({
             </TouchableOpacity>
           ))}
         </View>
-        {/* ------------------------------------------- */}
       </View>
     </>
   );
@@ -61,6 +59,7 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 16,
     marginTop: 16,
+    paddingHorizontal: 16, // --- THÊM: Nhích vào 16px ---
   },
   title: {
     fontSize: 24,
@@ -75,22 +74,19 @@ const styles = StyleSheet.create({
   filterContainer: {
     flexDirection: "row",
     alignItems: "center",
-    // --- THAY ĐỔI: Bỏ gap ở đây ---
-    // gap: 10,
     marginBottom: 16,
+    paddingHorizontal: 16, // --- THÊM: Nhích vào 16px cho thẳng hàng với header ---
   },
   filterLabel: {
     fontSize: 14,
     color: "#475569",
-    marginRight: 8, // --- THAY ĐỔI: Tăng margin ---
+    marginRight: 8,
   },
-
-  // --- THAY ĐỔI: Thêm nhóm nút ---
   buttonGroup: {
-    flex: 1, // Chiếm hết phần còn lại
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8, // Thêm gap giữa các nút
+    gap: 8,
   },
   filterButton: {
     paddingVertical: 6,
@@ -99,7 +95,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderWidth: 1,
     borderColor: "#FFE8DA",
-    flex: 1, // --- THAY ĐỔI: Chia đều chiều rộng ---
+    flex: 1,
   },
   filterButtonActive: {
     backgroundColor: "#EA580C",
@@ -109,7 +105,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#EA580C",
-    textAlign: "center", // --- THAY ĐỔI: Căn giữa chữ ---
+    textAlign: "center",
   },
   filterButtonTextActive: {
     color: "white",

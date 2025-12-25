@@ -37,10 +37,10 @@ import {
 } from "lucide-react-native";
 
 import QRCode from "react-native-qrcode-svg";
-import apiClient from "../../../../utils/api";
 import FilterSortBar, {
   FilterOption,
 } from "../../../../components/common/FilterSortBar";
+import apiClient from "../../../../utils/api";
 
 // --- INTERFACES ---
 interface DoorRequestItem {
@@ -51,13 +51,12 @@ interface DoorRequestItem {
   status: string;
 }
 
-// [UPDATED] Interface khớp với JSON bạn cung cấp
 interface VerifyResultData {
   isValid: boolean;
-  message: string; // "Hợp lệ. Mời vào."
-  studentName: string; // "Tran Ngoc Quan"
-  labName: string; // "Phòng Lab mới"
-  timeSlot: string; // "23/12/2025 (12:30 - 14:45)"
+  message: string;
+  studentName: string;
+  labName: string;
+  timeSlot: string;
 }
 
 interface DoorRequestDetail {

@@ -1,5 +1,5 @@
 import apiClient from "@/utils/api";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ChevronLeft,
   ChevronRight,
@@ -459,224 +459,238 @@ export default function RescheduleSlotsScreen() {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <BookingPageHeader
-        icon={headerIcon}
-        title="Chọn lịch bù"
-        subtitle={`Phòng: ${context.labName || "Unknown"}`}
+    <>
+      <Stack.Screen
+        options={{
+          title: "Quay lại", // <-- Thay chữ "success" bằng chữ bạn muốn ở đây
+          headerShadowVisible: false, // (Tùy chọn) Xóa đường kẻ mờ dưới header cho đẹp
+        }}
       />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+      >
+        <BookingPageHeader
+          icon={headerIcon}
+          title="Chọn lịch bù"
+          subtitle={`Phòng: ${context.labName || "Unknown"}`}
+        />
 
-      {/* Info Warning */}
-      <View style={styles.infoBar}>
-        <Info size={16} color="#C2410C" />
-        <Text style={styles.infoText}>
-          Cần bù{" "}
-          <Text style={{ fontWeight: "bold" }}>{context.slotDebtCount}</Text>{" "}
-          slot.
-        </Text>
-      </View>
-
-      {/* Navigation */}
-      <View style={styles.calendarNav}>
-        <TouchableOpacity onPress={handlePrevWeek} style={styles.navButton}>
-          <ChevronLeft size={20} color="#EA580C" />
-        </TouchableOpacity>
-        <Text style={styles.dateRangeText}>{dateRange}</Text>
-        <View style={{ flexDirection: "row", gap: 4 }}>
-          <TouchableOpacity
-            onPress={() => setNewSelectedSlots([])}
-            style={styles.navButton}
-          >
-            <RefreshCcw size={18} color="#EA580C" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleNextWeek} style={styles.navButton}>
-            <ChevronRight size={20} color="#EA580C" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Main Grid */}
-      <View style={styles.calendarContainer}>
-        {/* Header Ngày */}
-        <View style={styles.weekdaysHeader}>
-          {weekDates.map((d, i) => {
-            const isToday = formatDateLocal(d) === formatDateLocal(new Date());
-            return (
-              <View key={i} style={styles.dayHeader}>
-                <Text style={styles.dayNameText}>{WEEKDAYS_SHORT[i]}</Text>
-                <Text style={[styles.dateNumText, isToday && styles.todayText]}>
-                  {d.getDate()}
-                </Text>
-              </View>
-            );
-          })}
+        {/* Info Warning */}
+        <View style={styles.infoBar}>
+          <Info size={16} color="#C2410C" />
+          <Text style={styles.infoText}>
+            Cần bù{" "}
+            <Text style={{ fontWeight: "bold" }}>{context.slotDebtCount}</Text>{" "}
+            slot.
+          </Text>
         </View>
 
-        {isBusyLoading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="small" color="#EA580C" />
+        {/* Navigation */}
+        <View style={styles.calendarNav}>
+          <TouchableOpacity onPress={handlePrevWeek} style={styles.navButton}>
+            <ChevronLeft size={20} color="#EA580C" />
+          </TouchableOpacity>
+          <Text style={styles.dateRangeText}>{dateRange}</Text>
+          <View style={{ flexDirection: "row", gap: 4 }}>
+            <TouchableOpacity
+              onPress={() => setNewSelectedSlots([])}
+              style={styles.navButton}
+            >
+              <RefreshCcw size={18} color="#EA580C" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleNextWeek} style={styles.navButton}>
+              <ChevronRight size={20} color="#EA580C" />
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
 
-        {/* Slots Logic */}
-        <TouchableOpacity
-          activeOpacity={1}
-          style={[styles.slotsGrid, isBusyLoading && { opacity: 0.5 }]}
-          onPress={() => setActiveTooltip(null)} // Click ra ngoài thì tắt tooltip
-        >
-          {weekDates.map((date, i) => (
-            <View key={i} style={styles.dayColumn}>
-              {allSlotsTemplate.map((slot) => {
-                const dateStr = formatDateLocal(date);
-                const { status, disabled, text, data } = getSlotStatus(
-                  dateStr,
-                  slot
-                );
-
-                // Check hiển thị Tooltip
-                const isTooltipVisible =
-                  activeTooltip?.date === dateStr &&
-                  activeTooltip?.slotId === slot.id;
-
-                return (
-                  // 👇 Bọc View để xử lý zIndex cho Tooltip
-                  <View
-                    key={slot.id}
-                    style={{ zIndex: isTooltipVisible ? 100 : 1 }}
+        {/* Main Grid */}
+        <View style={styles.calendarContainer}>
+          {/* Header Ngày */}
+          <View style={styles.weekdaysHeader}>
+            {weekDates.map((d, i) => {
+              const isToday =
+                formatDateLocal(d) === formatDateLocal(new Date());
+              return (
+                <View key={i} style={styles.dayHeader}>
+                  <Text style={styles.dayNameText}>{WEEKDAYS_SHORT[i]}</Text>
+                  <Text
+                    style={[styles.dateNumText, isToday && styles.todayText]}
                   >
-                    {/* --- PHẦN TOOLTIP --- */}
-                    {isTooltipVisible && (
-                      <View style={styles.tooltipContainer}>
-                        <View style={styles.tooltipBubble}>
-                          {/* Badge Status */}
-                          {data?.typeLabel && (
-                            <View
-                              style={{
-                                backgroundColor:
-                                  status === "maintenance"
-                                    ? "#EF4444"
-                                    : "#3B82F6",
-                                alignSelf: "center",
-                                paddingHorizontal: 6,
-                                paddingVertical: 2,
-                                borderRadius: 4,
-                                marginBottom: 4,
-                              }}
-                            >
-                              <Text
+                    {d.getDate()}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {isBusyLoading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="small" color="#EA580C" />
+            </View>
+          )}
+
+          {/* Slots Logic */}
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.slotsGrid, isBusyLoading && { opacity: 0.5 }]}
+            onPress={() => setActiveTooltip(null)} // Click ra ngoài thì tắt tooltip
+          >
+            {weekDates.map((date, i) => (
+              <View key={i} style={styles.dayColumn}>
+                {allSlotsTemplate.map((slot) => {
+                  const dateStr = formatDateLocal(date);
+                  const { status, disabled, text, data } = getSlotStatus(
+                    dateStr,
+                    slot
+                  );
+
+                  // Check hiển thị Tooltip
+                  const isTooltipVisible =
+                    activeTooltip?.date === dateStr &&
+                    activeTooltip?.slotId === slot.id;
+
+                  return (
+                    // 👇 Bọc View để xử lý zIndex cho Tooltip
+                    <View
+                      key={slot.id}
+                      style={{ zIndex: isTooltipVisible ? 100 : 1 }}
+                    >
+                      {/* --- PHẦN TOOLTIP --- */}
+                      {isTooltipVisible && (
+                        <View style={styles.tooltipContainer}>
+                          <View style={styles.tooltipBubble}>
+                            {/* Badge Status */}
+                            {data?.typeLabel && (
+                              <View
                                 style={{
-                                  color: "white",
-                                  fontSize: 9,
-                                  fontWeight: "bold",
+                                  backgroundColor:
+                                    status === "maintenance"
+                                      ? "#EF4444"
+                                      : "#3B82F6",
+                                  alignSelf: "center",
+                                  paddingHorizontal: 6,
+                                  paddingVertical: 2,
+                                  borderRadius: 4,
+                                  marginBottom: 4,
                                 }}
                               >
-                                {data.typeLabel.toUpperCase()}
-                              </Text>
-                            </View>
-                          )}
+                                <Text
+                                  style={{
+                                    color: "white",
+                                    fontSize: 9,
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {data.typeLabel.toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
 
-                          <Text style={styles.tooltipText}>
-                            {getTooltipContent(status, data)}
-                          </Text>
-                          <Text style={styles.tooltipSubText}>
-                            {slot.startTime} - {slot.endTime}
-                          </Text>
+                            <Text style={styles.tooltipText}>
+                              {getTooltipContent(status, data)}
+                            </Text>
+                            <Text style={styles.tooltipSubText}>
+                              {slot.startTime} - {slot.endTime}
+                            </Text>
+                          </View>
+                          <View style={styles.tooltipArrow} />
                         </View>
-                        <View style={styles.tooltipArrow} />
-                      </View>
-                    )}
+                      )}
 
-                    {/* --- BUTTON SLOT --- */}
-                    <TouchableOpacity
-                      style={[
-                        styles.slotButton,
-                        status === "safe" && styles.safeSlot,
-                        status === "lost" && styles.lostSlot,
-                        status === "maintenance" && styles.maintenanceSlot,
-                        status === "busy" && styles.busySlot,
-                        status === "past" && styles.pastSlot,
-                        status === "selected" && styles.selectedSlot,
-                      ]}
-                      activeOpacity={0.7}
-                      // 👇 Bỏ disabled={disabled} cũ đi, tự xử lý ở onPress
-                      onPress={() =>
-                        handleSlotPress(dateStr, slot.id, status, disabled)
-                      }
-                    >
-                      <Text
+                      {/* --- BUTTON SLOT --- */}
+                      <TouchableOpacity
                         style={[
-                          styles.slotLabel,
-                          status === "safe" && styles.safeSlotText,
-                          status === "lost" && styles.lostSlotText,
-                          status === "maintenance" &&
-                            styles.maintenanceSlotText,
-                          status === "busy" && styles.busySlotText,
-                          status === "past" && styles.pastText,
-                          status === "selected" && styles.selectedSlotText,
+                          styles.slotButton,
+                          status === "safe" && styles.safeSlot,
+                          status === "lost" && styles.lostSlot,
+                          status === "maintenance" && styles.maintenanceSlot,
+                          status === "busy" && styles.busySlot,
+                          status === "past" && styles.pastSlot,
+                          status === "selected" && styles.selectedSlot,
                         ]}
-                        numberOfLines={1}
+                        activeOpacity={0.7}
+                        // 👇 Bỏ disabled={disabled} cũ đi, tự xử lý ở onPress
+                        onPress={() =>
+                          handleSlotPress(dateStr, slot.id, status, disabled)
+                        }
                       >
-                        {text}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+                        <Text
+                          style={[
+                            styles.slotLabel,
+                            status === "safe" && styles.safeSlotText,
+                            status === "lost" && styles.lostSlotText,
+                            status === "maintenance" &&
+                              styles.maintenanceSlotText,
+                            status === "busy" && styles.busySlotText,
+                            status === "past" && styles.pastText,
+                            status === "selected" && styles.selectedSlotText,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {text}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </TouchableOpacity>
+        </View>
+
+        {/* Legend / Tooltip */}
+        <View style={styles.legend}>
+          <LegendItem colorStyle={styles.legendEmpty} label="Trống" />
+          <LegendItem colorStyle={styles.selectedSlot} label="Đang chọn" />
+          <LegendItem colorStyle={styles.safeSlot} label="Của bạn" />
+          <LegendItem colorStyle={styles.busySlot} label="Đã kín" />
+          <LegendItem colorStyle={styles.maintenanceSlot} label="Bảo trì" />
+          <LegendItem colorStyle={styles.lostSlot} label="Bị mất" />
+          <LegendItem colorStyle={styles.pastSlot} label="Quá hạn" />
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footerContainer}>
+          <View style={styles.footerInfo}>
+            <Text style={styles.selectionText}>Đã chọn: </Text>
+            <Text
+              style={[
+                styles.countText,
+                newSelectedSlots.length === context.slotDebtCount
+                  ? styles.countFull
+                  : styles.countWarning,
+              ]}
+            >
+              {newSelectedSlots.length}
+            </Text>
+            <Text style={styles.selectionText}> / {context.slotDebtCount}</Text>
+          </View>
+
+          <View style={styles.footerButtons}>
+            <View style={{ flex: 1 }}>
+              <BookingButton
+                label="Hủy bỏ"
+                variant="secondary"
+                onPress={handleCancel}
+                isLoading={isSubmitting}
+              />
             </View>
-          ))}
-        </TouchableOpacity>
-      </View>
-
-      {/* Legend / Tooltip */}
-      <View style={styles.legend}>
-        <LegendItem colorStyle={styles.legendEmpty} label="Trống" />
-        <LegendItem colorStyle={styles.selectedSlot} label="Đang chọn" />
-        <LegendItem colorStyle={styles.safeSlot} label="Của bạn" />
-        <LegendItem colorStyle={styles.busySlot} label="Đã kín" />
-        <LegendItem colorStyle={styles.maintenanceSlot} label="Bảo trì" />
-        <LegendItem colorStyle={styles.lostSlot} label="Bị mất" />
-        <LegendItem colorStyle={styles.pastSlot} label="Quá hạn" />
-      </View>
-
-      {/* Footer */}
-      <View style={styles.footerContainer}>
-        <View style={styles.footerInfo}>
-          <Text style={styles.selectionText}>Đã chọn: </Text>
-          <Text
-            style={[
-              styles.countText,
-              newSelectedSlots.length === context.slotDebtCount
-                ? styles.countFull
-                : styles.countWarning,
-            ]}
-          >
-            {newSelectedSlots.length}
-          </Text>
-          <Text style={styles.selectionText}> / {context.slotDebtCount}</Text>
-        </View>
-
-        <View style={styles.footerButtons}>
-          <View style={{ flex: 1 }}>
-            <BookingButton
-              label="Hủy bỏ"
-              variant="secondary"
-              onPress={handleCancel}
-              isLoading={isSubmitting}
-            />
-          </View>
-          <View style={{ width: 12 }} />
-          <View style={{ flex: 1 }}>
-            <BookingButton
-              label="Xác nhận"
-              variant="primary"
-              onPress={handleConfirm}
-              disabled={newSelectedSlots.length === 0}
-              isLoading={isSubmitting}
-            />
+            <View style={{ width: 12 }} />
+            <View style={{ flex: 1 }}>
+              <BookingButton
+                label="Xác nhận"
+                variant="primary"
+                onPress={handleConfirm}
+                disabled={newSelectedSlots.length === 0}
+                isLoading={isSubmitting}
+              />
+            </View>
           </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </>
   );
 }
 

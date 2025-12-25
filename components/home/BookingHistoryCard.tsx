@@ -6,19 +6,20 @@ type Props = {
   booking: any;
   slotTemplates: any[];
   onRemove: (id: string) => void;
-  showCancelButton?: boolean; // [MỚI] Thêm prop tùy chọn, mặc định là true
+  showCancelButton?: boolean;
+  onPress?: () => void;
 };
 
 export default function BookingHistoryCard({
   booking: b,
   slotTemplates,
   onRemove,
-  showCancelButton = true, // [MỚI] Mặc định là true (User dùng thì hiện)
+  showCancelButton = true,
+  onPress,
 }: Props) {
   const status = b.status?.toLowerCase() || "pending";
   const isApproved = status === "approved";
   const isRejected = status === "rejected";
-  // Các trạng thái hủy/từ chối khác cũng tính là rejected để ẩn nút
   const isCancelled = ["cancelled", "denied", "expired"].includes(status);
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -27,8 +28,6 @@ export default function BookingHistoryCard({
   const slotsDisplay = useMemo(() => {
     if (!b.slots || b.slots.length === 0) return ["Nhấn vào để xem chi tiết"];
 
-    // ... (Giữ nguyên logic xử lý slot của bạn) ...
-    // Để code ngắn gọn mình ẩn phần xử lý slot đi, bạn giữ nguyên code cũ nhé
     const grouped: Record<string, string[]> = {};
     b.slots.forEach((s: any) => {
       try {
@@ -65,7 +64,7 @@ export default function BookingHistoryCard({
   }, [b.slots, slotTemplates, isExpanded]);
 
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.cardRow}>
         <View style={styles.cardIcon}>
           <Tag size={20} color="#EA580C" />
@@ -135,13 +134,14 @@ export default function BookingHistoryCard({
                 </Text>
               </View>
 
-              {/* [MỚI] Kiểm tra thêm điều kiện showCancelButton */}
+              {/* [FIXED] Nút Hủy bấm được, gọi hàm onRemove từ cha */}
               {!isApproved &&
                 !isRejected &&
                 !isCancelled &&
                 showCancelButton && (
                   <TouchableOpacity
-                    style={styles.deleteButton}
+                    style={[styles.deleteButton, { zIndex: 10 }]}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                     onPress={() => onRemove(b.id)}
                   >
                     <Trash2 size={14} color="#64748B" />
@@ -166,13 +166,11 @@ export default function BookingHistoryCard({
           </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
-// ... (Giữ nguyên phần styles)
 const styles = StyleSheet.create({
-  // Copy lại styles cũ của bạn vào đây
   card: {
     backgroundColor: "white",
     borderRadius: 12,
@@ -213,6 +211,7 @@ const styles = StyleSheet.create({
     marginLeft: 18,
   },
   cardActions: { alignItems: "flex-end", flexShrink: 0 },
+
   deleteButton: {
     marginTop: 8,
     paddingHorizontal: 8,
@@ -226,6 +225,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteButtonText: { fontSize: 12, color: "#64748B" },
+
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99 },
   badgeText: { fontSize: 11, fontWeight: "700" },
   badgeApproved: { backgroundColor: "#ECFDF5" },

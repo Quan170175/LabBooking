@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertCircle,
   ArrowRight,
@@ -186,6 +186,7 @@ export default function BookingSuccessScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <ScrollView contentContainerStyle={styles.content}>
         {/* HEADER ANIMATION */}
         <View style={styles.header}>

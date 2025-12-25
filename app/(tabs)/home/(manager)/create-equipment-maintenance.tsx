@@ -296,7 +296,7 @@ export default function CreateEquipmentMaintenanceScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Bảo trì thiết bị</Text>
-          <Text style={styles.headerSub}>Lên lịch bảo trì các thiết bị</Text>
+          {/* <Text style={styles.headerSub}>Lên lịch bảo trì các thiết bị</Text> */}
         </View>
       </View>
 

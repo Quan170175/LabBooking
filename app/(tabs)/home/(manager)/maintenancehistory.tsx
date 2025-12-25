@@ -27,7 +27,8 @@ import {
   MapPin,
   Trash2,
   AlertTriangle,
-  CheckSquare, // 🆕 Import icon cho nút hoàn thành
+  CheckSquare,
+  X, // 🆕 Import icon X để xóa lọc ngày
 } from "lucide-react-native";
 
 import apiClient from "../../../../utils/api";
@@ -53,14 +54,16 @@ export default function MaintenanceHistoryScreen() {
   const [data, setData] = useState<MaintenanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [filterDate, setFilterDate] = useState<Date>(new Date());
+
+  // Thay đổi mặc định thành null để lấy tất cả lúc đầu
+  const [filterDate, setFilterDate] = useState<Date | null>(null);
+
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilterOption>("ALL");
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
   const [completingId, setCompletingId] = useState<string | null>(null);
 
   // fetch data
@@ -69,20 +72,27 @@ export default function MaintenanceHistoryScreen() {
     try {
       let endpoint = "";
       let params: any = {};
-      const startDate = new Date(filterDate);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(filterDate);
-      endDate.setHours(23, 59, 59, 999);
 
       if (activeTab === "room") {
         endpoint = "/api/RoomMaintainSchedules";
         params = {
           PageNumber: 1,
           PageSize: 10,
-          From: startDate.toISOString(),
-          To: endDate.toISOString(),
           SortBy: "StartTime",
+          // Không set mặc định From/To ở đây nữa
         };
+
+        // Chỉ thêm tham số ngày nếu filterDate KHÁC null
+        if (filterDate) {
+          const startDate = new Date(filterDate);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(filterDate);
+          endDate.setHours(23, 59, 59, 999);
+
+          params.From = startDate.toISOString();
+          params.To = endDate.toISOString();
+        }
+
         if (statusFilter === "COMPLETED") params.Status = "Done";
         else if (statusFilter === "PENDING") params.Status = "NotYet";
       } else {
@@ -90,11 +100,22 @@ export default function MaintenanceHistoryScreen() {
         params = {
           PageNumber: 1,
           PageSize: 10,
-          FromDate: startDate.toISOString(),
-          ToDate: endDate.toISOString(),
           SortBy: "startTime",
           IsDescending: true,
+          // Không set mặc định FromDate/ToDate ở đây nữa
         };
+
+        // Chỉ thêm tham số ngày nếu filterDate KHÁC null
+        if (filterDate) {
+          const startDate = new Date(filterDate);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(filterDate);
+          endDate.setHours(23, 59, 59, 999);
+
+          params.FromDate = startDate.toISOString();
+          params.ToDate = endDate.toISOString();
+        }
+
         if (statusFilter === "COMPLETED") params.Status = "Done";
         else if (statusFilter === "PENDING") params.Status = "NotYet";
       }
@@ -123,6 +144,7 @@ export default function MaintenanceHistoryScreen() {
     fetchData();
   }, [fetchData]);
 
+  // ... (Giữ nguyên logic Delete và Complete) ...
   const handleConfirmDelete = (id: string) => {
     setItemToDelete(id);
     setDeleteModalVisible(true);
@@ -139,31 +161,25 @@ export default function MaintenanceHistoryScreen() {
       setDeleteModalVisible(false);
       Alert.alert("Thành công", "Đã xóa lịch bảo trì.");
     } catch (error: any) {
-      // Error handling cũ
       setDeleteModalVisible(false);
     } finally {
       setIsDeleting(false);
       setItemToDelete(null);
     }
   };
+
   const handleComplete = async (id: string) => {
     setCompletingId(id);
     try {
-      // Gọi API complete dựa trên ID
       await apiClient.post(`/api/EquipmentMaintainSchedule/${id}/complete`);
-
-      // Cập nhật State Local ngay lập tức
       setData((prevData) =>
         prevData.map((item) =>
           item.id === id ? { ...item, status: "Done" } : item
         )
       );
-
       Alert.alert("Thành công", "Đã cập nhật trạng thái hoàn thành!");
     } catch (error: any) {
-      console.error(error);
-      const msg =
-        error.response?.data?.message || "Không thể cập nhật trạng thái.";
+      const msg = error.response?.data?.message || "Không thể cập nhật.";
       Alert.alert("Lỗi", msg);
     } finally {
       setCompletingId(null);
@@ -172,20 +188,33 @@ export default function MaintenanceHistoryScreen() {
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
+    // Nếu user chọn ngày thì set, nếu cancel thì giữ nguyên (hoặc null tùy logic bạn muốn)
     if (selectedDate) setFilterDate(selectedDate);
   };
+
   const handleSelectStatus = (value: StatusFilterOption) => {
     setStatusFilter(value);
     setShowStatusModal(false);
   };
-  const displayDate = `${filterDate.getDate()}/${
-    filterDate.getMonth() + 1
-  }/${filterDate.getFullYear()}`;
+
+  //  Logic hiển thị ngày trên UI
+  const displayDate = filterDate
+    ? `${filterDate.getDate()}/${
+        filterDate.getMonth() + 1
+      }/${filterDate.getFullYear()}`
+    : "Tất cả thời gian";
+
+  // Hàm xóa lọc ngày
+  const clearDateFilter = () => {
+    setFilterDate(null);
+  };
+
   const getStatusLabel = () => {
     if (statusFilter === "ALL") return "Tất cả";
     if (statusFilter === "COMPLETED") return "Đã hoàn thành";
     return "Chưa xử lý";
   };
+
   const formatTimeRange = (start: string, end: string) => {
     try {
       const s = new Date(start);
@@ -216,6 +245,7 @@ export default function MaintenanceHistoryScreen() {
   };
 
   const renderItem = ({ item }: { item: MaintenanceRecord }) => {
+    // ... (Giữ nguyên logic renderItem cũ) ...
     let targetName = "Không xác định";
     let status = "NotYet";
     let subInfoText = "";
@@ -237,7 +267,6 @@ export default function MaintenanceHistoryScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          {/* ... (Giữ nguyên phần Header Card) */}
           <View style={{ flexDirection: "row", flex: 1, gap: 12 }}>
             <View
               style={[
@@ -297,9 +326,7 @@ export default function MaintenanceHistoryScreen() {
             </Text>
           </View>
 
-          {/*Nút bấm*/}
           <View style={{ flexDirection: "row", gap: 8 }}>
-            {/* nút hoàn thành (Chỉ hiện khi chưa xong & tab Thiết bị) */}
             {status === "NotYet" && activeTab === "equipment" && (
               <TouchableOpacity
                 style={styles.completeButton}
@@ -317,7 +344,6 @@ export default function MaintenanceHistoryScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Nút Xóa (Giữ nguyên, chỉ hiện ở tab Thiết bị) */}
             {activeTab === "equipment" && (
               <TouchableOpacity
                 style={styles.deleteButton}
@@ -335,25 +361,39 @@ export default function MaintenanceHistoryScreen() {
   };
 
   return (
-    // ... (Phần Return JSX giữ nguyên hoàn toàn)
     <SafeAreaView style={styles.container}>
-      {/* ... Header, Filter, Tabs ... */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Lịch sử bảo trì</Text>
-        <Text style={styles.headerSub}>
-          Theo dõi và quản lý lịch sử bảo trì phòng, thiết bị
-        </Text>
       </View>
 
       {/* Filter Chip Area */}
       <View style={styles.filterContainer}>
+        {/* 4️⃣ Cập nhật UI nút chọn ngày */}
         <TouchableOpacity
-          style={styles.filterChip}
+          style={[styles.filterChip, filterDate ? styles.filterChipActive : {}]}
           onPress={() => setShowDatePicker(true)}
         >
-          <CalendarIcon size={16} color="#475569" />
-          <Text style={styles.filterChipText}>{displayDate}</Text>
+          <CalendarIcon size={16} color={filterDate ? "#EA580C" : "#475569"} />
+          <Text
+            style={[
+              styles.filterChipText,
+              filterDate ? styles.filterChipTextActive : {},
+            ]}
+          >
+            {displayDate}
+          </Text>
         </TouchableOpacity>
+
+        {/* 5️⃣ Nút xóa lọc ngày (chỉ hiện khi đã chọn ngày) */}
+        {filterDate && (
+          <TouchableOpacity
+            style={styles.clearDateBtn}
+            onPress={clearDateFilter}
+          >
+            <X size={16} color="#EF4444" />
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
           style={[
             styles.filterChip,
@@ -380,7 +420,6 @@ export default function MaintenanceHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === "room" && styles.activeTab]}
@@ -439,24 +478,24 @@ export default function MaintenanceHistoryScreen() {
               <Text style={styles.emptyTitle}>Không có dữ liệu</Text>
               <Text style={styles.emptyText}>
                 Không tìm thấy bảo trì{" "}
-                {activeTab === "room" ? "phòng" : "thiết bị"} nào vào ngày{" "}
-                {displayDate}.
+                {activeTab === "room" ? "phòng" : "thiết bị"} nào
+                {filterDate ? ` vào ngày ${displayDate}` : ""}.
               </Text>
             </View>
           }
         />
       )}
 
-      {/* DatePicker & Status Modal & Delete Modal (Giữ nguyên) */}
       {showDatePicker && (
         <DateTimePicker
-          value={filterDate}
+          value={filterDate || new Date()} // Nếu null thì hiển thị lịch bắt đầu từ hôm nay
           mode="date"
           display="default"
           onChange={onDateChange}
         />
       )}
 
+      {/* ... Các Modal Status & Delete giữ nguyên ... */}
       <Modal
         visible={showStatusModal}
         transparent={true}
@@ -574,6 +613,7 @@ export default function MaintenanceHistoryScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ... (Giữ nguyên styles cũ) ...
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   header: {
     paddingHorizontal: 16,
@@ -588,6 +628,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     gap: 12,
+    alignItems: "center",
   },
   filterChip: {
     flex: 1,
@@ -601,6 +642,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
     gap: 6,
+  },
+  // Style mới cho nút xóa lọc
+  clearDateBtn: {
+    padding: 10,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    justifyContent: "center",
+    alignItems: "center",
   },
   filterChipActive: { borderColor: "#FED7AA", backgroundColor: "#FFF7ED" },
   filterChipText: { fontSize: 14, color: "#334155", fontWeight: "500" },
@@ -691,23 +742,21 @@ const styles = StyleSheet.create({
   },
   deleteText: { color: "#EF4444", fontSize: 12, fontWeight: "600" },
 
-  // 🆕 STYLES MỚI CHO NÚT COMPLETE
   completeButton: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 6,
     paddingHorizontal: 10,
-    backgroundColor: "#DCFCE7", // Màu nền xanh nhạt
+    backgroundColor: "#DCFCE7",
     borderRadius: 8,
     gap: 6,
   },
   completeText: {
-    color: "#166534", // Màu chữ xanh đậm
+    color: "#166534",
     fontSize: 12,
     fontWeight: "600",
   },
 
-  // Empty State & Modals (Giữ nguyên)
   emptyState: {
     alignItems: "center",
     justifyContent: "center",

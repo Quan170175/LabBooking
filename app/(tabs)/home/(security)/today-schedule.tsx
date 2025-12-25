@@ -655,7 +655,7 @@ export default function SecurityTodayScheduleScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   headerContainer: { paddingHorizontal: 20, paddingBottom: 10, paddingTop: 10 },
-  dateText: { fontSize: 20, fontWeight: "bold", color: "#0F172A" },
+  dateText: { fontSize: 24, fontWeight: "bold", color: "#0F172A" },
   subText: { fontSize: 14, color: "#64748B", marginTop: 4 },
 
   // Styles cho Filter Dropdown

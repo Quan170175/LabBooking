@@ -15,6 +15,7 @@ import {
   ScanLine,
   ClipboardCheck,
   HistoryIcon,
+  LayoutGrid,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -189,16 +190,16 @@ const APP_SECTIONS = [
     title: "Khu vực An ninh",
     items: [
       {
-        to: "/(tabs)/home/incident-history",
-        title: "Lịch sử sự cố",
-        description: "Xem danh sách sự cố",
+        to: "/(tabs)/home/create-incident",
+        title: "Báo cáo sự cố",
+        description: "Tạo báo cáo mới",
         icon: ShieldCheck,
         allowedRoles: [ROLES.SECURITYGUARD],
       },
       {
-        to: "/(tabs)/home/create-incident",
-        title: "Báo cáo sự cố",
-        description: "Tạo báo cáo mới",
+        to: "/(tabs)/home/incident-history",
+        title: "Lịch sử sự cố",
+        description: "Xem danh sách sự cố",
         icon: ShieldCheck,
         allowedRoles: [ROLES.SECURITYGUARD],
       },
@@ -222,6 +223,20 @@ const APP_SECTIONS = [
         description: "Xem lịch sử bàn giao",
         icon: HistoryIcon,
         allowedRoles: [ROLES.SECURITYGUARD, ROLES.MANAGER],
+      },
+      {
+        to: "/(tabs)/home/daily-schedule",
+        title: "Các phòng lab",
+        description: "Hiển thị các phòng lab đang hoạt động",
+        icon: LayoutGrid,
+        allowedRoles: [ROLES.SECURITYGUARD],
+      },
+      {
+        to: "/(tabs)/home/daily-notes",
+        title: "Ghi chú từ Quản lý",
+        description: "Xem ghi chú từ quản lý",
+        icon: ClipboardList,
+        allowedRoles: [ROLES.SECURITYGUARD],
       },
     ],
   },
@@ -434,6 +449,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    alignSelf: "flex-start",
   },
   ctaText: { color: "#ea580c", fontWeight: "700", fontSize: 15 },
   sectionContainer: { marginBottom: 24 },

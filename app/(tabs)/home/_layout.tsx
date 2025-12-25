@@ -93,6 +93,14 @@ export default function HomeStackLayout() {
         name="(security)/today-schedule-history"
         options={{ header: () => <AppHeader /> }}
       />
+      <Stack.Screen
+        name="(security)/daily-schedule"
+        options={{ header: () => <AppHeader /> }}
+      />
+      <Stack.Screen
+        name="(security)/daily-notes"
+        options={{ header: () => <AppHeader /> }}
+      />
 
       {/* 👇 ĐÃ THÊM: Cấu hình Chat dạng Modal */}
       <Stack.Screen

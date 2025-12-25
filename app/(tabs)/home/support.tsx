@@ -199,7 +199,7 @@ export default function SupportScreen() {
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Trung tâm hỗ trợ</Text>
-        <Text style={styles.headerSub}>Giải đáp thắc mắc và gửi yêu cầu</Text>
+        {/* <Text style={styles.headerSub}>Giải đáp thắc mắc và gửi yêu cầu</Text> */}
       </View>
 
       <ScrollView

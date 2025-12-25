@@ -260,7 +260,7 @@ export default function IncidentHistoryScreen() {
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Lịch sử sự cố</Text>
-        <Text style={styles.headerSub}>Quản lý sự cố và bảo trì</Text>
+        {/* <Text style={styles.headerSub}>Quản lý sự cố và bảo trì</Text> */}
       </View>
 
       <IncidentFilterBar
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: { padding: 16, backgroundColor: "#FFF7ED" },
-  headerTitle: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
+  headerTitle: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
   headerSub: { fontSize: 13, color: "#64748B", marginTop: 4 },
   listContent: { padding: 16, paddingBottom: 100 },
   emptyState: { alignItems: "center", marginTop: 40, gap: 12 },

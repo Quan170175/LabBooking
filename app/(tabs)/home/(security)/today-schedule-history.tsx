@@ -451,12 +451,12 @@ export default function SecurityHistoryScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.pageHeaderContainer}>
-        <Text style={styles.pageTitle}>Lịch sử kiểm tra</Text>
-        <Text style={styles.pageDescription}>
+        <Text style={styles.pageTitle}>Lịch sử bàn giao</Text>
+        {/* <Text style={styles.pageDescription}>
           {isSecurityGuard
             ? "Chế độ: Bảo vệ (SecurityGuard)"
             : "Chế độ: Xem (Chỉ đọc)"}
-        </Text>
+        </Text> */}
       </View>
 
       <View style={styles.filterContainer}>
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   pageTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "bold",
     color: "#0F172A",
     marginBottom: 6,
