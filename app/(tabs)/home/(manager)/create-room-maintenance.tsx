@@ -107,10 +107,10 @@ export default function CreateMaintenanceScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Tạo lịch bảo trì</Text>
-        <Text style={styles.headerSub}>
+        <Text style={styles.headerTitle}>Bảo trì phòng</Text>
+        {/* <Text style={styles.headerSub}>
           Lên kế hoạch bảo trì cho phòng Lab của bạn
-        </Text>
+        </Text> */}
       </View>
 
       <ScrollView

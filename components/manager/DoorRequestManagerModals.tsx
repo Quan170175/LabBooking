@@ -9,10 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  StyleSheet,
-  StyleProp,
-  ViewStyle,
-  TextStyle,
 } from "react-native";
 import {
   X,
@@ -24,31 +20,38 @@ import {
   Hash,
   Clock,
   CalendarDays,
+  Check,
 } from "lucide-react-native";
 
 // --- Interfaces ---
 
 interface DoorRequestManagerModalsProps {
-  // Styles object từ màn hình cha (hoặc bạn có thể move styles vào file này)
   styles: any;
 
-  // Reject Modal Props
+  // --- Reject Modal Props ---
   rejectModalVisible: boolean;
   setRejectModalVisible: (visible: boolean) => void;
   rejectReason: string;
   setRejectReason: (reason: string) => void;
   confirmReject: () => void;
 
-  // Detail Modal Props
+  // --- Accept Modal Props ---
+  acceptModalVisible: boolean;
+  setAcceptModalVisible: (visible: boolean) => void;
+  acceptNote: string;
+  setAcceptNote: (note: string) => void;
+  confirmAccept: () => void;
+
+  // --- Detail Modal Props ---
   detailModalVisible: boolean;
   setDetailModalVisible: (visible: boolean) => void;
   isLoadingDetail: boolean;
-  selectedDetail: any; // Bạn nên thay 'any' bằng interface BookingDetail cụ thể nếu có
+  selectedDetail: any;
   activeTab: string;
   handleRejectInit: (id: string | number) => void;
   handleAccept: (id: string | number) => void;
 
-  // Lookup Modal Props
+  // --- Lookup Modal Props ---
   lookupModalVisible: boolean;
   setLookupModalVisible: (visible: boolean) => void;
   lookupCode: string;
@@ -57,7 +60,7 @@ interface DoorRequestManagerModalsProps {
   isLoadingLookup: boolean;
   lookupResult: any | null;
 
-  // Helper Functions (được truyền từ cha vào)
+  // --- Helpers ---
   getStatusConfig: (status: string) => {
     bg: string;
     color: string;
@@ -73,7 +76,7 @@ interface DetailItemProps {
   value: string;
   icon: React.ReactNode;
   isLink?: boolean;
-  styles: any; // Styles passed down
+  styles: any;
 }
 
 // --- Helper Component ---
@@ -110,6 +113,12 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
   rejectReason,
   setRejectReason,
   confirmReject,
+  // Accept
+  acceptModalVisible,
+  setAcceptModalVisible,
+  acceptNote,
+  setAcceptNote,
+  confirmAccept,
   // Detail
   detailModalVisible,
   setDetailModalVisible,
@@ -134,7 +143,7 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
 }) => {
   return (
     <>
-      {/* --- 1. REJECT MODAL --- */}
+      {/* --- 1. REJECT MODAL (TỪ CHỐI) --- */}
       <Modal
         transparent
         visible={rejectModalVisible}
@@ -157,8 +166,12 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
               Vui lòng nhập lý do từ chối để thông báo cho sinh viên:
             </Text>
 
+            {/* 👇 CẬP NHẬT: Nền trắng, viền đỏ nhạt 👇 */}
             <TextInput
-              style={styles.rejectInput}
+              style={[
+                styles.rejectInput,
+                { backgroundColor: "#FFFFFF", borderColor: "#FECACA" },
+              ]}
               placeholder="VD: Sai thông tin, Chưa đến giờ..."
               value={rejectReason}
               onChangeText={setRejectReason}
@@ -187,7 +200,73 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* --- 2. DETAIL MODAL --- */}
+      {/* --- 2. ACCEPT MODAL (DUYỆT) --- */}
+      <Modal
+        transparent
+        visible={acceptModalVisible}
+        animationType="fade"
+        onRequestClose={() => setAcceptModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.rejectModalContent}>
+            <View style={styles.rejectHeader}>
+              <Text style={[styles.rejectTitle, { color: "#16A34A" }]}>
+                Xác nhận Duyệt
+              </Text>
+              <TouchableOpacity onPress={() => setAcceptModalVisible(false)}>
+                <X size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.rejectLabel}>
+              Nhập ghi chú cho sinh viên (không bắt buộc):
+            </Text>
+
+            {/* 👇 Giữ nguyên: Nền trắng, viền xanh nhạt 👇 */}
+            <TextInput
+              style={[
+                styles.rejectInput,
+                { borderColor: "#BBF7D0", backgroundColor: "#FFFFFF" },
+              ]}
+              placeholder="VD: Yêu cầu hợp lệ, đã mở cửa..."
+              value={acceptNote}
+              onChangeText={setAcceptNote}
+              multiline
+              numberOfLines={3}
+              autoFocus
+            />
+
+            <View style={styles.rejectActions}>
+              <TouchableOpacity
+                style={styles.rejectBtnCancel}
+                onPress={() => setAcceptModalVisible(false)}
+              >
+                <Text style={styles.rejectBtnTextCancel}>Hủy bỏ</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.rejectBtnConfirm,
+                  { backgroundColor: "#16A34A" },
+                ]}
+                onPress={confirmAccept}
+              >
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <Check size={18} color="white" />
+                  <Text style={styles.rejectBtnTextConfirm}>Duyệt ngay</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* --- 3. DETAIL MODAL --- */}
       <Modal
         animationType="slide"
         transparent
@@ -363,7 +442,7 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
         </View>
       </Modal>
 
-      {/* --- 3. LOOKUP MODAL --- */}
+      {/* --- 4. LOOKUP MODAL --- */}
       <Modal
         transparent
         visible={lookupModalVisible}
@@ -375,7 +454,6 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
           style={styles.modalOverlay}
         >
           <View style={styles.modalContent}>
-            {/* Header Lookup */}
             <View style={styles.modalHeader}>
               <View
                 style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
@@ -387,22 +465,18 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
                 onPress={() => {
                   setLookupModalVisible(false);
                   setLookupCode("");
-                  // Nếu logic cha cần reset result thì truyền hàm reset vào,
-                  // hoặc đơn giản là set lại khi đóng ở component cha
                 }}
               >
                 <X size={24} color="#64748B" />
               </TouchableOpacity>
             </View>
 
-            {/* Content ScrollView */}
             <ScrollView
               contentContainerStyle={{ padding: 16 }}
               style={{ flexGrow: 0 }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              {/* Input Area */}
               <Text style={styles.label}>Nhập mã booking hoặc ID:</Text>
               <View style={styles.lookupInputContainer}>
                 <TextInput
@@ -429,7 +503,6 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
                 </TouchableOpacity>
               </View>
 
-              {/* Result Area */}
               {lookupResult && (
                 <View style={styles.lookupResultCard}>
                   <View style={styles.resultHeader}>

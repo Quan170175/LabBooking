@@ -210,7 +210,7 @@ export default function MyLabInfoScreen() {
 
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Thông tin Phòng Lab</Text>
-        <Text style={styles.headerSub}>Quản lý thông tin và thiết bị</Text>
+        {/* <Text style={styles.headerSub}>Quản lý thông tin và thiết bị</Text> */}
       </View>
 
       <ScrollView

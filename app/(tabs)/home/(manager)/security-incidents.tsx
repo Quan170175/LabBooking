@@ -369,9 +369,9 @@ export default function SecurityIncidentsScreen() {
       <View style={styles.fixedHeaderContainer}>
         <View style={styles.headerTitleArea}>
           <Text style={styles.title}>Báo cáo từ bảo vệ</Text>
-          <Text style={styles.subtitle}>
+          {/* <Text style={styles.subtitle}>
             Theo dõi sự cố và phản hồi nhanh chóng.
-          </Text>
+          </Text> */}
         </View>
 
         <IncidentFilterBar

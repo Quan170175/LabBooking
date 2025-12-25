@@ -31,6 +31,10 @@ import {
   Building2,
   QrCode,
   CalendarDays,
+  User,
+  Phone,
+  Mail,
+  StickyNote,
 } from "lucide-react-native";
 
 import QRCode from "react-native-qrcode-svg";
@@ -54,8 +58,8 @@ interface VerifyResultData {
   labName: string;
   date: string;
   timeSlot: string;
-  studentName?: string; // Nếu API trả về studentName hoặc requesterFullName
-  isValid?: boolean; // Thuộc tính bổ sung để UI xử lý logic
+  studentName?: string;
+  isValid?: boolean;
 }
 
 interface DoorRequestDetail {
@@ -98,46 +102,17 @@ const formatDateForAPI = (date: Date) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-// --- HELPER FUNCTIONS ---
-
 const getErrorMessage = (error: any) => {
   const data = error?.response?.data || error;
-
-  console.log("🔥 Parsing Error Data:", JSON.stringify(data, null, 2));
-
   if (!data) return "Lỗi kết nối hoặc không có phản hồi.";
   if (data.errors && typeof data.errors === "object") {
     const errorKeys = Object.keys(data.errors);
-
     if (errorKeys.length > 0) {
-      const firstKey = errorKeys[0];
-      const firstError = data.errors[firstKey];
-
-      if (Array.isArray(firstError) && firstError.length > 0) {
-        return firstError[0];
-      }
-      if (typeof firstError === "string") {
-        return firstError;
-      }
+      const firstError = data.errors[errorKeys[0]];
+      return Array.isArray(firstError) ? firstError[0] : firstError;
     }
   }
-
-  if (data.detail && typeof data.detail === "string") {
-    return data.detail;
-  }
-
-  if (data.message && typeof data.message === "string") {
-    if (
-      data.message !== "Validation Failed" &&
-      data.message !== "One or more validation errors occurred."
-    ) {
-      return data.message;
-    }
-  }
-
-  if (typeof data === "string") return data;
-
-  return data.message || data.title || "Có lỗi xảy ra, vui lòng thử lại.";
+  return data.detail || data.message || "Có lỗi xảy ra, vui lòng thử lại.";
 };
 
 // ==========================================
@@ -185,7 +160,7 @@ export default function DoorRequestScreen() {
     const isHistoryTab = activeTab === "history";
     const params: any = {
       PageNumber: 1,
-      PageSize: 10,
+      PageSize: 50, // Lấy nhiều hơn để test
       SortBy: "RequestTime",
       SortDirection: sortDirection,
       IsHistory: isHistoryTab,
@@ -199,7 +174,6 @@ export default function DoorRequestScreen() {
 
     try {
       const response = await apiClient.get("/api/DoorRequests", { params });
-      // Xử lý dữ liệu trả về linh hoạt
       const resData =
         response.data?.items ||
         response.data?.data ||
@@ -227,53 +201,26 @@ export default function DoorRequestScreen() {
   const handleVerifyCode = async () => {
     if (!bookingCode.trim())
       return Alert.alert("Lỗi", "Vui lòng nhập Mã đặt phòng.");
-
     setIsVerifying(true);
     setVerifyResult(null);
-
     try {
       const response: any = await apiClient.get(
         `/api/Bookings/lookup/${bookingCode.trim()}`
       );
-
-      // --- LOG ĐỂ KIỂM TRA (DEBUG) ---
-      console.log(
-        "1. Raw Response:",
-        !!response.config ? "Axios Object" : "JSON Object"
-      );
-
-      // Bước 1: Lấy JSON body (loại bỏ lớp vỏ Axios nếu có)
       const apiBody = response.data !== undefined ? response.data : response;
+      let finalData = apiBody.bookingCode
+        ? apiBody
+        : apiBody.data?.bookingCode
+        ? apiBody.data
+        : null;
 
-      // Bước 2: Tìm dữ liệu thực tế (Phòng máy, thời gian...)
-      // Chúng ta sẽ kiểm tra xem dữ liệu nằm trực tiếp hay nằm trong field .data
-      let finalData = null;
-
-      if (apiBody.bookingCode) {
-        // Trường hợp 1: Dữ liệu đã được bóc tách hoàn toàn (giống log trước của bạn)
-        finalData = apiBody;
-      } else if (apiBody.data && apiBody.data.bookingCode) {
-        // Trường hợp 2: Dữ liệu nằm trong field .data (giống trên Swagger)
-        finalData = apiBody.data;
-      }
-
-      // Bước 3: Xử lý kết quả
       if (finalData) {
-        console.log("==> ĐÃ TÌM THẤY PHÒNG:", finalData.labName);
         setVerifyResult({ ...finalData, isValid: true });
       } else {
-        // Nếu không tìm thấy field bookingCode ở đâu cả
-        const msg =
-          apiBody?.message ||
-          "Mã đặt phòng không hợp lệ hoặc không có dữ liệu.";
-        Alert.alert("Thông báo", msg);
+        Alert.alert("Thông báo", apiBody?.message || "Mã không hợp lệ.");
       }
     } catch (error: any) {
-      console.error("Lỗi API:", error);
-      const errorMsg =
-        error.response?.data?.message ||
-        "Không thể kết nối hoặc mã không tồn tại.";
-      Alert.alert("Lỗi", errorMsg);
+      Alert.alert("Lỗi", error.response?.data?.message || "Mã không tồn tại.");
     } finally {
       setIsVerifying(false);
     }
@@ -282,7 +229,6 @@ export default function DoorRequestScreen() {
   const handleCreateRequest = async () => {
     if (!bookingCode.trim() || !reason.trim())
       return Alert.alert("Thiếu thông tin", "Nhập đủ mã và lý do.");
-
     setIsSubmitting(true);
     try {
       await apiClient.post("/api/DoorRequests", {
@@ -341,7 +287,8 @@ export default function DoorRequestScreen() {
     setIsLoadingQr(true);
     setQrContent("");
     try {
-      const payload = { requestId: id, createdAt: new Date().toISOString() };
+      // Logic Payload QR tùy thuộc vào hệ thống của bạn
+      const payload = { requestId: id, timestamp: new Date().getTime() };
       setQrContent(JSON.stringify(payload));
     } catch (error) {
       Alert.alert("Lỗi", "Không thể tạo mã QR.");
@@ -375,26 +322,17 @@ export default function DoorRequestScreen() {
             <Hash size={18} color="#EA580C" />
             <Text style={styles.cardTitle}>Mã: {item.bookingCode}</Text>
           </View>
-          <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flexDirection: "row", gap: 12 }}>
             {activeTab === "history" && isAccepted && (
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => handleShowQrCode(item.id)}
-              >
+              <TouchableOpacity onPress={() => handleShowQrCode(item.id)}>
                 <QrCode size={20} color="#0F172A" />
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => handleViewDetail(item.id)}
-            >
+            <TouchableOpacity onPress={() => handleViewDetail(item.id)}>
               <Eye size={20} color="#0EA5E9" />
             </TouchableOpacity>
             {activeTab === "pending" && (
-              <TouchableOpacity
-                onPress={() => handleDeleteRequest(item.id)}
-                style={styles.deleteButton}
-              >
+              <TouchableOpacity onPress={() => handleDeleteRequest(item.id)}>
                 <Trash2 size={20} color="#EF4444" />
               </TouchableOpacity>
             )}
@@ -457,38 +395,22 @@ export default function DoorRequestScreen() {
       />
 
       <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === "pending" && styles.tabActive,
-          ]}
-          onPress={() => handleTabChange("pending")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "pending" && styles.tabTextActive,
-            ]}
+        {["pending", "history"].map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tabButton, activeTab === tab && styles.tabActive]}
+            onPress={() => handleTabChange(tab as any)}
           >
-            Chờ duyệt
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === "history" && styles.tabActive,
-          ]}
-          onPress={() => handleTabChange("history")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "history" && styles.tabTextActive,
-            ]}
-          >
-            Lịch sử
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === tab && styles.tabTextActive,
+              ]}
+            >
+              {tab === "pending" ? "Chờ duyệt" : "Lịch sử"}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {isLoading && !isRefreshing ? (
@@ -568,45 +490,18 @@ export default function DoorRequestScreen() {
               </View>
 
               {verifyResult && (
-                <View
-                  style={[
-                    styles.verifiedCard,
-                    !verifyResult.isValid && {
-                      backgroundColor: "#FEF2F2",
-                      borderColor: "#FCA5A5",
-                    },
-                  ]}
-                >
+                <View style={styles.verifiedCard}>
                   <View style={styles.verifiedHeader}>
                     <CheckCircle2 size={16} color="#166534" />
                     <Text style={styles.verifiedTitle}>Thông tin hợp lệ</Text>
                   </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                      marginTop: 4,
-                    }}
-                  >
+                  <View style={styles.verifiedInfoItem}>
                     <Building2 size={14} color="#64748B" />
-                    <Text
-                      style={[
-                        styles.verifiedText,
-                        { fontWeight: "700", color: "#0F172A" },
-                      ]}
-                    >
+                    <Text style={styles.verifiedTextMain}>
                       {verifyResult.labName}
                     </Text>
                   </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                      marginTop: 4,
-                    }}
-                  >
+                  <View style={styles.verifiedInfoItem}>
                     <CalendarDays size={14} color="#64748B" />
                     <Text style={styles.verifiedText}>
                       {verifyResult.date} ({verifyResult.timeSlot})
@@ -643,6 +538,121 @@ export default function DoorRequestScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODAL CHI TIẾT YÊU CẦU */}
+      <Modal
+        visible={detailModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDetailModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chi tiết yêu cầu</Text>
+              <TouchableOpacity onPress={() => setDetailModalVisible(false)}>
+                <X size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+            {isLoadingDetail ? (
+              <ActivityIndicator
+                size="large"
+                color="#EA580C"
+                style={{ marginVertical: 40 }}
+              />
+            ) : selectedRequest ? (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.detailCard}>
+                  <DetailRow
+                    icon={<Building2 size={18} color="#EA580C" />}
+                    label="Phòng Lab"
+                    value={selectedRequest.labName}
+                  />
+                  <DetailRow
+                    icon={<Hash size={18} color="#EA580C" />}
+                    label="Mã đặt phòng"
+                    value={selectedRequest.bookingCode}
+                  />
+                  <DetailRow
+                    icon={<Clock size={18} color="#EA580C" />}
+                    label="Thời gian gửi"
+                    value={new Date(selectedRequest.requestTime).toLocaleString(
+                      "vi-VN"
+                    )}
+                  />
+                  <DetailRow
+                    icon={<FileText size={18} color="#EA580C" />}
+                    label="Lý do"
+                    value={selectedRequest.reason}
+                  />
+                </View>
+
+                <Text style={styles.sectionTitle}>Thông tin người gửi</Text>
+                <View style={styles.detailCard}>
+                  <DetailRow
+                    icon={<User size={18} color="#64748B" />}
+                    label="Họ tên"
+                    value={selectedRequest.requestedByName}
+                  />
+                  <DetailRow
+                    icon={<Mail size={18} color="#64748B" />}
+                    label="Email"
+                    value={selectedRequest.requestedByEmail}
+                  />
+                  <DetailRow
+                    icon={<Phone size={18} color="#64748B" />}
+                    label="Số điện thoại"
+                    value={
+                      selectedRequest.requestedByPhoneNumber || "Chưa cập nhật"
+                    }
+                  />
+                </View>
+
+                <Text style={styles.sectionTitle}>Kết quả xử lý</Text>
+                <View style={styles.detailCard}>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Trạng thái</Text>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        {
+                          alignSelf: "flex-start",
+                          marginTop: 4,
+                          backgroundColor:
+                            selectedRequest.status === "Accepted"
+                              ? "#DCFCE7"
+                              : "#FEE2E2",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color:
+                            selectedRequest.status === "Accepted"
+                              ? "#166534"
+                              : "#B91C1C",
+                          fontWeight: "700",
+                        }}
+                      >
+                        {getStatusLabel(selectedRequest.status)}
+                      </Text>
+                    </View>
+                  </View>
+                  {selectedRequest.managerNote && (
+                    <DetailRow
+                      icon={<StickyNote size={18} color="#B45309" />}
+                      label="Ghi chú quản lý"
+                      value={selectedRequest.managerNote}
+                      isLast
+                    />
+                  )}
+                </View>
+                <View style={{ height: 30 }} />
+              </ScrollView>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
       {/* MODAL QR CODE */}
       <Modal
         visible={qrModalVisible}
@@ -677,21 +687,12 @@ export default function DoorRequestScreen() {
             {isLoadingQr ? (
               <ActivityIndicator size="large" color="#EA580C" />
             ) : (
-              <View
-                style={{
-                  padding: 20,
-                  backgroundColor: "white",
-                  borderRadius: 10,
-                  elevation: 5,
-                }}
-              >
-                <QRCode value={qrContent} size={200} />
+              <View style={styles.qrContainer}>
+                <QRCode value={qrContent} size={220} />
               </View>
             )}
-            <Text
-              style={{ marginTop: 20, color: "#64748B", textAlign: "center" }}
-            >
-              Đưa mã này vào máy quét tại phòng Lab.
+            <Text style={styles.qrHint}>
+              Đưa mã này vào máy quét tại cửa phòng Lab để tự động mở khóa.
             </Text>
           </View>
         </View>
@@ -699,6 +700,27 @@ export default function DoorRequestScreen() {
     </SafeAreaView>
   );
 }
+
+// Sub-component cho Detail Row
+const DetailRow = ({
+  icon,
+  label,
+  value,
+  isLast,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  isLast?: boolean;
+}) => (
+  <View style={[styles.detailItem, !isLast && styles.detailBorder]}>
+    <View style={styles.detailHeaderRow}>
+      {icon}
+      <Text style={styles.detailLabel}>{label}</Text>
+    </View>
+    <Text style={styles.detailValue}>{value}</Text>
+  </View>
+);
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF7ED" },
@@ -712,11 +734,12 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: "bold", color: "#0F172A" },
   addButton: {
     backgroundColor: "#EA580C",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
+    elevation: 4,
   },
   tabContainer: {
     flexDirection: "row",
@@ -734,26 +757,28 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomColor: "#EA580C" },
   tabText: { fontSize: 14, fontWeight: "600", color: "#64748B" },
   tabTextActive: { color: "#EA580C", fontWeight: "700" },
-  listContent: { padding: 16 },
+  listContent: { padding: 16, paddingBottom: 100 },
   card: {
     backgroundColor: "#FFF",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    elevation: 1,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 10,
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  cardTitle: { fontSize: 16, fontWeight: "bold" },
-  deleteButton: { padding: 4 },
-  iconButton: { padding: 4 },
+  cardTitle: { fontSize: 16, fontWeight: "800", color: "#1E293B" },
   row: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  descriptionText: { fontSize: 14, color: "#334155", flex: 1 },
+  descriptionText: { fontSize: 14, color: "#475569", flex: 1, lineHeight: 20 },
   cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -769,21 +794,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
-  statusText: { fontSize: 12, fontWeight: "600" },
+  statusText: { fontSize: 12, fontWeight: "700" },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
   modalContent: {
     backgroundColor: "#FFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: "85%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: "90%",
   },
   modalHeader: {
     flexDirection: "row",
@@ -791,34 +816,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  modalTitle: { fontSize: 18, fontWeight: "bold" },
+  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#0F172A" },
   label: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#334155",
     marginBottom: 8,
-    marginTop: 10,
+    marginTop: 12,
   },
   inputRow: { flexDirection: "row", gap: 10, marginBottom: 10 },
   inputFlex: {
     flex: 1,
-    backgroundColor: "#F1F5F9",
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    fontSize: 15,
   },
   checkButton: {
     backgroundColor: "#0EA5E9",
-    width: 50,
-    borderRadius: 8,
+    width: 54,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
   verifiedCard: {
     backgroundColor: "#F0FDF4",
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#BBF7D0",
     marginBottom: 16,
@@ -827,28 +853,89 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 4,
+    marginBottom: 8,
   },
   verifiedTitle: { fontSize: 14, fontWeight: "bold", color: "#166534" },
-  verifiedText: { fontSize: 13, color: "#334155" },
+  verifiedInfoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  verifiedTextMain: { fontWeight: "700", color: "#0F172A", fontSize: 14 },
+  verifiedText: { fontSize: 13, color: "#475569" },
   inputMulti: {
-    backgroundColor: "#F1F5F9",
-    borderRadius: 8,
-    padding: 12,
-    minHeight: 80,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 100,
     textAlignVertical: "top",
     marginBottom: 24,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    fontSize: 15,
   },
   submitButton: {
     backgroundColor: "#EA580C",
-    padding: 16,
-    borderRadius: 12,
+    padding: 18,
+    borderRadius: 14,
     alignItems: "center",
+    elevation: 2,
   },
-  disabledButton: { opacity: 0.5 },
+  disabledButton: { backgroundColor: "#CBD5E1" },
   submitButtonText: { color: "#FFF", fontSize: 16, fontWeight: "bold" },
-  emptyState: { alignItems: "center", marginTop: 60, gap: 12 },
-  emptyText: { color: "#94A3B8" },
+  emptyState: { alignItems: "center", marginTop: 80, gap: 16 },
+  emptyText: { color: "#94A3B8", fontSize: 15 },
+
+  // Detail Modal Styles
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#64748B",
+    marginTop: 20,
+    marginBottom: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  detailCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  detailItem: { paddingVertical: 10 },
+  detailBorder: { borderBottomWidth: 1, borderBottomColor: "#E2E8F0" },
+  detailHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  detailLabel: { fontSize: 12, color: "#64748B", fontWeight: "600" },
+  detailValue: {
+    fontSize: 15,
+    color: "#0F172A",
+    fontWeight: "600",
+    paddingLeft: 26,
+  },
+
+  // QR Styles
+  qrContainer: {
+    padding: 20,
+    backgroundColor: "white",
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  qrHint: {
+    marginTop: 24,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 20,
+    fontSize: 14,
+  },
 });

@@ -164,7 +164,14 @@ export default function ManagerDoorRequestScreen() {
   // --- STATE REJECT MODAL ---
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
-  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // --- STATE ACCEPT MODAL (MỚI) ---
+  const [acceptModalVisible, setAcceptModalVisible] = useState(false);
+  const [acceptNote, setAcceptNote] = useState("");
+
+  // --- STATE PROCESSING & SELECTION (ĐÃ SỬA) ---
+  const [processingId, setProcessingId] = useState<string | null>(null); // Chỉ dùng khi API đang chạy
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null); // Dùng để lưu ID khi mở modal
 
   // --- STATE LOOKUP MODAL ---
   const [lookupModalVisible, setLookupModalVisible] = useState(false);
@@ -247,34 +254,40 @@ export default function ManagerDoorRequestScreen() {
   };
 
   // ==========================================
-  // APPROVE / REJECT LOGIC
+  // APPROVE / REJECT LOGIC (ĐÃ SỬA)
   // ==========================================
+
+  // 1. Khởi tạo Duyệt (Mở modal Accept)
   const handleAccept = (id: string | number) => {
-    // Ép kiểu về string để đồng bộ với API
-    const idStr = String(id);
-    Alert.alert("Xác nhận duyệt", "Bạn muốn mở cửa cho yêu cầu này?", [
-      { text: "Hủy", style: "cancel" },
-      {
-        text: "Duyệt ngay",
-        onPress: () =>
-          processRequest(idStr, "Accepted", "Yêu cầu đã được duyệt."),
-      },
-    ]);
+    setSelectedActionId(String(id)); // Lưu ID vào biến tạm, không set processingId ở đây
+    setAcceptNote("");
+    setAcceptModalVisible(true);
   };
 
+  // 2. Xác nhận Duyệt (Gọi API)
+  const confirmAccept = () => {
+    if (selectedActionId) {
+      const noteToSend = acceptNote.trim() || "Yêu cầu đã được duyệt.";
+      processRequest(selectedActionId, "Accepted", noteToSend);
+      setAcceptModalVisible(false);
+    }
+  };
+
+  // 3. Khởi tạo Từ chối (Mở modal Reject)
   const handleRejectInit = (id: string | number) => {
-    setProcessingId(String(id));
+    setSelectedActionId(String(id)); // Lưu ID vào biến tạm
     setRejectReason("");
     setRejectModalVisible(true);
   };
 
+  // 4. Xác nhận Từ chối (Gọi API)
   const confirmReject = () => {
     if (!rejectReason.trim()) {
       Alert.alert("Thiếu thông tin", "Vui lòng nhập lý do từ chối.");
       return;
     }
-    if (processingId) {
-      processRequest(processingId, "Rejected", rejectReason);
+    if (selectedActionId) {
+      processRequest(selectedActionId, "Rejected", rejectReason);
       setRejectModalVisible(false);
     }
   };
@@ -284,7 +297,7 @@ export default function ManagerDoorRequestScreen() {
     newStatus: "Accepted" | "Rejected",
     note: string
   ) => {
-    setProcessingId(id);
+    setProcessingId(id); // Bắt đầu loading khi thực sự gọi API
     try {
       const body = {
         newStatus: newStatus,
@@ -306,7 +319,8 @@ export default function ManagerDoorRequestScreen() {
       const msg = error.response?.data?.message || "Có lỗi xảy ra.";
       Alert.alert("Thất bại", msg);
     } finally {
-      setProcessingId(null);
+      setProcessingId(null); // Tắt loading khi API chạy xong
+      setSelectedActionId(null); // Reset ID đã chọn
     }
   };
 
@@ -348,7 +362,7 @@ export default function ManagerDoorRequestScreen() {
   const renderItem = ({ item }: { item: DoorRequestItem }) => {
     const isPending = activeTab === "pending";
     const statusConf = getStatusConfig(item.status);
-    const isProcessing = processingId === item.id;
+    const isProcessing = processingId === item.id; // Chỉ hiển thị loading nếu ID trùng khớp
 
     return (
       <View style={[styles.card, !isPending && { opacity: 0.95 }]}>
@@ -544,7 +558,7 @@ export default function ManagerDoorRequestScreen() {
         />
       )}
 
-      {/* 👇 MODAL COMPONENT (REPLACEMENT) */}
+      {/* 👇 MODAL COMPONENT */}
       <DoorRequestManagerModals
         styles={styles}
         // Reject
@@ -553,6 +567,12 @@ export default function ManagerDoorRequestScreen() {
         rejectReason={rejectReason}
         setRejectReason={setRejectReason}
         confirmReject={confirmReject}
+        // Accept
+        acceptModalVisible={acceptModalVisible}
+        setAcceptModalVisible={setAcceptModalVisible}
+        acceptNote={acceptNote}
+        setAcceptNote={setAcceptNote}
+        confirmAccept={confirmAccept}
         // Detail
         detailModalVisible={detailModalVisible}
         setDetailModalVisible={setDetailModalVisible}
@@ -712,7 +732,7 @@ const styles = StyleSheet.create({
   textReject: { color: "#EF4444", fontWeight: "600", fontSize: 14 },
   textAccept: { color: "white", fontWeight: "600", fontSize: 14 },
 
-  // --- STYLES DÀNH CHO MODAL (Được component con sử dụng) ---
+  // --- STYLES DÀNH CHO MODAL ---
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -760,7 +780,6 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 14, fontWeight: "600", color: "#475569" },
   divider: { height: 1, backgroundColor: "#E2E8F0", marginVertical: 12 },
 
-  // Styles cho DetailItem
   detailRowItem: { flexDirection: "row", gap: 10, marginBottom: 12 },
   detailIconWrapper: { marginTop: 2 },
   detailTextWrapper: { flex: 1 },

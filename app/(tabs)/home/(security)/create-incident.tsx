@@ -247,12 +247,6 @@ export default function CreateIncidentScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <ChevronLeft size={24} color="#0F172A" />
-          </TouchableOpacity>
           <Text style={styles.headerTitle}>Báo cáo sự cố</Text>
           <View style={{ width: 24 }} />
         </View>
@@ -487,7 +481,7 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: "#FFF7ED",
   },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
+  headerTitle: { fontSize: 24, fontWeight: "700", color: "#0F172A" },
   backButton: { padding: 4 },
   content: { padding: 16, paddingBottom: 100 },
 
