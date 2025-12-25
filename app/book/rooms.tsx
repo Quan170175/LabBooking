@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 // --- THAY ĐỔI 1: Imports ---
 import apiClient from "@/utils/api";
 import React, { useEffect, useState } from "react";
@@ -124,62 +124,73 @@ export default function BookRooms() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <BookingProgress step={1} />
-
-      <BookingPageHeader
-        icon={headerIcon}
-        title="Chọn phòng lab"
-        subtitle={getSubtitle()}
+    <>
+      <Stack.Screen
+        options={{
+          title: "Quay lại", // <-- Thay chữ "success" bằng chữ bạn muốn ở đây
+          headerShadowVisible: false, // (Tùy chọn) Xóa đường kẻ mờ dưới header cho đẹp
+        }}
       />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+      >
+        <BookingProgress step={1} />
 
-      {/* --- THAY ĐỔI 8: Dùng `rooms.map` và dữ liệu thật --- */}
-      <View style={styles.roomList}>
-        {rooms.map((room) => {
-          // Tạo mô tả (desc) từ dữ liệu API
-          let desc = `${room.location} - ${room.maximumLimit} chỗ ngồi`;
-          if (room.equipments && room.equipments.length > 0) {
-            desc += ` (${room.equipments.length} thiết bị)`;
-          }
+        <BookingPageHeader
+          icon={headerIcon}
+          title="Chọn phòng lab"
+          subtitle={getSubtitle()}
+        />
 
-          return (
-            <BookingCard key={room.id}>
-              <View style={styles.roomInfo}>
-                <View style={styles.roomIcon}>
-                  {/* ... (SVG icon giữ nguyên) ... */}
-                  <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <Path
-                      d="M15.2 2H9.2C8.65 2 8.2 2.45 8.2 3v2c0 .55.45 1 1 1h5c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1zM16.2 4h2c.55 0 1 .45 1 1v15c0 .55-.45 1-1 1h-12c-.55 0-1-.45-1-1V5c0-.55.45-1 1-1h2"
-                      stroke="#EA580C"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <Path
-                      d="M12.2 11h4M12.2 16h4M8.2 11h.01M8.2 16h.01"
-                      stroke="#EA580C"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </Svg>
+        {/* --- THAY ĐỔI 8: Dùng `rooms.map` và dữ liệu thật --- */}
+        <View style={styles.roomList}>
+          {rooms.map((room) => {
+            // Tạo mô tả (desc) từ dữ liệu API
+            let desc = `${room.location} - ${room.maximumLimit} chỗ ngồi`;
+            if (room.equipments && room.equipments.length > 0) {
+              desc += ` (${room.equipments.length} thiết bị)`;
+            }
+
+            return (
+              <BookingCard key={room.id}>
+                <View style={styles.roomInfo}>
+                  <View style={styles.roomIcon}>
+                    {/* ... (SVG icon giữ nguyên) ... */}
+                    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                      <Path
+                        d="M15.2 2H9.2C8.65 2 8.2 2.45 8.2 3v2c0 .55.45 1 1 1h5c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1zM16.2 4h2c.55 0 1 .45 1 1v15c0 .55-.45 1-1 1h-12c-.55 0-1-.45-1-1V5c0-.55.45-1 1-1h2"
+                        stroke="#EA580C"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <Path
+                        d="M12.2 11h4M12.2 16h4M8.2 11h.01M8.2 16h.01"
+                        stroke="#EA580C"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </Svg>
+                  </View>
+                  <View>
+                    <Text style={styles.roomName}>{room.labName}</Text>
+                    <Text style={styles.roomDesc}>{desc}</Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.roomName}>{room.labName}</Text>
-                  <Text style={styles.roomDesc}>{desc}</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={() => handleSelectRoom(room)}
-                style={styles.selectButton}
-              >
-                <Text style={styles.selectButtonText}>Chọn</Text>
-              </TouchableOpacity>
-            </BookingCard>
-          );
-        })}
-      </View>
-    </ScrollView>
+                <TouchableOpacity
+                  onPress={() => handleSelectRoom(room)}
+                  style={styles.selectButton}
+                >
+                  <Text style={styles.selectButtonText}>Chọn</Text>
+                </TouchableOpacity>
+              </BookingCard>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </>
   );
 }
 

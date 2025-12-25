@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -364,6 +364,12 @@ export default function ChangeDetailsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Stack.Screen
+        options={{
+          title: "Quay lại", // <-- Thay chữ "success" bằng chữ bạn muốn ở đây
+          headerShadowVisible: false, // (Tùy chọn) Xóa đường kẻ mờ dưới header cho đẹp
+        }}
+      />
       <BookingPageHeader
         icon={<DeviceIcon />}
         title="Cập nhật thông tin"

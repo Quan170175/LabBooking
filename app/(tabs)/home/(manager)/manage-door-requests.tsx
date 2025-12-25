@@ -36,9 +36,12 @@ interface DoorRequestItem {
   id: string;
   bookingCode: string;
   reason: string;
-  requestedByName: string;
+  requestedByName: string; // Map từ contactName
   requestTime: string;
   status: string;
+  slotLabel?: string;
+  slotStartTime?: string;
+  slotEndTime?: string;
 }
 
 interface DoorRequestDetail {
@@ -165,13 +168,13 @@ export default function ManagerDoorRequestScreen() {
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
-  // --- STATE ACCEPT MODAL (MỚI) ---
+  // --- STATE ACCEPT MODAL ---
   const [acceptModalVisible, setAcceptModalVisible] = useState(false);
   const [acceptNote, setAcceptNote] = useState("");
 
-  // --- STATE PROCESSING & SELECTION (ĐÃ SỬA) ---
-  const [processingId, setProcessingId] = useState<string | null>(null); // Chỉ dùng khi API đang chạy
-  const [selectedActionId, setSelectedActionId] = useState<string | null>(null); // Dùng để lưu ID khi mở modal
+  // --- STATE PROCESSING & SELECTION ---
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
 
   // --- STATE LOOKUP MODAL ---
   const [lookupModalVisible, setLookupModalVisible] = useState(false);
@@ -180,6 +183,9 @@ export default function ManagerDoorRequestScreen() {
   const [lookupResult, setLookupResult] =
     useState<BookingLookupResponse | null>(null);
 
+  // ------------------------------------------
+  // FIX 1: UPDATE FETCH DATA LIST (Sửa logic lấy items)
+  // ------------------------------------------
   const fetchData = useCallback(async () => {
     if (!isRefreshing) setIsLoading(true);
     try {
@@ -199,14 +205,39 @@ export default function ManagerDoorRequestScreen() {
         params.FilterStatus = "Pending";
       }
 
-      const response = await apiClient.get("/api/DoorRequests", { params });
-      const resData = response.data;
-      const items: DoorRequestItem[] =
-        resData?.items ||
-        resData?.data ||
-        (Array.isArray(resData) ? resData : []);
+      console.log("Fetching with params:", params); // Debug log
 
-      setDataList(items);
+      const response = await apiClient.get("/api/DoorRequests", { params });
+
+      // Lấy phần body của response
+      const resBody = response.data || response;
+
+      // LOGIC MỚI: Dò tìm mảng items bất kể cấu trúc
+      // 1. Kiểm tra cấu trúc chuẩn API mới: { data: { items: [] } }
+      // 2. Kiểm tra nếu interceptor trả thẳng { items: [] }
+      // 3. Kiểm tra nếu data là mảng trực tiếp
+      let rawItems = [];
+
+      if (resBody?.data?.items && Array.isArray(resBody.data.items)) {
+        rawItems = resBody.data.items;
+      } else if (resBody?.items && Array.isArray(resBody.items)) {
+        rawItems = resBody.items;
+      } else if (resBody?.data && Array.isArray(resBody.data)) {
+        rawItems = resBody.data;
+      } else if (Array.isArray(resBody)) {
+        rawItems = resBody;
+      }
+
+      console.log("Found Items:", rawItems.length); // Debug log
+
+      // Mapping dữ liệu
+      const mappedItems: DoorRequestItem[] = rawItems.map((item: any) => ({
+        ...item,
+        // Ưu tiên contactName, nếu không có thì dùng requestedByName, không thì N/A
+        requestedByName: item.contactName || item.requestedByName || "N/A",
+      }));
+
+      setDataList(mappedItems);
     } catch (error) {
       console.error("Fetch Error:", error);
       Alert.alert("Lỗi", "Không tải được danh sách yêu cầu.");
@@ -231,6 +262,9 @@ export default function ManagerDoorRequestScreen() {
     fetchData();
   };
 
+  // ------------------------------------------
+  // FIX 2: UPDATE VIEW DETAIL (Sửa logic lấy detail)
+  // ------------------------------------------
   const handleViewDetail = async (id: string) => {
     setDetailModalVisible(true);
     setIsLoadingDetail(true);
@@ -238,8 +272,27 @@ export default function ManagerDoorRequestScreen() {
 
     try {
       const response = await apiClient.get(`/api/DoorRequests/${id}`);
-      setSelectedDetail(response.data);
+      const resBody = response.data || response;
+
+      // LOGIC MỚI: Tìm object data
+      const apiData = resBody?.data || resBody;
+
+      if (apiData) {
+        const mappedDetail: DoorRequestDetail = {
+          ...apiData,
+          requestedByName:
+            apiData.contactName || apiData.requestedByName || "N/A",
+          requestedByEmail:
+            apiData.contactEmail || apiData.requestedByEmail || "N/A",
+          requestedByPhoneNumber:
+            apiData.contactPhoneNumber ||
+            apiData.requestedByPhoneNumber ||
+            "N/A",
+        };
+        setSelectedDetail(mappedDetail);
+      }
     } catch (error) {
+      console.error(error);
       Alert.alert("Lỗi", "Không tải được chi tiết yêu cầu.");
       setDetailModalVisible(false);
     } finally {
@@ -254,17 +307,15 @@ export default function ManagerDoorRequestScreen() {
   };
 
   // ==========================================
-  // APPROVE / REJECT LOGIC (ĐÃ SỬA)
+  // APPROVE / REJECT LOGIC
   // ==========================================
 
-  // 1. Khởi tạo Duyệt (Mở modal Accept)
   const handleAccept = (id: string | number) => {
-    setSelectedActionId(String(id)); // Lưu ID vào biến tạm, không set processingId ở đây
+    setSelectedActionId(String(id));
     setAcceptNote("");
     setAcceptModalVisible(true);
   };
 
-  // 2. Xác nhận Duyệt (Gọi API)
   const confirmAccept = () => {
     if (selectedActionId) {
       const noteToSend = acceptNote.trim() || "Yêu cầu đã được duyệt.";
@@ -273,14 +324,12 @@ export default function ManagerDoorRequestScreen() {
     }
   };
 
-  // 3. Khởi tạo Từ chối (Mở modal Reject)
   const handleRejectInit = (id: string | number) => {
-    setSelectedActionId(String(id)); // Lưu ID vào biến tạm
+    setSelectedActionId(String(id));
     setRejectReason("");
     setRejectModalVisible(true);
   };
 
-  // 4. Xác nhận Từ chối (Gọi API)
   const confirmReject = () => {
     if (!rejectReason.trim()) {
       Alert.alert("Thiếu thông tin", "Vui lòng nhập lý do từ chối.");
@@ -297,7 +346,7 @@ export default function ManagerDoorRequestScreen() {
     newStatus: "Accepted" | "Rejected",
     note: string
   ) => {
-    setProcessingId(id); // Bắt đầu loading khi thực sự gọi API
+    setProcessingId(id);
     try {
       const body = {
         newStatus: newStatus,
@@ -319,8 +368,8 @@ export default function ManagerDoorRequestScreen() {
       const msg = error.response?.data?.message || "Có lỗi xảy ra.";
       Alert.alert("Thất bại", msg);
     } finally {
-      setProcessingId(null); // Tắt loading khi API chạy xong
-      setSelectedActionId(null); // Reset ID đã chọn
+      setProcessingId(null);
+      setSelectedActionId(null);
     }
   };
 
@@ -362,7 +411,7 @@ export default function ManagerDoorRequestScreen() {
   const renderItem = ({ item }: { item: DoorRequestItem }) => {
     const isPending = activeTab === "pending";
     const statusConf = getStatusConfig(item.status);
-    const isProcessing = processingId === item.id; // Chỉ hiển thị loading nếu ID trùng khớp
+    const isProcessing = processingId === item.id;
 
     return (
       <View style={[styles.card, !isPending && { opacity: 0.95 }]}>
@@ -412,6 +461,15 @@ export default function ManagerDoorRequestScreen() {
               Lý do: "{displayData(item.reason)}"
             </Text>
           </View>
+          {item.slotLabel && (
+            <View style={styles.infoRow}>
+              <Clock size={14} color="#64748B" />
+              <Text style={styles.infoText} numberOfLines={1}>
+                {item.slotLabel} ({item.slotStartTime?.slice(0, 5)} -{" "}
+                {item.slotEndTime?.slice(0, 5)})
+              </Text>
+            </View>
+          )}
 
           <TouchableOpacity
             style={styles.viewDetailLink}

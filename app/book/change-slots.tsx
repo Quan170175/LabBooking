@@ -1,5 +1,5 @@
 import apiClient from "@/utils/api";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft, ChevronRight, RefreshCcw } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -301,6 +301,12 @@ export default function ChangeSlotsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Stack.Screen
+        options={{
+          title: "Quay lại", // <-- Thay chữ "success" bằng chữ bạn muốn ở đây
+          headerShadowVisible: false, // (Tùy chọn) Xóa đường kẻ mờ dưới header cho đẹp
+        }}
+      />
       <BookingPageHeader
         icon={headerIcon}
         title="Điều chỉnh lịch"

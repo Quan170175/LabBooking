@@ -1,18 +1,24 @@
-import React, { useState, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Alert,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
+import React, { useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+// --- IMPORTS ---
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+
 import {
   actions,
   RichEditor,
@@ -20,6 +26,9 @@ import {
 } from "react-native-pell-rich-editor";
 
 import apiClient from "../../../utils/api";
+
+// FIX LỖI TS: Ép kiểu để không bị gạch chân đỏ
+const FS = FileSystem as any;
 
 // --- INTERFACES ---
 interface SelectedFile {
@@ -35,10 +44,10 @@ interface FileRowProps {
   onPick: () => void;
   onClear: () => void;
   required?: boolean;
+  onDownloadTemplate?: () => void; // Thêm lại prop này để dùng nút cũ
 }
 
 export default function EmailComposerScreen() {
-  // --- STATE ---
   const [studentFile, setStudentFile] = useState<SelectedFile | null>(null);
   const [attachmentFile, setAttachmentFile] = useState<SelectedFile | null>(
     null
@@ -47,69 +56,69 @@ export default function EmailComposerScreen() {
   const [bodyHtml, setBodyHtml] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Ref Editor
   const richText = useRef<RichEditor>(null);
 
-  // --- LOGIC FUNCTIONS ---
-
-  // 1. Chọn file (Giữ nguyên logic DocumentPicker)
-  const pickFile = async (
-    setFileAction: React.Dispatch<React.SetStateAction<SelectedFile | null>>
-  ) => {
+  // ========================================================================
+  // LOGIC TẢI FILE: ĐỌC -> GHI -> SHARE
+  // ========================================================================
+  const handleDownloadTemplate = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: "*/*",
-        copyToCacheDirectory: true,
+      // 1. Load Asset
+      const templateAsset = Asset.fromModule(
+        require("../../../assets/files/students_mail_template.xlsx")
+      );
+      await templateAsset.downloadAsync(); // Đảm bảo asset đã tải về máy
+
+      // 2. Đọc file asset thành chuỗi Base64
+      // Lưu ý: Dùng localUri nếu có, nếu không dùng uri
+      const uriToRead = templateAsset.localUri || templateAsset.uri;
+      const fileContent = await FS.readAsStringAsync(uriToRead, {
+        encoding: "base64",
       });
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        setFileAction({
-          uri: file.uri,
-          name: file.name,
-          mimeType: file.mimeType || undefined,
-          size: file.size,
+      // 3. Tạo đường dẫn lưu tạm
+      const cacheDir = FS.cacheDirectory || FS.documentDirectory;
+      const fileUri = cacheDir + "students_mail_template.xlsx";
+
+      // 4. Ghi file vào bộ nhớ tạm
+      await FS.writeAsStringAsync(fileUri, fileContent, {
+        encoding: "base64",
+      });
+
+      // 5. Mở hộp thoại chia sẻ (Share Sheet) để user tự lưu
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          UTI: "com.microsoft.excel.xlsx",
+          dialogTitle: "Lưu file mẫu",
         });
+      } else {
+        Alert.alert("Lỗi", "Thiết bị không hỗ trợ chia sẻ.");
       }
-    } catch (err) {
-      console.log("Lỗi chọn file:", err);
+    } catch (error) {
+      console.error("Chi tiết lỗi:", error);
+      Alert.alert(
+        "Lỗi",
+        "Không thể lấy file mẫu. Kiểm tra lại thư mục assets."
+      );
     }
   };
 
-  // 2. Insert biến vào editor
-  const insertVariable = (variable: string) => {
-    richText.current?.insertText(variable);
-  };
-
-  // 3. GỬI EMAIL (Sử dụng apiClient)
+  // --- LOGIC GỬI MAIL ---
   const handleSendEmail = async () => {
-    // Validate
-    if (!studentFile) {
+    if (!studentFile || !subject || !bodyHtml) {
       Alert.alert(
         "Thiếu thông tin",
-        "Vui lòng chọn file danh sách sinh viên (Excel)."
+        "Vui lòng nhập đủ: Tiêu đề, Nội dung và File danh sách."
       );
       return;
     }
-    if (!subject.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập tiêu đề email.");
-      return;
-    }
-    if (!bodyHtml || bodyHtml === "<p><br></p>") {
-      Alert.alert("Thiếu thông tin", "Vui lòng soạn nội dung email.");
-      return;
-    }
-
     setLoading(true);
-
     try {
       const formData = new FormData();
-
-      // Append Text
       formData.append("Subject", subject);
       formData.append("Body", bodyHtml);
-
-      // Append File 1 (Bắt buộc)
       formData.append("StudentFile", {
         uri: studentFile.uri,
         name: studentFile.name,
@@ -118,7 +127,6 @@ export default function EmailComposerScreen() {
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       } as any);
 
-      // Append File 2 (Optional)
       if (attachmentFile) {
         formData.append("AttachmentFile", {
           uri: attachmentFile.uri,
@@ -127,53 +135,54 @@ export default function EmailComposerScreen() {
         } as any);
       }
 
-      console.log("🚀 Đang gửi request...");
-
-      // 🟢 GỌI API QUA CLIENT
-      const response = await apiClient.post(
-        "/api/Emails/send-custom-email",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
-
-      console.log("✅ Kết quả:", response.data);
-      Alert.alert("Thành công", "Hệ thống đang tiến hành gửi email!");
+      await apiClient.post("/api/Emails/send-custom-email", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      Alert.alert("Thành công", "Đang gửi email!");
     } catch (error: any) {
-      console.error("❌ Lỗi API:", error);
-      // apiClient đã xử lý 401/403, ở đây chỉ catch lỗi logic hoặc 500
-      const msg =
-        error.response?.data?.message || "Có lỗi xảy ra khi gửi email.";
-      Alert.alert(
-        "Gửi thất bại",
-        typeof msg === "string" ? msg : JSON.stringify(msg)
-      );
+      Alert.alert("Thất bại", error.response?.data?.message || "Lỗi gửi email");
     } finally {
       setLoading(false);
     }
   };
 
-  // --- RENDER UI ---
+  const pickFile = async (setFileAction: any) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets) {
+        setFileAction({
+          uri: result.assets[0].uri,
+          name: result.assets[0].name,
+          mimeType: result.assets[0].mimeType,
+          size: result.assets[0].size,
+        });
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const insertVariable = (variable: string) =>
+    richText.current?.insertText(variable);
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.root}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.title}>Gửi thông báo</Text>
-          {/* <Text style={styles.subtitle}>
+          <Text style={styles.title}>Soạn Email</Text>
+          <Text style={styles.subtitle}>
             Gửi thông báo tới danh sách sinh viên
-          </Text> */}
+          </Text>
         </View>
 
-        {/* --- KHU VỰC CHỌN FILE --- */}
+        {/* Đã xóa nút to, quay lại dùng nút nhỏ tích hợp trong FileRow */}
+
         <View style={styles.section}>
           <FileRow
             label="1. Danh sách SV (Excel)"
@@ -181,6 +190,7 @@ export default function EmailComposerScreen() {
             onPick={() => pickFile(setStudentFile)}
             onClear={() => setStudentFile(null)}
             required
+            onDownloadTemplate={handleDownloadTemplate} // Truyền hàm download vào đây
           />
           <View style={{ height: 10 }} />
           <FileRow
@@ -191,30 +201,27 @@ export default function EmailComposerScreen() {
           />
         </View>
 
-        {/* --- KHU VỰC NHẬP LIỆU --- */}
         <View style={styles.section}>
           <Text style={styles.label}>
             Tiêu đề Email <Text style={{ color: "red" }}>*</Text>
           </Text>
           <TextInput
             style={styles.input}
-            placeholder="Ví dụ: Thông báo nghỉ học..."
             value={subject}
             onChangeText={setSubject}
+            placeholder="Nhập tiêu đề..."
           />
 
           <Text style={[styles.label, { marginTop: 15 }]}>
             Nội dung Email <Text style={{ color: "red" }}>*</Text>
           </Text>
-
-          {/* Thanh công cụ chèn biến */}
           <View style={styles.variableBar}>
             <Text style={styles.varLabel}>Chèn nhanh:</Text>
             <TouchableOpacity
               style={styles.chip}
               onPress={() => insertVariable("{{FullName}}")}
             >
-              <Text style={styles.chipText}>+ Tên SV</Text>
+              <Text style={styles.chipText}>+ Tên</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.chip}
@@ -224,7 +231,6 @@ export default function EmailComposerScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Editor Container */}
           <View style={styles.editorWrapper}>
             <RichToolbar
               editor={richText}
@@ -234,33 +240,25 @@ export default function EmailComposerScreen() {
                 actions.setUnderline,
                 actions.heading1,
                 actions.insertBulletsList,
-                actions.setTextColor,
               ]}
-              iconTint="#64748B"
-              selectedIconTint="#EA580C"
-              style={styles.toolbar}
             />
             <RichEditor
               ref={richText}
               onChange={setBodyHtml}
-              placeholder="Nhập nội dung tại đây..."
+              placeholder="Nhập nội dung..."
               initialHeight={200}
-              editorStyle={{ backgroundColor: "white", color: "#334155" }}
             />
           </View>
         </View>
 
-        {/* --- NÚT GỬI --- */}
         <View style={styles.footer}>
           {loading ? (
-            <View style={styles.centered}>
-              <ActivityIndicator size="large" color="#EA580C" />
-            </View>
+            <ActivityIndicator size="large" color="#EA580C" />
           ) : (
             <TouchableOpacity style={styles.btnSend} onPress={handleSendEmail}>
               <Text style={styles.btnSendText}>GỬI THÔNG BÁO</Text>
               <Ionicons
-                name="send"
+                name="paper-plane-outline"
                 size={20}
                 color="white"
                 style={{ marginLeft: 8 }}
@@ -273,35 +271,47 @@ export default function EmailComposerScreen() {
   );
 }
 
-// --- SUB COMPONENTS ---
-const FileRow = ({ label, file, onPick, onClear, required }: FileRowProps) => (
+// --- FILE ROW VỚI NÚT DOWNLOAD NHỎ (GIAO DIỆN CŨ) ---
+const FileRow = ({
+  label,
+  file,
+  onPick,
+  onClear,
+  required,
+  onDownloadTemplate,
+}: FileRowProps) => (
   <View style={styles.fileCard}>
     <View
       style={{
         flexDirection: "row",
         justifyContent: "space-between",
+        alignItems: "center",
         marginBottom: 8,
       }}
     >
       <Text style={styles.fileLabel}>
         {label} {required && <Text style={{ color: "red" }}>*</Text>}
       </Text>
+
+      {/* Nút download nhỏ nằm ở đây */}
+      {onDownloadTemplate && (
+        <TouchableOpacity
+          onPress={onDownloadTemplate}
+          style={styles.btnTemplate}
+        >
+          <Ionicons name="download-outline" size={14} color="#0284C7" />
+          <Text style={styles.btnTemplateText}>Tải mẫu</Text>
+        </TouchableOpacity>
+      )}
     </View>
 
     {file ? (
       <View style={styles.fileSelected}>
-        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-          <Ionicons name="document-text" size={24} color="#16A34A" />
-          <View style={{ marginLeft: 10, flex: 1 }}>
-            <Text style={styles.fileName} numberOfLines={1}>
-              {file.name}
-            </Text>
-            <Text style={styles.fileSize}>
-              {(file.size ? file.size / 1024 : 0).toFixed(1)} KB
-            </Text>
-          </View>
-        </View>
-        <TouchableOpacity onPress={onClear} style={{ padding: 5 }}>
+        <Ionicons name="document-text" size={24} color="#16A34A" />
+        <Text style={[styles.fileName, { flex: 1, marginLeft: 10 }]}>
+          {file.name}
+        </Text>
+        <TouchableOpacity onPress={onClear}>
           <Ionicons name="trash-outline" size={20} color="#DC2626" />
         </TouchableOpacity>
       </View>
@@ -314,19 +324,13 @@ const FileRow = ({ label, file, onPick, onClear, required }: FileRowProps) => (
   </View>
 );
 
-// --- STYLES ---
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#FFF7ED" },
   scrollContent: { padding: 16, paddingBottom: 50 },
-  centered: { alignItems: "center", justifyContent: "center" },
-
   header: { marginBottom: 20 },
   title: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
-  subtitle: { fontSize: 14, color: "#64748B", marginTop: 4 },
-
+  subtitle: { fontSize: 14, color: "#64748B" },
   section: { marginBottom: 20 },
-
-  // File Picker Styles
   fileCard: {
     backgroundColor: "white",
     padding: 12,
@@ -334,20 +338,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FED7AA",
   },
-  fileLabel: { fontSize: 14, fontWeight: "600", color: "#1E293B" },
-  btnPick: {
+  fileLabel: { fontSize: 14, fontWeight: "600" },
+
+  // Style cho nút download nhỏ
+  btnTemplate: {
     flexDirection: "row",
+    backgroundColor: "#E0F2FE",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F1F5F9",
-    padding: 12,
-    borderRadius: 8,
-    borderStyle: "dashed",
-    borderWidth: 1,
-    borderColor: "#CBD5E0",
-    marginTop: 4,
   },
-  btnPickText: { color: "#64748B", fontWeight: "500", marginLeft: 8 },
+  btnTemplateText: {
+    fontSize: 12,
+    color: "#0284C7",
+    marginLeft: 4,
+    fontWeight: "600",
+  },
+
   fileSelected: {
     flexDirection: "row",
     alignItems: "center",
@@ -356,38 +364,38 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#BBF7D0",
-    marginTop: 4,
   },
-  fileName: { fontSize: 14, fontWeight: "600", color: "#15803D" },
-  fileSize: { fontSize: 12, color: "#166534" },
-
-  // Input Styles
-  label: { fontSize: 15, fontWeight: "700", color: "#334155", marginBottom: 8 },
+  fileName: { fontWeight: "600", color: "#15803D" },
+  btnPick: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    padding: 12,
+    borderRadius: 8,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    borderColor: "#CBD5E0",
+  },
+  btnPickText: { color: "#64748B", marginLeft: 8 },
+  label: { fontSize: 15, fontWeight: "700", marginBottom: 8 },
   input: {
     backgroundColor: "white",
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#CBD5E0",
-    fontSize: 16,
-    color: "#0F172A",
   },
-
-  // Variable Bar
-  variableBar: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
-  varLabel: { fontSize: 12, color: "#64748B", marginRight: 8 },
+  variableBar: { flexDirection: "row", marginBottom: 10, alignItems: "center" },
+  varLabel: { fontSize: 12, marginRight: 8 },
   chip: {
     backgroundColor: "#E0F2FE",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
     marginRight: 8,
-    borderWidth: 1,
-    borderColor: "#7DD3FC",
   },
   chipText: { color: "#0284C7", fontWeight: "bold", fontSize: 12 },
-
-  // Editor Styles
   editorWrapper: {
     borderWidth: 1,
     borderColor: "#CBD5E0",
@@ -395,26 +403,14 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "white",
   },
-  toolbar: {
-    backgroundColor: "#F8FAFC",
-    borderBottomWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-
-  // Footer Button
   footer: { marginTop: 10 },
   btnSend: {
-    flexDirection: "row",
     backgroundColor: "#EA580C",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",
+    flexDirection: "row",
     justifyContent: "center",
-    shadowColor: "#EA580C",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   btnSendText: { color: "white", fontWeight: "bold", fontSize: 16 },
 });

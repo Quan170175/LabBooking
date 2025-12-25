@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { AlertCircle, CalendarClock } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -92,110 +92,126 @@ export default function SelectBookingToChange() {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <BookingPageHeader
-        icon={headerIcon}
-        title="Chọn lịch cần thay đổi"
-        subtitle="Danh sách các lịch đã được duyệt có thể chỉnh sửa"
+    <>
+      {/* --- DÒNG NÀY ĐỂ TẮT HEADER MẶC ĐỊNH CỦA HỆ THỐNG --- */}
+      <Stack.Screen
+        options={{
+          title: "Quay lại", // <-- Thay chữ "success" bằng chữ bạn muốn ở đây
+          headerShadowVisible: false, // (Tùy chọn) Xóa đường kẻ mờ dưới header cho đẹp
+        }}
       />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+      >
+        <BookingPageHeader
+          icon={headerIcon}
+          title="Chọn lịch cần thay đổi"
+          subtitle="Danh sách các lịch đã được duyệt và vẫn còn slot chưa diễn ra"
+        />
 
-      {isLoading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#EA580C" />
-        </View>
-      ) : bookings.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Không tìm thấy lịch nào phù hợp.</Text>
-        </View>
-      ) : (
-        <View style={styles.listContainer}>
-          {bookings.map((b) => {
-            // --- LOGIC HIỂN THỊ ---
-            const roomDisplay =
-              b.labRoomResponse?.labName || `Phòng: ${b.labRoomId}`;
-            const totalSlots = b.slots?.length || 0;
+        {isLoading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color="#EA580C" />
+          </View>
+        ) : bookings.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>
+              Không tìm thấy lịch nào phù hợp.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.listContainer}>
+            {bookings.map((b) => {
+              // --- LOGIC HIỂN THỊ ---
+              const roomDisplay =
+                b.labRoomResponse?.labName || `Phòng: ${b.labRoomId}`;
+              const totalSlots = b.slots?.length || 0;
 
-            // Check xem có đơn pending không (QUAN TRỌNG)
-            const isPendingChange = b.hasPendingChangeRequest === true;
+              // Check xem có đơn pending không (QUAN TRỌNG)
+              const isPendingChange = b.hasPendingChangeRequest === true;
 
-            // Đếm số slot tương lai
-            const now = new Date();
-            now.setHours(0, 0, 0, 0);
-            const futureSlots = (b.slots || []).filter(
-              (s: any) => new Date(s.date) >= now
-            ).length;
+              // Đếm số slot tương lai
+              const now = new Date();
+              now.setHours(0, 0, 0, 0);
+              const futureSlots = (b.slots || []).filter(
+                (s: any) => new Date(s.date) >= now
+              ).length;
 
-            return (
-              <BookingCard key={b.id} layout="default">
-                <View style={styles.cardContainer}>
-                  {/* 1. CỘT TRÁI: THÔNG TIN */}
-                  <View style={styles.textColumn}>
-                    <Text style={styles.bookingTitle} numberOfLines={1}>
-                      {b.title || "Không có tiêu đề"}
-                    </Text>
-
-                    <Text style={styles.roomName} numberOfLines={1}>
-                      {roomDisplay}
-                    </Text>
-
-                    <Text style={styles.metaText}>
-                      {getTypeLabel(b.type)} • {b.numberOfParticipants} người
-                    </Text>
-
-                    <View style={styles.slotRow}>
-                      <CalendarClock
-                        size={14}
-                        color="#EA580C"
-                        style={{ marginRight: 4 }}
-                      />
-                      <Text style={styles.slotText}>
-                        <Text style={{ fontWeight: "700" }}>{totalSlots}</Text>{" "}
-                        slot tổng •{" "}
-                        <Text style={{ color: "#EA580C", fontWeight: "700" }}>
-                          {futureSlots}
-                        </Text>{" "}
-                        slot chưa diễn ra
+              return (
+                <BookingCard key={b.id} layout="default">
+                  <View style={styles.cardContainer}>
+                    {/* 1. CỘT TRÁI: THÔNG TIN */}
+                    <View style={styles.textColumn}>
+                      <Text style={styles.bookingTitle} numberOfLines={1}>
+                        {b.title || "Không có tiêu đề"}
                       </Text>
-                    </View>
 
-                    {/* [MỚI] Dòng thông báo nhỏ nếu đang Pending */}
-                    {isPendingChange && (
-                      <View style={styles.pendingNote}>
-                        <AlertCircle size={12} color="#D97706" />
-                        <Text style={styles.pendingNoteText}>
-                          Đang có yêu cầu sửa đổi chờ duyệt
+                      <Text style={styles.roomName} numberOfLines={1}>
+                        {roomDisplay}
+                      </Text>
+
+                      <Text style={styles.metaText}>
+                        {getTypeLabel(b.type)} • {b.numberOfParticipants} người
+                      </Text>
+
+                      <View style={styles.slotRow}>
+                        <CalendarClock
+                          size={14}
+                          color="#EA580C"
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={styles.slotText}>
+                          <Text style={{ fontWeight: "700" }}>
+                            {totalSlots}
+                          </Text>{" "}
+                          slot tổng •{" "}
+                          <Text style={{ color: "#EA580C", fontWeight: "700" }}>
+                            {futureSlots}
+                          </Text>{" "}
+                          slot chưa diễn ra
                         </Text>
                       </View>
-                    )}
-                  </View>
 
-                  {/* 2. CỘT PHẢI: NÚT BẤM */}
-                  <View style={styles.actionColumn}>
-                    <TouchableOpacity
-                      onPress={() => handleSelectBooking(b.id)}
-                      disabled={isPendingChange} // Chặn bấm nếu đang pending
-                      style={[
-                        styles.selectButton,
-                        isPendingChange && styles.disabledButton, // Style xám nếu pending
-                      ]}
-                    >
-                      <Text
+                      {/* [MỚI] Dòng thông báo nhỏ nếu đang Pending */}
+                      {isPendingChange && (
+                        <View style={styles.pendingNote}>
+                          <AlertCircle size={12} color="#D97706" />
+                          <Text style={styles.pendingNoteText}>
+                            Đang có yêu cầu sửa đổi chờ duyệt
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* 2. CỘT PHẢI: NÚT BẤM */}
+                    <View style={styles.actionColumn}>
+                      <TouchableOpacity
+                        onPress={() => handleSelectBooking(b.id)}
+                        disabled={isPendingChange} // Chặn bấm nếu đang pending
                         style={[
-                          styles.selectButtonText,
-                          isPendingChange && styles.disabledButtonText,
+                          styles.selectButton,
+                          isPendingChange && styles.disabledButton, // Style xám nếu pending
                         ]}
                       >
-                        {isPendingChange ? "Đã gửi" : "Sửa"}
-                      </Text>
-                    </TouchableOpacity>
+                        <Text
+                          style={[
+                            styles.selectButtonText,
+                            isPendingChange && styles.disabledButtonText,
+                          ]}
+                        >
+                          {isPendingChange ? "Đã gửi" : "Sửa"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
-              </BookingCard>
-            );
-          })}
-        </View>
-      )}
-    </ScrollView>
+                </BookingCard>
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
+    </>
   );
 }
 

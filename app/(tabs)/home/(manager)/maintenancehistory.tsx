@@ -55,7 +55,7 @@ export default function MaintenanceHistoryScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // 1️⃣ Thay đổi mặc định thành null để lấy tất cả lúc đầu
+  // Thay đổi mặc định thành null để lấy tất cả lúc đầu
   const [filterDate, setFilterDate] = useState<Date | null>(null);
 
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -82,7 +82,7 @@ export default function MaintenanceHistoryScreen() {
           // Không set mặc định From/To ở đây nữa
         };
 
-        // 2️⃣ Chỉ thêm tham số ngày nếu filterDate KHÁC null
+        // Chỉ thêm tham số ngày nếu filterDate KHÁC null
         if (filterDate) {
           const startDate = new Date(filterDate);
           startDate.setHours(0, 0, 0, 0);
@@ -105,7 +105,7 @@ export default function MaintenanceHistoryScreen() {
           // Không set mặc định FromDate/ToDate ở đây nữa
         };
 
-        // 2️⃣ Chỉ thêm tham số ngày nếu filterDate KHÁC null
+        // Chỉ thêm tham số ngày nếu filterDate KHÁC null
         if (filterDate) {
           const startDate = new Date(filterDate);
           startDate.setHours(0, 0, 0, 0);
@@ -197,7 +197,7 @@ export default function MaintenanceHistoryScreen() {
     setShowStatusModal(false);
   };
 
-  // 3️⃣ Logic hiển thị ngày trên UI
+  //  Logic hiển thị ngày trên UI
   const displayDate = filterDate
     ? `${filterDate.getDate()}/${
         filterDate.getMonth() + 1

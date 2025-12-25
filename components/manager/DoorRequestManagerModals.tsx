@@ -23,6 +23,20 @@ import {
   Check,
 } from "lucide-react-native";
 
+// --- Helper: Format Date dd/MM/yyyy ---
+const formatDateDisplay = (dateString?: string) => {
+  if (!dateString) return "N/A";
+  try {
+    const d = new Date(dateString);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  } catch {
+    return dateString;
+  }
+};
+
 // --- Interfaces ---
 
 interface DoorRequestManagerModalsProps {
@@ -166,7 +180,6 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
               Vui lòng nhập lý do từ chối để thông báo cho sinh viên:
             </Text>
 
-            {/* 👇 CẬP NHẬT: Nền trắng, viền đỏ nhạt 👇 */}
             <TextInput
               style={[
                 styles.rejectInput,
@@ -225,7 +238,6 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
               Nhập ghi chú cho sinh viên (không bắt buộc):
             </Text>
 
-            {/* 👇 Giữ nguyên: Nền trắng, viền xanh nhạt 👇 */}
             <TextInput
               style={[
                 styles.rejectInput,
@@ -396,12 +408,57 @@ const DoorRequestManagerModals: React.FC<DoorRequestManagerModalsProps> = ({
                   value={displayData(selectedDetail.bookingCode)}
                   icon={<Hash size={16} color="#64748B" />}
                 />
+                {/* Thời gian gửi (Giữ nguyên) */}
                 <DetailItem
                   styles={styles}
                   label="Thời gian gửi"
                   value={formatTime(selectedDetail.requestTime)}
                   icon={<Clock size={16} color="#64748B" />}
                 />
+
+                {/* --- MỚI: NGÀY MUỐN MỞ CỬA --- */}
+                <View style={styles.detailRowItem}>
+                  <View style={styles.detailIconWrapper}>
+                    <CalendarDays size={18} color="#EA580C" />
+                  </View>
+                  <View style={styles.detailTextWrapper}>
+                    <Text
+                      style={[
+                        styles.detailItemLabel,
+                        { color: "#EA580C", fontWeight: "600" },
+                      ]}
+                    >
+                      Ngày muốn mở cửa
+                    </Text>
+                    <Text style={styles.detailItemValue}>
+                      {formatDateDisplay(selectedDetail.requestDate)}{" "}
+                      {selectedDetail.slotLabel
+                        ? `(${selectedDetail.slotLabel})`
+                        : ""}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* --- MỚI: CA TRỰC / THỜI GIAN --- */}
+                <View style={styles.detailRowItem}>
+                  <View style={styles.detailIconWrapper}>
+                    <Clock size={18} color="#EA580C" />
+                  </View>
+                  <View style={styles.detailTextWrapper}>
+                    <Text
+                      style={[
+                        styles.detailItemLabel,
+                        { color: "#EA580C", fontWeight: "600" },
+                      ]}
+                    >
+                      Ca trực/Thời gian mở
+                    </Text>
+                    <Text style={styles.detailItemValue}>
+                      {selectedDetail.slotStartTime?.slice(0, 5) || "--:--"} -{" "}
+                      {selectedDetail.slotEndTime?.slice(0, 5) || "--:--"}
+                    </Text>
+                  </View>
+                </View>
 
                 <Text style={[styles.detailLabel, { marginTop: 10 }]}>
                   Lý do mở cửa:

@@ -15,6 +15,7 @@ import {
   ScanLine,
   ClipboardCheck,
   HistoryIcon,
+  LayoutGrid,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -222,6 +223,20 @@ const APP_SECTIONS = [
         description: "Xem lịch sử bàn giao",
         icon: HistoryIcon,
         allowedRoles: [ROLES.SECURITYGUARD, ROLES.MANAGER],
+      },
+      {
+        to: "/(tabs)/home/daily-schedule",
+        title: "Các phòng lab",
+        description: "Hiển thị các phòng lab đang hoạt động",
+        icon: LayoutGrid,
+        allowedRoles: [ROLES.SECURITYGUARD],
+      },
+      {
+        to: "/(tabs)/home/daily-notes",
+        title: "Ghi chú từ Quản lý",
+        description: "Xem ghi chú từ quản lý",
+        icon: ClipboardList,
+        allowedRoles: [ROLES.SECURITYGUARD],
       },
     ],
   },
